@@ -478,8 +478,8 @@ export default function HotelsPage() {
                     <Image
                       src={hotel.image}
                       alt={hotel.city}
-                      width={56}
-                      height={56}
+                      width={400}
+                      height={300}
                       className="object-cover w-full h-full"
                     />
                   </div>

@@ -24,8 +24,8 @@ export default function Footer() {
               <Image
                 src="/img/make-my-bharat-yatra-logo.png"
                 alt="Make My Bharat Yatra Logo"
-                width={300}
-                height={48}
+                width={400}
+                height={300}
                 className="object-contain object-center h-15 "
               />
             </div>
@@ -37,10 +37,10 @@ export default function Footer() {
               us{" "}
             </p>
             <div className="flex space-x-4">
-              <Link href="https://www.facebook.com/profile.php?id=61565956004249"><Facebook className="w-5 h-5 cursor-pointer hover:text-blue-400 " /></Link>
-              <Link href="https://x.com/Mmby0410"><Twitter className="w-5 h-5 cursor-pointer hover:text-blue-400" /></Link>
-              <Link href="https://www.instagram.com/make_my_bharat_yatra/"><Instagram className="w-5 h-5 cursor-pointer hover:text-pink-400" /></Link>
-              <Link href="https://www.linkedin.com/in/make-my-bharat-yatra/"><Link2Icon className="w-5 h-5 cursor-pointer hover:text-blue-400" /></Link>
+              <Link href="https://www.facebook.com/profile.php?id=61565956004249"><Facebook className="w-10 h-10 cursor-pointer hover:text-blue-400 " /></Link>
+              <Link href="https://x.com/Mmby0410"><Twitter className="w-10 h-10 cursor-pointer hover:text-blue-400" /></Link>
+              <Link href="https://www.instagram.com/make_my_bharat_yatra/"><Instagram className="w-10 h-10 cursor-pointer hover:text-pink-400" /></Link>
+              <Link href="https://www.linkedin.com/in/make-my-bharat-yatra/"><Link2Icon className="w-10 h-10 cursor-pointer hover:text-blue-400" /></Link>
               {/* <Link href=""><YoutubeIcon className="w-5 h-5 cursor-pointer hover:text-red-400" /></Link> */}
 
             </div>
