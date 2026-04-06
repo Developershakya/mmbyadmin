@@ -141,7 +141,8 @@ export default function HolidayPage() {
 
           <div className="max-w-7xl mx-auto  p-5 space-y-4">
             {/* Title */}
-            <h1 className="capitalize text-2xl md:text-3xl  font-bold md:font-bold text-gray-900">
+            <div className="sticky top-15 space-y-3 z-60 bg-white">
+            <h1 className="capitalize  text-2xl md:text-3xl  font-bold md:font-bold text-gray-900">
               Goa hero package with complimentary activities
             </h1>
 
@@ -174,7 +175,7 @@ export default function HolidayPage() {
                 </li>
               </ul>
             </div>
-
+          </div>
             {/* Images */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 h-[250px] rounded-xl">
               {/* Left Big Image */}
