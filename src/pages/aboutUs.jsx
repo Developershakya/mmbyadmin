@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import CountUp from 'react-countup';
 import {
   Users,
   Target,
@@ -117,11 +118,11 @@ export default function AboutPage() {
                 🌟 MakeMyBharatYatra
               </Badge>
 
-              <h1 className="text-5xl sm:text-7xl lg:text-7xl font-black uppercase tracking-wider mb-8 bg-gradient-to-r from-white via-orange-100 to-white bg-clip-text text-transparent leading-tight">
+              <h1 className="text-2xl sm:text-xl md:text-5xl lg:text-7xl font-black uppercase tracking-wider mb-5 bg-gradient-to-r from-white via-orange-100 to-white bg-clip-text text-transparent leading-tight">
                 About Our Company
               </h1>
 
-              <p className="text-xl sm:text-2xl max-w-4xl mx-auto mb-12 leading-relaxed font-light">
+              <p className="text-xl sm:text-2xl max-w-4xl mx-auto mb-8 leading-relaxed font-light">
                 Since <span className="font-bold text-orange-300">2010</span>,
                 we've been crafting unforgettable journeys with love, passion,
                 and precision — bringing dreams to life through travel.
@@ -130,7 +131,7 @@ export default function AboutPage() {
               <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
                 <Button
                   size="lg"
-                  className="group bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-full shadow-2xl px-8 py-4 font-semibold text-lg transform hover:scale-110 transition-all duration-300"
+                  className="group bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded shadow-2xl px-8 py-4 font-semibold text-lg transform hover:scale-110 transition-all duration-300"
                 >
                   <Link href="/contactUs" className="flex items-center gap-2">
                     Get in Touch
@@ -140,7 +141,7 @@ export default function AboutPage() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="bg-white/10 backdrop-blur-sm border-white/30 text-white rounded-full shadow-2xl px-8 py-4 font-semibold text-lg hover:bg-white hover:text-orange-600 transform hover:scale-110 transition-all duration-300"
+                  className="bg-white/10 backdrop-blur-sm border-white/30 text-white rounded shadow-2xl px-8 py-4 font-semibold text-lg hover:bg-white hover:text-orange-600 transform hover:scale-110 transition-all duration-300"
                 >
                   <Link href="/career">Join Our Team</Link>
                 </Button>
@@ -328,17 +329,17 @@ export default function AboutPage() {
 
     
         {/* Enhanced Mission & Vision with Improved Layout */}
-        <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-orange-50 via-white to-red-50 relative overflow-hidden">
+        <section className="p-5 sm:px-6 lg:px-8 bg-gradient-to-br from-orange-50 via-white to-red-50 relative overflow-hidden">
           {/* Background decorations */}
           <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-orange-200/30 to-transparent rounded-full -mr-48 -mt-48"></div>
           <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-red-200/30 to-transparent rounded-full -ml-48 -mb-48"></div>
 
           <div className="max-w-7xl mx-auto relative z-10">
-            <div className="text-center mb-20">
+            <div className="text-center mb-10">
               <Badge className="bg-gradient-to-r from-orange-500 to-red-500 text-white mb-4">
                 Mission & Vision
               </Badge>
-              <h2 className="text-5xl font-bold text-gray-800 mb-6">
+              <h2 className="text-4xl font-bold text-gray-800 mb-6">
                 Our Purpose & Direction
               </h2>
               <div className="w-24 h-1 bg-gradient-to-r from-orange-500 to-red-500 mx-auto rounded-full"></div>
@@ -350,7 +351,7 @@ export default function AboutPage() {
                 <CardContent className="p-10 text-center h-full flex flex-col">
                   <div className="flex items-center justify-center gap-3 mb-8">
                     <div className="bg-gradient-to-br from-orange-500 to-red-500 p-4 rounded-2xl group-hover:rotate-12 transition-transform duration-500">
-                      <Target className="h-10 w-10 text-white" />
+                      <Target className="h-5 w-5 text-white" />
                     </div>
                     <h3 className="text-4xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
                       Our Mission
@@ -378,7 +379,7 @@ export default function AboutPage() {
                 <CardContent className="p-10 text-center h-full flex flex-col">
                   <div className="flex items-center justify-center gap-3 mb-8">
                     <div className="bg-gradient-to-br from-green-500 to-emerald-500 p-4 rounded-2xl group-hover:rotate-12 transition-transform duration-500">
-                      <Globe className="h-10 w-10 text-white" />
+                      <Globe className="h-5 w-5 text-white" />
                     </div>
                     <h3 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
                       Our Vision
@@ -405,20 +406,20 @@ export default function AboutPage() {
         </section>
 
         {/* Enhanced Values Section with Modern Cards */}
-        <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-orange-100 via-white to-red-100 relative">
+        <section className="p-8 sm:px-6 lg:px-8 bg-gradient-to-r from-orange-100 via-white to-red-100 relative">
           <div className="max-w-7xl mx-auto">
-            <div className="text-center mb-20">
+            <div className="text-center mb-10">
               <Badge className="bg-gradient-to-r from-orange-500 to-red-500 text-white mb-4">
                 Our Values
               </Badge>
-              <h2 className="text-5xl font-bold mb-6 bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+              <h2 className="text-4xl font-bold mb- bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
                 Core Values That Drive Us
               </h2>
               <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
                 Principles that guide every decision and solution at Make My
                 Bharat Yatra.
               </p>
-              <div className="w-24 h-1 bg-gradient-to-r from-orange-500 to-red-500 mx-auto rounded-full mt-6"></div>
+              <div className="w-24 h-1 bg-gradient-to-r from-orange-500 to-red-500 mx-auto rounded-full mt-5"></div>
             </div>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -446,7 +447,7 @@ export default function AboutPage() {
         </section>
 
         {/* Enhanced Stats Section with Animated Counters */}
-        <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-orange-600 via-red-600 to-orange-700 text-white relative overflow-hidden">
+        <section className="p-8 sm:px-6 lg:px-8 bg-gradient-to-r from-orange-600 via-red-600 to-orange-700 text-white relative overflow-hidden">
           {/* Animated background elements */}
           <div className="absolute inset-0">
             <div className="absolute top-0 left-0 w-full h-full bg-[url('/pattern.png')] opacity-10"></div>
@@ -454,8 +455,8 @@ export default function AboutPage() {
             <div className="absolute bottom-20 right-10 w-24 h-24 bg-white/10 rounded-full animate-bounce"></div>
           </div>
 
-          <div className="max-w-7xl mx-auto relative z-10">
-            <div className="text-center mb-16">
+          <div className=" ">
+            <div className="text-center mb-4">
               <h2 className="text-4xl font-bold mb-4">Our Impact in Numbers</h2>
               <p className="text-xl text-white/90">
                 Achievements that speak for themselves
@@ -464,20 +465,21 @@ export default function AboutPage() {
 
             <div className="grid md:grid-cols-4 gap-8 text-center">
               {[
-                { number: "500+", label: "Happy Clients", icon: "😊" },
-                { number: "50+", label: "Team Members", icon: "👥" },
-                { number: "1000+", label: "Projects Completed", icon: "✅" },
-                { number: "5+", label: "Years of Excellence", icon: "⭐" },
+                { number: 500, label: "Happy Clients", icon: "😊" },
+                { number: 50, label: "Team Members", icon: "👥" },
+                { number: 1000, label: "Projects Completed", icon: "✅" },
+                { number: 5, label: "Years of Excellence", icon: "⭐" },
               ].map((stat, i) => (
                 <div
                   key={i}
-                  className="group p-8 rounded-2xl bg-white/10 backdrop-blur-md hover:bg-white/20 transition-all duration-500 transform hover:scale-110 hover:-translate-y-2 border border-white/20"
+                  className="group p-2 rounded-2xl bg-white/10 backdrop-blur-md hover:bg-white/20 transition-all duration-500 transform hover:scale-110 hover:-translate-y-2 border border-white/20"
                 >
-                  <div className="text-4xl mb-4 group-hover:animate-bounce">
+                  <div className="text-xl mb-4 group-hover:animate-bounce">
                     {stat.icon}
                   </div>
-                  <div className="text-5xl font-black mb-3 bg-gradient-to-r from-white to-orange-100 bg-clip-text text-transparent">
-                    {stat.number}
+                  <div className="text-3xl font-black mb-3 bg-gradient-to-r from-white to-orange-100 bg-clip-text text-transparent">
+                    
+                    <CountUp end={stat.number} duration={2} />+
                   </div>
                   <div className="text-white/90 font-semibold text-lg">
                     {stat.label}
@@ -489,21 +491,21 @@ export default function AboutPage() {
         </section>
 
         {/* Enhanced CTA Section */}
-        <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-orange-500 via-red-500 to-orange-600 text-white relative overflow-hidden">
+        <section className="py-2 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-orange-500 via-red-500 to-orange-600 text-white relative overflow-hidden">
           {/* Background effects */}
           <div className="absolute inset-0">
             <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-yellow-400/20 to-transparent rounded-full -mr-48 -mt-48"></div>
             <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-red-400/20 to-transparent rounded-full -ml-48 -mb-48"></div>
           </div>
 
-          <div className="max-w-5xl mx-auto text-center relative z-10">
-            <Badge className="bg-white/20 text-white mb-6">
+          <div className=" mx-auto text-center mt-2 ">
+            <Badge className="bg-white/20 text-white mb-3">
               Let's Work Together
             </Badge>
-            <h2 className="text-5xl sm:text-7xl font-black mb-8 leading-tight">
+            <h2 className="text-2xl sm:text-xl font-black mb-2 leading-tight">
               Ready to Work Together?
             </h2>
-            <p className="text-2xl mb-12 text-white/90 leading-relaxed max-w-3xl mx-auto">
+            <p className="text-2xl mb-7 text-white/90 leading-relaxed max-w-3xl mx-auto">
               Let's bring your vision to life! Our team is excited to build
               unforgettable experiences with you.
             </p>
@@ -511,7 +513,7 @@ export default function AboutPage() {
             <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
               <Button
                 size="lg"
-                className="group  text-orange-600 font-bold rounded-full hover:bg-gray-100 px-10 py-5 text-xl shadow-2xl transform hover:scale-110 transition-all duration-300"
+                className="group  text-orange-600 font-bold border border-white cursor-pointer rounded hover:bg-gray-100  text-xl shadow-2xl transform hover:scale-110 transition-all duration-300"
               >
                 <Link href="/contactUs" className="flex items-center gap-2">
                   Start a Project
@@ -521,14 +523,14 @@ export default function AboutPage() {
               <Button
                 size="lg"
                 variant="outline"
-                className="bg-transparent border-2 border-white text-white rounded-full hover:bg-white hover:text-orange-600 px-10 py-5 text-xl shadow-2xl transform hover:scale-110 transition-all duration-300 font-bold"
+                className="bg-transparent border-2 border-white text-white rounded  cursor-pointer hover:bg-white hover:text-orange-600  text-xl shadow-2xl transform hover:scale-110 transition-all duration-300 font-bold"
               >
                 <Link href="/portfolio">View Our Work</Link>
               </Button>
             </div>
 
             {/* Trust indicators */}
-            <div className="mt-16 flex flex-wrap justify-center items-center gap-8 opacity-80">
+            <div className="mt-5 flex flex-wrap justify-center items-center gap-20 opacity-80">
               <div className="flex items-center gap-2">
                 <Star className="h-5 w-5 text-yellow-400 fill-current" />
                 <span className="font-semibold">4.9/5 Rating</span>
