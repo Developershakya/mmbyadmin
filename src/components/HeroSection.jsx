@@ -1,6 +1,5 @@
 "use client";
-import { useState } from "react";
-import Link from "next/link";
+import { useState, useRef, useEffect } from "react";
 import {
   Plane,
   Hotel,
@@ -8,1115 +7,1028 @@ import {
   Bus,
   MapPin,
   Clock,
+  ChevronDown,
+  Search,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
-import { Calendar as CalendarIcon } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
+/* ---------------------------------------------------------
+   STATIC DATA
+--------------------------------------------------------- */
+const indianCities = [
+  { code: "DEL", name: "New Delhi, India", sub: "Indira Gandhi International Airport" },
+  { code: "BOM", name: "Mumbai, India", sub: "Chhatrapati Shivaji International Airport" },
+  { code: "BLR", name: "Bengaluru, India", sub: "Kempegowda International Airport" },
+  { code: "MAA", name: "Chennai, India", sub: "Chennai International Airport" },
+  { code: "CCU", name: "Kolkata, India", sub: "Netaji Subhas Chandra Bose Airport" },
+  { code: "HYD", name: "Hyderabad, India", sub: "Rajiv Gandhi International Airport" },
+  { code: "PNQ", name: "Pune, India", sub: "Pune Airport" },
+  { code: "JAI", name: "Jaipur, India", sub: "Jaipur International Airport" },
+  { code: "AMD", name: "Ahmedabad, India", sub: "Sardar Vallabhbhai Patel Airport" },
+  { code: "LKO", name: "Lucknow, India", sub: "Chaudhary Charan Singh Airport" },
+  { code: "IXC", name: "Chandigarh, India", sub: "Chandigarh Airport" },
+  { code: "GOI", name: "Goa, India", sub: "Dabolim Airport" },
+  { code: "AGR", name: "Agra, India", sub: "Agra Airport" },
+  { code: "VNS", name: "Varanasi, India", sub: "Lal Bahadur Shastri Airport" },
+  { code: "PAT", name: "Patna, India", sub: "Jay Prakash Narayan Airport" },
+  { code: "BHO", name: "Bhopal, India", sub: "Raja Bhoj Airport" },
+  { code: "IDR", name: "Indore, India", sub: "Devi Ahilyabai Holkar Airport" },
+  { code: "NAG", name: "Nagpur, India", sub: "Dr. Babasaheb Ambedkar Airport" },
+  { code: "STV", name: "Surat, India", sub: "Surat Airport" },
+  { code: "ATQ", name: "Amritsar, India", sub: "Sri Guru Ram Dass Jee Airport" },
+];
+
+const visaFreeDestinations = [
+  { code: "MNL", name: "Manila", sub: "Philippines" },
+  { code: "MLE", name: "Male", sub: "Maldives" },
+  { code: "KUL", name: "Kuala Lumpur", sub: "Malaysia" },
+  { code: "CMB", name: "Colombo", sub: "Sri Lanka" },
+  { code: "MRU", name: "Mauritius", sub: "Mauritius" },
+  { code: "HKG", name: "Hong Kong", sub: "Hong Kong" },
+  { code: "PBH", name: "Paro", sub: "Bhutan" },
+  { code: "SEZ", name: "Mahe Island", sub: "Seychelles" },
+  { code: "NAN", name: "Nadi", sub: "Fiji" },
+];
+
+const eVisaDestinations = [
+  { code: "DPS", name: "Denpasar (Bali)", sub: "Indonesia" },
+  { code: "SGN", name: "Ho Chi Minh City", sub: "Vietnam" },
+  { code: "NRT", name: "Tokyo", sub: "Japan" },
+  { code: "REP", name: "Siem Reap", sub: "Cambodia" },
+  { code: "TBS", name: "Tbilisi", sub: "Georgia" },
+  { code: "DXB", name: "Dubai", sub: "UAE" },
+];
+
+const popularSearches = [
+  { code: "BOM", name: "Mumbai, India", sub: "Chhatrapati Shivaji International Airport" },
+  { code: "DEL", name: "New Delhi, India", sub: "Indira Gandhi International Airport" },
+  { code: "SIN", name: "Singapore", sub: "Changi Airport" },
+  { code: "BKK", name: "Bangkok, Thailand", sub: "Suvarnabhumi Airport" },
+];
+
+const RECENT_KEY = "bharatYatra_recentSearches";
+
+function getRecentSearches() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentSearch(item) {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = getRecentSearches().filter((i) => i.code !== item.code);
+    const updated = [item, ...existing].slice(0, 5);
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(updated));
+  } catch {
+    /* ignore */
+  }
+}
+
+/* ---------------------------------------------------------
+   LocationSearchBox
+   A reusable MakeMyTrip-style search dropdown.
+   Click the trigger (label + value) -> opens a panel with:
+   search input, Recent Searches, Visa-Free/Visa-on-Arrival
+   Destinations, E-Visa Destinations, Popular Searches.
+--------------------------------------------------------- */
+function LocationSearchBox({ label, value, placeholder, onSelect, align = "left" }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [recents, setRecents] = useState([]);
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    if (open) setRecents(getRecentSearches());
+  }, [open]);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (boxRef.current && !boxRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const allOptions = [
+    ...indianCities,
+    ...visaFreeDestinations,
+    ...eVisaDestinations,
+  ];
+
+  const filtered = query
+    ? allOptions.filter(
+        (c) =>
+          c.name.toLowerCase().includes(query.toLowerCase()) ||
+          c.code.toLowerCase().includes(query.toLowerCase())
+      )
+    : null;
+
+  function handleSelect(item) {
+    onSelect(item);
+    saveRecentSearch(item);
+    setOpen(false);
+    setQuery("");
+  }
+
+  return (
+  <div
+    className="relative w-full h-full"
+    ref={boxRef}
+  >
+      <span className="text-xs uppercase tracking-wider text-gray-400 block mb-1">
+        {label}
+      </span>
+ <button
+  type="button"
+  onClick={() => setOpen((prev) => !prev)}
+  className="w-full h-full text-left block cursor-pointer"
+>
+        <div className="text-xl font-bold text-gray-800 truncate">
+          {value ? value.name : placeholder}
+        </div>
+        {value?.sub && (
+          <span className="text-xs text-gray-500 truncate block">
+            {value.sub}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className={`absolute mt-2 w-[340px] max-h-[420px] overflow-y-auto bg-white shadow-2xl rounded-xl border border-gray-100 z-30 p-3 ${
+            align === "right" ? "right-0" : "left-0"
+          }`}
+        >
+          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 mb-3 sticky top-0 bg-white">
+            <Search className="w-4 h-4 text-gray-400" />
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Search ${label.toLowerCase()}`}
+              className="w-full text-sm outline-none"
+            />
+          </div>
+
+          {filtered ? (
+            <div>
+              {filtered.length === 0 ? (
+                <p className="text-sm text-gray-400 px-1 py-4 text-center">
+                  No destinations found
+                </p>
+              ) : (
+                filtered.map((item) => (
+                  <button
+                    key={item.code}
+                    type="button"
+                    onClick={() => handleSelect(item)}
+                    className="w-full flex items-start gap-3 p-2.5 rounded-lg hover:bg-orange-50 transition text-left"
+                  >
+                    <span className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-600">
+                      {item.code}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold text-gray-800">
+                        {item.name}
+                      </span>
+                      <span className="block text-[11px] text-gray-400">
+                        {item.sub}
+                      </span>
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          ) : (
+            <>
+              {recents.length > 0 && (
+                <div className="mb-3">
+                  <h4 className="text-[11px] uppercase font-bold text-gray-400 tracking-wide px-1 mb-1">
+                    Recent Searches
+                  </h4>
+                  {recents.map((item) => (
+                    <button
+                      key={`recent-${item.code}`}
+                      type="button"
+                      onClick={() => handleSelect(item)}
+                      className="w-full flex items-start gap-3 p-2.5 rounded-lg hover:bg-orange-50 transition text-left"
+                    >
+                      <span className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-600">
+                        {item.code}
+                      </span>
+                      <span>
+                        <span className="block text-sm font-semibold text-gray-800">
+                          {item.name}
+                        </span>
+                        <span className="block text-[11px] text-gray-400">
+                          {item.sub}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="mb-3">
+                <h4 className="text-[11px] uppercase font-bold text-gray-400 tracking-wide px-1 mb-1">
+                  Visa-Free / Visa-on-Arrival Destinations
+                </h4>
+                <div className="grid grid-cols-3 gap-2 px-1">
+                  {visaFreeDestinations.map((item) => (
+                    <button
+                      key={item.code}
+                      type="button"
+                      onClick={() => handleSelect(item)}
+                      className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg py-2 px-2 hover:border-orange-400 hover:bg-orange-50 transition truncate"
+                      title={item.name}
+                    >
+                      {item.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <h4 className="text-[11px] uppercase font-bold text-gray-400 tracking-wide px-1 mb-1">
+                  E-Visa Destinations
+                </h4>
+                <div className="grid grid-cols-3 gap-2 px-1">
+                  {eVisaDestinations.map((item) => (
+                    <button
+                      key={item.code}
+                      type="button"
+                      onClick={() => handleSelect(item)}
+                      className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg py-2 px-2 hover:border-orange-400 hover:bg-orange-50 transition truncate"
+                      title={item.name}
+                    >
+                      {item.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-[11px] uppercase font-bold text-gray-400 tracking-wide px-1 mb-1">
+                  Popular Searches
+                </h4>
+                {popularSearches.map((item) => (
+                  <button
+                    key={`popular-${item.code}`}
+                    type="button"
+                    onClick={() => handleSelect(item)}
+                    className="w-full flex items-start gap-3 p-2.5 rounded-lg hover:bg-orange-50 transition text-left"
+                  >
+                    <span className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-600">
+                      {item.code}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold text-gray-800">
+                        {item.name}
+                      </span>
+                      <span className="block text-[11px] text-gray-400">
+                        {item.sub}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   MAIN COMPONENT
+--------------------------------------------------------- */
 export default function HeroSection() {
+  const [activeTab, setActiveTab] = useState("flights");
   const [tripType, setTripType] = useState("oneway");
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   const [infants, setInfants] = useState(0);
   const [travelClass, setTravelClass] = useState("");
+  const [travelersOpen, setTravelersOpen] = useState(false);
 
   const displayValue = `${adults} Adult${adults > 1 ? "s" : ""}${
     children > 0 ? `, ${children} Child${children > 1 ? "ren" : ""}` : ""
   }${infants > 0 ? `, ${infants} Infant${infants > 1 ? "s" : ""}` : ""}`;
 
-
-  // cab
+  // Dates
   const [departureDate, setDepartureDate] = useState(new Date());
-  const [returnDate, setReturnDate] = useState(new Date());
-   const [openDeparture, setOpenDeparture] = useState(false);
+  const [returnDate, setReturnDate] = useState(null);
+  const [openDeparture, setOpenDeparture] = useState(false);
   const [openReturn, setOpenReturn] = useState(false);
-  const [selected, setSelected] = useState(new Date());
-  const [open, setOpen] = useState(false); // ✅ state for calendar visibility
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
 
+  const [checkIn, setCheckIn] = useState(new Date());
+  const [checkOut, setCheckOut] = useState(new Date());
+  const [openCheckIn, setOpenCheckIn] = useState(false);
+  const [openCheckOut, setOpenCheckOut] = useState(false);
+
+  const [travelDate, setTravelDate] = useState(new Date());
+  const [openTravelDate, setOpenTravelDate] = useState(false);
+
+  const [cabDate, setCabDate] = useState(new Date());
+  const [openCabDate, setOpenCabDate] = useState(false);
   const [pickupTime, setPickupTime] = useState("10:00");
-  // const [timezone, setTimezone] = useState("Asia/Kolkata");
 
-  const indianCities = [
-    "Delhi",
-    "Mumbai",
-    "Bengaluru",
-    "Chennai",
-    "Kolkata",
-    "Hyderabad",
-    "Pune",
-    "Jaipur",
-    "Ahmedabad",
-    "Lucknow",
-    "Chandigarh",
-    "Goa",
-    "Agra",
-    "Varanasi",
-    "Patna",
-    "Bhopal",
-    "Indore",
-    "Nagpur",
-    "Surat",
-    "Amritsar",
+  // Location values now hold objects: { code, name, sub } | null
+  const [from, setFrom] = useState(null);
+  const [to, setTo] = useState(null);
+  const [hotelDestination, setHotelDestination] = useState(null);
+  const [rooms, setRooms] = useState("");
+
+  const [holidayFrom, setHolidayFrom] = useState(null);
+  const [holidayTo, setHolidayTo] = useState(null);
+
+  const [busFrom, setBusFrom] = useState(null);
+  const [busTo, setBusTo] = useState(null);
+
+  const [cabTripType, setCabTripType] = useState("oneway");
+  const [cabFrom, setCabFrom] = useState(null);
+  const [cabTo, setCabTo] = useState(null);
+
+  const tabs = [
+    { id: "flights", label: "Flights", icon: Plane },
+    { id: "hotels", label: "Hotels", icon: Hotel },
+    { id: "holidays", label: "Holidays", icon: MapPin },
+    { id: "buses", label: "Buses", icon: Bus },
+    { id: "cabs", label: "Cabs", icon: Car },
   ];
+
+  const formatWeekday = (date) =>
+    date ? date.toLocaleDateString("en-US", { weekday: "long" }) : "";
 
   return (
     <section
-      className="relative  bg-center py-16"
-      style={{ backgroundImage: "url('/images/video/v1.mp4')" }}
-    > 
-      {/* Background Video */}
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover "
-      >
-        <source src="/images/video/v2.mp4" type="video/mp4" />
-        Your browser does not support the video tag.
-      </video>
-      {/* <div className="absolute inset-0 bg-black opacity-20"></div> */}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h1 className="text-xl lg:text-7xl md:text-4xl sm:text-3xl font-bold captalize text-white mb-4">
-            MAKE MY BHARAT YATRA
-          </h1>
-          <p className="text-xl text-white font-bold mb-8">
-            Flights • Hotels • Holiday Packages • Buses • Cabs
-          </p>
-        </div>
+      className="relative bg-cover bg-center h-[560px] flex items-center"
+      style={{
+        backgroundImage:
+          "linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.35)), url('https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=1920&q=80')",
+      }}
+    >
+      <div className="max-w-7xl mx-auto w-full px-6 relative z-10 -mt-4">
+        <h1 className="text-5xl font-bold text-white mb-2 tracking-wide">
+          Make My Bharat Yatra
+        </h1>
+        <p className="text-white text-lg font-light mb-6 opacity-90">
+          Flights • Hotels • Holiday Packages • Buses • Cabs
+        </p>
 
-        <Card>
-          <CardContent>
-            <Tabs defaultValue="flights" className="w-full">
-              <TabsList className="grid w-full grid-cols-5  mb-6 bg- ">
-                
-                  {/* Flights */}
-                <TabsTrigger
-                  value="flights"
-                  className="flex items-center gap-2"
-                >
-                <Link href="/flight">
-                  <Plane className="w-10 h-10" />
-                </Link>
-                </TabsTrigger>
-                
-                 {/* Hotels */}
-                <TabsTrigger value="hotels" className="flex items-center gap-2">
-                <Link href="/hotel">
-                  <Hotel className="w-10 h-10" />
-                </Link>
-                </TabsTrigger>
+        <div className="rounded-2xl shadow-2xl">
+          {/* Tab Bar */}
+          <div className="border-b border-gray-100">
+            <div className="inline-flex bg-gradient-to-r from-[#7a3600]/90 to-[#a84b00]/90 rounded-t-xl overflow-hidden">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-10 py-5 font-semibold transition ${
+                      isActive
+                        ? "bg-white text-orange-600 border-t-4 border-orange-500"
+                        : "text-white hover:bg-white/10"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-                  {/* Packages */}
-                <TabsTrigger
-                  value="packages"
-                  className="flex items-center gap-2"
-                >
-                <Link href="/package">
-                  <MapPin className="w-10 h-10" />
-                </Link>
-                </TabsTrigger>
-                
-                  {/* Bus */}
-                <TabsTrigger value="bus" className="flex items-center gap-2">
-                <Link href="/bus">
-                  <Bus className="w-10 h-10" />
-                </Link>
-                </TabsTrigger>
+          {/* Panel */}
+          <div className="relative rounded-b-xl bg-white p-6 pb-24">
+            {/* ---------------- FLIGHTS ---------------- */}
+            {activeTab === "flights" && (
+              <div>
+                <div className="flex flex-wrap space-x-6 mb-4 text-xs font-semibold text-gray-600">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="tripType"
+                      checked={tripType === "oneway"}
+                      onChange={() => setTripType("oneway")}
+                      className="accent-orange-600 w-4 h-4"
+                    />
+                    <span className={tripType === "oneway" ? "text-orange-600" : ""}>
+                      One Way
+                    </span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer hover:text-orange-600">
+                    <input
+                      type="radio"
+                      name="tripType"
+                      checked={tripType === "roundtrip"}
+                      onChange={() => setTripType("roundtrip")}
+                      className="accent-orange-600 w-4 h-4"
+                    />
+                    <span className={tripType === "roundtrip" ? "text-orange-600" : ""}>
+                      Round Trip
+                    </span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer hover:text-orange-600">
+                    <input
+                      type="radio"
+                      name="tripType"
+                      checked={tripType === "multicity"}
+                      onChange={() => setTripType("multicity")}
+                      className="accent-orange-600 w-4 h-4"
+                    />
+                    <span className={tripType === "multicity" ? "text-orange-600" : ""}>
+                      Multi City
+                    </span>
+                  </label>
+                  <span className="ml-auto text-gray-400 font-normal">
+                    Book International and Domestic Flights
+                  </span>
+                </div>
 
-                  {/* Cabs */}
-                <TabsTrigger value="cabs" className="flex items-center gap-2">
-                <Link href="/cab">
-                  <Car className="w-10 h-10" />
-                </Link>
-                </TabsTrigger>
+                <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                  <div
+  className="lg:col-span-3 p-4 hover:bg-gray-50/80 transition cursor-pointer"
+  
+>
+                    <LocationSearchBox
+                      label="From"
+                      value={from}
+                      placeholder="New Delhi"
+                      onSelect={setFrom}
+                    />
+                  </div>
 
-              </TabsList>
+                  <div className="lg:col-span-3 p-4 lg:pl-6 hover:bg-gray-50/80 transition">
+                    <LocationSearchBox
+                      label="To"
+                      value={to}
+                      placeholder="Leh"
+                      onSelect={setTo}
+                    />
+                  </div>
 
-               <TabsContent value="flights">
-                  <div className="w-full max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-3">
-                    {/* Trip Type Tabs */}
-                    <div className="flex flex-wrap items-center gap-4 md:gap-6 text-sm font-medium text-black mb-6">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tripType"
-                          value="oneway"
-                          checked={tripType === "oneway"}
-                          onChange={(e) => setTripType(e.target.value)}
-                          className="text-orange-500"
-                        />
-                        One Way
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tripType"
-                          value="roundtrip"
-                          checked={tripType === "roundtrip"}
-                          onChange={(e) => setTripType(e.target.value)}
-                          className="text-orange-500"
-                        />
-                        Round Trip
-                      </label>
-
-                      <span className="ml-auto text-base md:text-lg text-black font-bold">
-                        Flights Booking
+                  {/* Departure */}
+                  <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
+                    <span
+                      className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
+                      onClick={() => {
+                        setOpenDeparture(!openDeparture);
+                        setOpenReturn(false);
+                      }}
+                    >
+                      Departure <ChevronDown className="w-3 h-3" />
+                    </span>
+                    <div
+                      onClick={() => {
+                        setOpenDeparture(!openDeparture);
+                        setOpenReturn(false);
+                      }}
+                    >
+                      <div className="text-xl font-bold text-gray-800">
+                        {departureDate ? departureDate.getDate() : "--"}{" "}
+                        <span className="text-sm font-semibold">
+                          {departureDate
+                            ? departureDate.toLocaleDateString("en-GB", {
+                                month: "short",
+                                year: "2-digit",
+                              })
+                            : ""}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {formatWeekday(departureDate)}
                       </span>
                     </div>
 
-                    {/* Booking Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 items-end">
-                      {/* Pickup Location */}
-                      <div>
-                        <label className="text-xs uppercase font-medium text-slate-500">
-                          From
-                        </label>
-                        <select
-                          value={from}
-                          onChange={(e) => setFrom(e.target.value)}
-                          className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-                        >
-                          <option value="">Delhi</option>
-                          {indianCities.map((city, index) => (
-                            <option key={index} value={city}>
-                              {city}
-                            </option>
-                          ))}
-                        </select>
+                    {openDeparture && (
+                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 left-0">
+                        <DayPicker
+                          mode="single"
+                          selected={departureDate}
+                          onSelect={(date) => {
+                            setDepartureDate(date);
+                            setOpenDeparture(false);
+                          }}
+                        />
                       </div>
+                    )}
+                  </div>
 
-                      {/* Drop Location */}
-                      <div>
-                        <label className="text-xs uppercase font-medium text-slate-500">
-                          To
-                        </label>
-                        <select
-                          value={to}
-                          onChange={(e) => setTo(e.target.value)}
-                          className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-                        >
-                          <option value="">Mumbai</option>
-                          {indianCities.map((city, index) => (
-                            <option key={index} value={city}>
-                              {city}
-                            </option>
-                          ))}
-                        </select>
+                  {/* Return */}
+                  <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
+                    <span
+                      className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
+                      onClick={() => {
+                        if (tripType === "roundtrip") {
+                          setOpenReturn(!openReturn);
+                          setOpenDeparture(false);
+                        }
+                      }}
+                    >
+                      Return <ChevronDown className="w-3 h-3" />
+                    </span>
+
+                    {tripType === "roundtrip" ? (
+                      <div
+                        onClick={() => {
+                          setOpenReturn(!openReturn);
+                          setOpenDeparture(false);
+                        }}
+                      >
+                        <div className="text-xl font-bold text-gray-800">
+                          {returnDate ? returnDate.getDate() : "--"}{" "}
+                          <span className="text-sm font-semibold">
+                            {returnDate
+                              ? returnDate.toLocaleDateString("en-GB", {
+                                  month: "short",
+                                  year: "2-digit",
+                                })
+                              : ""}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {formatWeekday(returnDate)}
+                        </span>
                       </div>
+                    ) : (
+                      <div
+                        className="text-xs text-gray-400 font-medium mt-1 leading-tight"
+                        onClick={() => setTripType("roundtrip")}
+                      >
+                        Tap to add return date for savings
+                      </div>
+                    )}
 
-                      {/* Departure Date */}
-                      <div className="relative">
-                        <label className="text-xs uppercase font-medium text-slate-500">
-                          Departure Date
-                        </label>
-                        <div
-                          className="flex flex-wrap md:flex-nowrap items-center gap-2 w-full font-bold text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-                          onClick={() => {
-                            setOpenDeparture(!openDeparture);
+                    {openReturn && tripType === "roundtrip" && (
+                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 left-0">
+                        <DayPicker
+                          mode="single"
+                          selected={returnDate}
+                          onSelect={(date) => {
+                            setReturnDate(date);
                             setOpenReturn(false);
                           }}
-                        >
-                          <CalendarIcon className="w-5 h-5 text-orange-500" />
-                          <span>
-                            {departureDate
-                              ? departureDate.toLocaleDateString("en-GB", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })
-                              : "Pick a date"}
-                          </span>
-                          {departureDate && (
-                            <p className="text-xs text-orange-500">
-                              {departureDate.toLocaleDateString("en-US", {
-                                weekday: "long",
-                              })}
-                            </p>
-                          )}
-                        </div>
-
-                        {openDeparture && (
-                          <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-10">
-                            <DayPicker
-                              mode="single"
-                              selected={departureDate}
-                              onSelect={(date) => {
-                                setDepartureDate(date);
-                                setOpenDeparture(false);
-                              }}
-                            />
-                          </div>
-                        )}
+                        />
                       </div>
-
-                      {/* Return Date (only for roundtrip) */}
-                      {tripType === "roundtrip" && (
-                        <div className="relative">
-                          <label className="text-xs uppercase font-medium text-slate-500">
-                            Return Date
-                          </label>
-                          <div
-                            className="flex flex-wrap md:flex-nowrap items-center gap-2 w-full font-bold text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-                            onClick={() => {
-                              setOpenReturn(!openReturn);
-                              setOpenDeparture(false);
-                            }}
-                          >
-                            <CalendarIcon className="w-5 h-5 text-orange-500" />
-                            <span>
-                              {returnDate
-                                ? returnDate.toLocaleDateString("en-GB", {
-                                    day: "2-digit",
-                                    month: "short",
-                                    year: "numeric",
-                                  })
-                                : "Pick a date"}
-                            </span>
-                            {returnDate && (
-                              <p className="text-xs text-orange-500">
-                                {returnDate.toLocaleDateString("en-US", {
-                                  weekday: "long",
-                                })}
-                              </p>
-                            )}
-                          </div>
-
-                          {openReturn && (
-                            <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-10">
-                              <DayPicker
-                                mode="single"
-                                selected={returnDate}
-                                onSelect={(date) => {
-                                  setReturnDate(date);
-                                  setOpenReturn(false);
-                                }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Travelers */}
-                      <div>
-                        <label
-                          htmlFor="travelers"
-                          className="text-xs uppercase font-medium text-slate-500"
-                        >
-                          Travelers
-                        </label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button className="w-full justify-start bg-white border border-gray-300 rounded-md px-3 py-3 text-sm md:text-lg font-semibold shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-400">
-                              {displayValue || "Select Travelers"}
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-72 space-y-4 p-4">
-                            {/* Adults */}
-                            <div className="flex items-center justify-between">
-                              <label htmlFor="adultCount">Adults</label>
-                              <input
-                                type="number"
-                                id="adultCount"
-                                min={1}
-                                max={9}
-                                value={adults}
-                                onChange={(e) =>
-                                  setAdults(Number(e.target.value))
-                                }
-                                className="w-20 border border-gray-300 rounded-md px-3 py-2 text-center text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                              />
-                            </div>
-
-                            {/* Children */}
-                            <div className="flex items-center justify-between">
-                              <label htmlFor="childCount">Children</label>
-                              <input
-                                type="number"
-                                id="childCount"
-                                min={0}
-                                max={9}
-                                value={children}
-                                onChange={(e) =>
-                                  setChildren(Number(e.target.value))
-                                }
-                                className="w-20 border border-gray-300 rounded-md px-3 py-2 text-center text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                              />
-                            </div>
-
-                            {/* Infants */}
-                            <div className="flex items-center justify-between">
-                              <label htmlFor="infantCount">Infants</label>
-                              <input
-                                type="number"
-                                id="infantCount"
-                                min={0}
-                                max={9}
-                                value={infants}
-                                onChange={(e) =>
-                                  setInfants(Number(e.target.value))
-                                }
-                                className="w-20 border border-gray-300 rounded-md px-3 py-2 text-center text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                              />
-                            </div>
-
-                            {/* Travel Class */}
-                            <div>
-                              <label htmlFor="travelClass">Travel Class</label>
-                              <select
-                                id="travelClass"
-                                value={travelClass}
-                                onChange={(e) => setTravelClass(e.target.value)}
-                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                              >
-                                <option value="">Choose Travel Class</option>
-                                <option value="Economy">Economy</option>
-                                <option value="Premium Economy">
-                                  Premium Economy
-                                </option>
-                                <option value="Business">Business</option>
-                                <option value="First Class">First Class</option>
-                              </select>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-
-                      {/* Search Button */}
-                      <div
-                        className={`col-span-1 sm:col-span-2 lg:col-span-1 flex justify-center mt-6 lg:mt-0 ${
-                          tripType === "roundtrip" ? "lg:col-span-5" : ""
-                        }`}
-                      >
-                        <Button
-                          className={`${
-                            tripType === "roundtrip"
-                              ? "w-full sm:w-auto px-6 py-3 rounded-md bg-orange-500 hover:bg-orange-600 text-white font-semibold transition-colors duration-300"
-                              : "w-full lg:w-auto px-6 py-3 rounded-md bg-orange-500 hover:bg-orange-600 text-white font-semibold transition-colors duration-300"
-                          }`}
-                        >
-                          SEARCH FLIGHTS
-                        </Button>
-                      </div>
-                    </div>
+                    )}
                   </div>
-                </TabsContent>
 
-               <TabsContent value="hotels">
-                   <div className="w-full max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-3">
-                                        {/* Trip Type Tabs */}
-                        <div className="flex flex-wrap items-center gap-6 text-sm font-medium text-black mb-6">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="tripType"
-                            />
-                            Upto 4 Rooms
+                  {/* Travelers & Class */}
+                  <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
+                    <span
+                      className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
+                      onClick={() => setTravelersOpen(!travelersOpen)}
+                    >
+                      Travellers &amp; Class <ChevronDown className="w-3 h-3" />
+                    </span>
+                    <div
+                      className="text-base font-bold text-gray-800 mt-0.5"
+                      onClick={() => setTravelersOpen(!travelersOpen)}
+                    >
+                      {displayValue}
+                      {travelClass ? `, ${travelClass}` : ", Economy"}
+                    </div>
+
+                    {travelersOpen && (
+                      <div className="absolute right-0 mt-2 w-72 space-y-4 p-4 bg-white shadow-lg rounded-xl border border-gray-100 z-20">
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="adultCount" className="text-sm text-gray-700">
+                            Adults
                           </label>
-                  
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="tripType"
-                              value="round"
-                            />
-                            Group Deals
-                             <span className="absolute -top-3 -right-8 text-[10px] bg-orange-500 text-white px-2 py-0.5 rounded-full">
-                              NEW
-                            </span>
-                          </label>
-                  
-                  
-                          <span className="ml-auto text-lg  font-bold ">
-                            Hotels Booking
-                          </span>
+                          <input
+                            type="number"
+                            id="adultCount"
+                            min={1}
+                            max={9}
+                            value={adults}
+                            onChange={(e) => setAdults(Number(e.target.value))}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-20 border border-gray-300 rounded-md px-3 py-2 text-center text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                          />
                         </div>
-                        
-                              {/* Booking Grid */}
-                              <div className="grid grid-cols-1 md:grid-cols-6 gap-6 items-center">
-                                {/* Pickup Location */}
-                              <div>
-                                <label className="text-xs uppercase font-medium text-slate-500">
-                                 City, Country or Category
-                                </label>
-                                <select
-                                  value={from}
-                                  onChange={(e) => setFrom(e.target.value)}
-                                  className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-                                >
-                        
-                                  <option value="">Goa</option>
-                                  <span>india</span>
-                                  {indianCities.map((city, index) => (
-                                    <option key={index} value={city}>
-                                      {city}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                        
-                              {/* Drop Location */}
-                              <div>
-                                <label className="text-xs uppercase font-medium text-slate-500">
-                                  To City/Country/Category
-                                </label>
-                                
-                                <select
-                                  value={to}
-                                  onChange={(e) => setTo(e.target.value)}
-                                  className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-                                >
-                                  <option value="" className=" flex items-center justify-center ">Mathura</option>
-                                  {indianCities.map((city, index) => (
-                                    <option key={index} value={city}>
-                                      {city}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                        
-                                {/* Departure Date */}
-                          <div className="relative">
-                            
-                              <label className="text-xs uppercase font-medium text-slate-500">
-                                Check-In Date
-                              </label>
-                              
-                        
-                              {/* Date Display (click to toggle calendar) */}
-                              <div
-                              
-                                className="flex items-center  gap-2 w-full justify-center font-bold text-sm border rounded-xl px-3 p-4 bg-white shadow-sm w-fit cursor-pointer"
-                                onClick={() => setOpen(!open)}
-                              >
-                                  
-                                <CalendarIcon className="w-5 h-5 text-orange-500 " />
-                                <span>
-                                  {selected
-                                    ? selected.toLocaleDateString("en-GB", {
-                                        day: "2-digit",
-                                        month: "short",
-                                        year: "numeric",
-                                      })
-                                    : "Pick a date"}
-                                
-                             
-                                </span>
-                          {/* Show weekday */}
-                               {selected && (
-                                <p className="text-xs text-orange-500 ">
-                                  {selected.toLocaleDateString("en-US", { weekday: "long" })}
-                                </p>
-                              )}
-                              </div>
-                        
-                              {/* Calendar Dropdown */}
-                              {open && (
-                                <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-10">
-                                  <DayPicker
-                                    mode="single"
-                                    selected={selected}
-                                    onSelect={(date) => {
-                                      setSelected(date);
-                                      setOpen(false); // ✅ close after selecting date
-                                    }}
-                                  />
-                                </div>
-                              )}
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="childCount" className="text-sm text-gray-700">
+                            Children
+                          </label>
+                          <input
+                            type="number"
+                            id="childCount"
+                            min={0}
+                            max={9}
+                            value={children}
+                            onChange={(e) => setChildren(Number(e.target.value))}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-20 border border-gray-300 rounded-md px-3 py-2 text-center text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="infantCount" className="text-sm text-gray-700">
+                            Infants
+                          </label>
+                          <input
+                            type="number"
+                            id="infantCount"
+                            min={0}
+                            max={9}
+                            value={infants}
+                            onChange={(e) => setInfants(Number(e.target.value))}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-20 border border-gray-300 rounded-md px-3 py-2 text-center text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="travelClass" className="text-sm text-gray-700">
+                            Travel Class
+                          </label>
+                          <select
+                            id="travelClass"
+                            value={travelClass}
+                            onChange={(e) => setTravelClass(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400 mt-1"
+                          >
+                            <option value="">Choose Travel Class</option>
+                            <option value="Economy">Economy</option>
+                            <option value="Premium Economy">Premium Economy</option>
+                            <option value="Business">Business</option>
+                            <option value="First Class">First Class</option>
+                          </select>
+                        </div>
+                        <button
+                          onClick={() => setTravelersOpen(false)}
+                          className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-md py-2 transition"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-bold text-gray-500 uppercase mr-2">
+                      Special Fares:
+                    </span>
+                    {["Regular", "Student", "Armed Forces", "Senior Citizen"].map(
+                      (fare, i) => (
+                        <label key={fare} className="cursor-pointer">
+                          <input
+                            type="radio"
+                            name="fare"
+                            defaultChecked={i === 0}
+                            className="peer hidden"
+                          />
+                          <div className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 peer-checked:border-orange-500 peer-checked:bg-orange-50">
+                            <div className="w-4 h-4 rounded-full border-2 border-orange-500 flex items-center justify-center">
+                              <div className="hidden peer-checked:block w-2 h-2 rounded-full bg-orange-500" />
                             </div>
-
-                            <div className="relative">
-                            
-                              <label className="text-xs uppercase font-medium text-slate-500">
-                                Check-Out Date
-                              </label>
-                              
-                        
-                              {/* Date Display (click to toggle calendar) */}
-                              <div
-                              
-                                className="flex items-center  gap-2 w-full justify-center font-bold text-sm border rounded-xl px-3 p-4 bg-white shadow-sm w-fit cursor-pointer"
-                                onClick={() => setOpen(!open)}
-                              >
-                                  
-                                <CalendarIcon className="w-5 h-5 text-orange-500 " />
-                                <span>
-                                  {selected
-                                    ? selected.toLocaleDateString("en-GB", {
-                                        day: "2-digit",
-                                        month: "short",
-                                        year: "numeric",
-                                      })
-                                    : "Pick a date"}
-                                
-                             
-                                </span>
-                          {/* Show weekday */}
-                               {selected && (
-                                <p className="text-xs text-orange-500 ">
-                                  {selected.toLocaleDateString("en-US", { weekday: "long" })}
-                                </p>
-                              )}
-                              </div>
-                        
-                              {/* Calendar Dropdown */}
-                              {open && (
-                                <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-10">
-                                  <DayPicker
-                                    mode="single"
-                                    selected={selected}
-                                    onSelect={(date) => {
-                                      setSelected(date);
-                                      setOpen(false); // ✅ close after selecting date
-                                    }}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                  
-                  
-                        
-                                {/* Rooms */}
-                                <div>
-                                <label className="text-xs uppercase font-medium text-slate-500">
-                                  Rooms & Guests
-                                </label>
-                  
-                                <select name="" id="" className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer">
-                                  <option value="">Select Rooms</option>
-                                  <option value="">2 Adult 1 Room</option>
-                                  <option value="">2 Adult 2 Room</option>
-                                  <option value="">3 Adult 1 Room</option>  
-                                  <option value="">3 Adult 2 Room</option>
-                                  <option value="">4 Adult 1 Room</option>
-                                  <option value="">4 Adult 2 Room</option>
-                                  <option value="">5 Adult 1 Room</option>
-                                  <option value="">5 Adult 2 Room</option>
-                  
-                                </select>
-                                 
-                              </div>
-                               
-                               {/* Search Button */}
-                        <div className="flex justify-center  mt-6">
-                                  <Button className="w-full md:w-auto px-6 py-3 rounded-sm bg-gray-400 hover:bg-gray-500 text-white font-semibold transition-colors duration-300">
-                                    SEARCH PACKAGES
-                                  </Button>
-                                </div>
-                               
-                              </div>
-                                
-                            </div>
-                </TabsContent>
-
-               <TabsContent value="packages">
-        <div className="w-full max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-3">
-                      {/* Trip Type Tabs */}
-      <div className="flex flex-wrap items-center gap-6 text-sm font-medium text-black mb-6">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="radio"
-            name="tripType"
-          />
-          Outstation One-Way
-        </label>
-
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="radio"
-            name="tripType"
-            value="round"
-          />
-          Honeymoon
-        </label>
-
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="radio"
-            name="tripType"
-            value="airport"
-          />
-          <span className="">Book@1</span>
-        </label>
-
-        <label className="flex items-center gap-2 cursor-pointer relative">
-          <input
-            type="radio"
-            name="tripTypePackage"
-            value="multi"
-          />
-          Group Tour Packages
-        </label>
-
-         <label className="flex items-center gap-2 cursor-pointer relative">
-          <input
-            type="radio"
-            name="tripTypePackage"
-            value="multi"
-          />
-          Domestic Sale Packages
-          <span className="absolute -top-3 -right-8 text-[10px] bg-orange-500 text-white px-2 py-0.5 rounded-full">
-            NEW
-          </span>
-        </label>
-
-        <span className="ml-auto text-lg   font-bold ">
-          Holiday Packages Booking
-        </span>
-      </div>
-      
-            {/* Booking Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-center">
-              {/* Pickup Location */}
-            <div>
-              <label className="text-xs uppercase font-medium text-slate-500">
-                From City
-              </label>
-              <select
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-              >
-      
-                <option value="">New Delhi</option>
-                <span>india</span>
-                {indianCities.map((city, index) => (
-                  <option key={index} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
-            </div>
-      
-            {/* Drop Location */}
-            <div>
-              <label className="text-xs uppercase font-medium text-slate-500">
-                To City/Country/Category
-              </label>
-              
-              <select
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-              >
-                <option value="" className=" flex items-center justify-center ">Mathura</option>
-                {indianCities.map((city, index) => (
-                  <option key={index} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
-            </div>
-      
-              {/* Departure Date */}
-        <div className="relative">
-          
-            <label className="text-xs uppercase font-medium text-slate-500">
-              Departure Date
-            </label>
-            
-      
-            {/* Date Display (click to toggle calendar) */}
-            <div
-            
-              className="flex items-center  gap-2 w-full justify-center font-bold text-sm border rounded-xl px-3 p-4 bg-white shadow-sm w-fit cursor-pointer"
-              onClick={() => setOpen(!open)}
-            >
-                
-              <CalendarIcon className="w-5 h-5 text-orange-500 " />
-              <span>
-                {selected
-                  ? selected.toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })
-                  : "Pick a date"}
-              
-           
-              </span>
-        {/* Show weekday */}
-             {selected && (
-              <p className="text-xs text-orange-500 ">
-                {selected.toLocaleDateString("en-US", { weekday: "long" })}
-              </p>
-            )}
-            </div>
-      
-            {/* Calendar Dropdown */}
-            {open && (
-              <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-10">
-                <DayPicker
-                  mode="single"
-                  selected={selected}
-                  onSelect={(date) => {
-                    setSelected(date);
-                    setOpen(false); // ✅ close after selecting date
-                  }}
-                />
+                            <span className="font-semibold text-sm">{fare}</span>
+                          </div>
+                        </label>
+                      )
+                    )}
+                  </div>
+                  <button className="absolute left-1/2 -translate-x-1/2 -bottom-18 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition">
+                    Search Flights
+                  </button>
+                </div>
               </div>
             )}
-          </div>
 
-
-      
-              {/* Rooms */}
+            {/* ---------------- HOTELS ---------------- */}
+            {activeTab === "hotels" && (
               <div>
-              <label className="text-xs uppercase font-medium text-slate-500">
-                Rooms& Guests
-              </label>
+                <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                  <div className="lg:col-span-5 p-4 hover:bg-gray-50">
+                    <LocationSearchBox
+                      label="City, Area or Property Name"
+                      value={hotelDestination}
+                      placeholder="Goa, India"
+                      onSelect={setHotelDestination}
+                    />
+                  </div>
 
-              <select name="" id="" className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer">
-                <option value="">Select Rooms</option>
-                <option value="">2 Adult 1 Room</option>
-                <option value="">2 Adult 2 Room</option>
-                <option value="">3 Adult 1 Room</option>  
-                <option value="">3 Adult 2 Room</option>
-                <option value="">4 Adult 1 Room</option>
-                <option value="">4 Adult 2 Room</option>
-                <option value="">5 Adult 1 Room</option>
-                <option value="">5 Adult 2 Room</option>
+                  <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative">
+                    <span
+                      className="text-xs uppercase text-gray-400 block mb-1"
+                      onClick={() => {
+                        setOpenCheckIn(!openCheckIn);
+                        setOpenCheckOut(false);
+                      }}
+                    >
+                      Check-In
+                    </span>
+                    <div
+                      className="text-xl font-bold text-gray-800"
+                      onClick={() => {
+                        setOpenCheckIn(!openCheckIn);
+                        setOpenCheckOut(false);
+                      }}
+                    >
+                      {checkIn ? checkIn.getDate() : "--"}{" "}
+                      <span className="text-sm font-semibold">
+                        {checkIn
+                          ? checkIn.toLocaleDateString("en-GB", {
+                              month: "short",
+                              year: "2-digit",
+                            })
+                          : ""}
+                      </span>
+                    </div>
+                    {openCheckIn && (
+                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
+                        <DayPicker
+                          mode="single"
+                          selected={checkIn}
+                          onSelect={(date) => {
+                            setCheckIn(date);
+                            setOpenCheckIn(false);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
 
-              </select>
-               
-            </div>
-             
-             {/* Search Button */}
-      <div className="flex justify-center  mt-6">
-                <Button className="w-full md:w-auto px-6 py-3 rounded-sm bg-gray-400 hover:bg-gray-500 text-white font-semibold transition-colors duration-300">
-                  SEARCH PACKAGES
-                </Button>
+                  <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative">
+                    <span
+                      className="text-xs uppercase text-gray-400 block mb-1"
+                      onClick={() => {
+                        setOpenCheckOut(!openCheckOut);
+                        setOpenCheckIn(false);
+                      }}
+                    >
+                      Check-Out
+                    </span>
+                    <div
+                      className="text-xl font-bold text-gray-800"
+                      onClick={() => {
+                        setOpenCheckOut(!openCheckOut);
+                        setOpenCheckIn(false);
+                      }}
+                    >
+                      {checkOut ? checkOut.getDate() : "--"}{" "}
+                      <span className="text-sm font-semibold">
+                        {checkOut
+                          ? checkOut.toLocaleDateString("en-GB", {
+                              month: "short",
+                              year: "2-digit",
+                            })
+                          : ""}
+                      </span>
+                    </div>
+                    {openCheckOut && (
+                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
+                        <DayPicker
+                          mode="single"
+                          selected={checkOut}
+                          onSelect={(date) => {
+                            setCheckOut(date);
+                            setOpenCheckOut(false);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50">
+                    <span className="text-xs uppercase text-gray-400 block mb-1">
+                      Rooms &amp; Guests
+                    </span>
+                    <select
+                      value={rooms}
+                      onChange={(e) => setRooms(e.target.value)}
+                      className="w-full text-xl font-bold text-gray-800 bg-transparent outline-none cursor-pointer"
+                    >
+                      <option value="">1 Room, 2 Adults</option>
+                      <option value="2-1">2 Adult 1 Room</option>
+                      <option value="2-2">2 Adult 2 Room</option>
+                      <option value="3-1">3 Adult 1 Room</option>
+                      <option value="3-2">3 Adult 2 Room</option>
+                      <option value="4-1">4 Adult 1 Room</option>
+                      <option value="4-2">4 Adult 2 Room</option>
+                    </select>
+                  </div>
+                </div>
+
+               <button className="absolute left-1/2 -translate-x-1/2 -bottom-20 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition">
+  Search Hotels
+</button>
               </div>
-             
-            </div>
-              
-          </div>
-              
-              </TabsContent>
+            )}
 
-             <TabsContent value="bus">
-            <div className="w-full max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-3">
-                <div className="text-lg ml-auto   text-black font-bold ">
-          Online Bus Booking
-        </div>
+            {/* ---------------- HOLIDAYS ---------------- */}
+            {activeTab === "holidays" && (
+              <div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                  <div className="lg:col-span-6 p-4 hover:bg-gray-50">
+                    <LocationSearchBox
+                      label="From City"
+                      value={holidayFrom}
+                      placeholder="New Delhi"
+                      onSelect={setHolidayFrom}
+                    />
+                  </div>
+                  <div className="lg:col-span-6 p-4 hover:bg-gray-50">
+                    <LocationSearchBox
+                      label="Where do you want to go?"
+                      value={holidayTo}
+                      placeholder="Kashmir, India"
+                      onSelect={setHolidayTo}
+                      align="right"
+                    />
+                  </div>
+                </div>
+               <button className="absolute left-1/2 -translate-x-1/2 -bottom-20 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition">
+  Search Holidays
+</button>
+              </div>
+            )}
 
-      {/* Booking Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
-        {/* Pickup Location */}
-      <div>
-        <label className="text-xs uppercase font-medium text-slate-500">
-          From
-        </label>
-        <select
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-        >
-
-          <option value="">Select Pickup Location</option>
-          {indianCities.map((city, index) => (
-            <option key={index} value={city}>
-              {city}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Drop Location */}
-      <div>
-        <label className="text-xs uppercase font-medium text-slate-500">
-          To
-        </label>
-        
-        <select
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-        >
-          <option value="" className=" flex items-center justify-center ">Select Drop Location</option>
-          {indianCities.map((city, index) => (
-            <option key={index} value={city}>
-              {city}
-            </option>
-          ))}
-        </select>
-      </div>
-
-        {/* Departure Date */}
-  <div className="relative">
-    
-      <label className="text-xs uppercase font-medium text-slate-500">
-        Departure 
-      </label>
-      
-
-      {/* Date Display (click to toggle calendar) */}
-      <div
-      
-        className="flex items-center  gap-2 w-full justify-center font-bold text-sm border rounded-xl px-3 p-4 bg-white shadow-sm w-fit cursor-pointer"
-        onClick={() => setOpen(!open)}
-      >
-          
-        <CalendarIcon className="w-5 h-5 text-orange-500 " />
-        <span>
-          {selected
-            ? selected.toLocaleDateString("en-GB", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })
-            : "Pick a date"}
-        
-     
-        </span>
-  {/* Show weekday */}
-       {selected && (
-        <p className="text-xs text-orange-500 ">
-          {selected.toLocaleDateString("en-US", { weekday: "long" })}
-        </p>
-      )}
-      </div>
-
-      {/* Calendar Dropdown */}
-      {open && (
-        <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-10">
-          <DayPicker
-            mode="single"
-            selected={selected}
-            onSelect={(date) => {
-              setSelected(date);
-              setOpen(false); // ✅ close after selecting date
-            }}
-          />
-        </div>
-      )}
-    </div>
-
-        {/* Pickup Time */}
-       
-       {/* Search Button */}
-<div className="flex justify-center  mt-6">
-          <Button className="w-full md:w-auto px-6 py-3 rounded-sm bg-gray-400 hover:bg-gray-500 text-white font-semibold transition-colors duration-300">
-            SEARCH BUSES
-          </Button>
-        </div>
-       
-      </div>
-        
-    </div>
-                
-              </TabsContent>
-
-              <TabsContent value="cabs">
-                  <div className="w-full max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-3">
-                    {/* Trip Type Tabs */}
-                    <div className="flex flex-wrap items-center gap-6 text-sm font-medium text-black mb-6">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tripType"
-                          value="oneway"
-                          checked={tripType === "oneway"}
-                          onChange={(e) => setTripType(e.target.value)}
+            {/* ---------------- BUSES ---------------- */}
+            {activeTab === "buses" && (
+              <div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                  <div className="lg:col-span-4 p-4 hover:bg-gray-50">
+                    <LocationSearchBox
+                      label="From City"
+                      value={busFrom}
+                      placeholder="Delhi"
+                      onSelect={setBusFrom}
+                    />
+                  </div>
+                  <div className="lg:col-span-4 p-4 hover:bg-gray-50">
+                    <LocationSearchBox
+                      label="To City"
+                      value={busTo}
+                      placeholder="Manali"
+                      onSelect={setBusTo}
+                    />
+                  </div>
+                  <div className="lg:col-span-4 p-4 cursor-pointer hover:bg-gray-50 relative">
+                    <span
+                      className="text-xs uppercase text-gray-400 block mb-1"
+                      onClick={() => setOpenTravelDate(!openTravelDate)}
+                    >
+                      Travel Date
+                    </span>
+                    <div
+                      className="text-xl font-bold text-gray-800"
+                      onClick={() => setOpenTravelDate(!openTravelDate)}
+                    >
+                      {travelDate ? travelDate.getDate() : "--"}{" "}
+                      <span className="text-sm font-semibold">
+                        {travelDate
+                          ? travelDate.toLocaleDateString("en-GB", {
+                              month: "short",
+                              year: "2-digit",
+                            })
+                          : ""}
+                      </span>
+                    </div>
+                    {openTravelDate && (
+                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
+                        <DayPicker
+                          mode="single"
+                          selected={travelDate}
+                          onSelect={(date) => {
+                            setTravelDate(date);
+                            setOpenTravelDate(false);
+                          }}
                         />
-                        Outstation One-Way
-                      </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
+               <button className="absolute left-1/2 -translate-x-1/2 -bottom-20 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition">
+  Search Buses
+</button>
+              </div>
+            )}
 
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tripType"
-                          value="round"
-                          checked={tripType === "round"}
-                          onChange={(e) => setTripType(e.target.value)}
-                        />
-                        Outstation Round-Trip
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tripType"
-                          value="airport"
-                          checked={tripType === "airport"}
-                          onChange={(e) => setTripType(e.target.value)}
-                        />
-                        <span className="">Airport Transfers</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer relative">
-                        <input
-                          type="radio"
-                          name="tripType"
-                          value="hourly"
-                          checked={tripType === "hourly"}
-                          onChange={(e) => setTripType(e.target.value)}
-                        />
-                        Hourly Rentals
+            {/* ---------------- CABS ---------------- */}
+            {activeTab === "cabs" && (
+              <div>
+                <div className="flex flex-wrap items-center gap-6 text-sm font-medium text-black mb-4">
+                  {[
+                    { id: "oneway", label: "Outstation One-Way" },
+                    { id: "round", label: "Outstation Round-Trip" },
+                    { id: "airport", label: "Airport Transfers" },
+                    { id: "hourly", label: "Hourly Rentals" },
+                  ].map((opt) => (
+                    <label key={opt.id} className="flex items-center gap-2 cursor-pointer relative">
+                      <input
+                        type="radio"
+                        name="cabTripType"
+                        checked={cabTripType === opt.id}
+                        onChange={() => setCabTripType(opt.id)}
+                        className="accent-orange-600 w-4 h-4"
+                      />
+                      {opt.label}
+                      {opt.id === "hourly" && (
                         <span className="absolute -top-3 -right-8 text-[10px] bg-orange-500 text-white px-2 py-0.5 rounded-full">
                           NEW
                         </span>
-                      </label>
+                      )}
+                    </label>
+                  ))}
+                </div>
 
-                      <span className="ml-auto text-lg  text-black font-bold ">
-                        Online Cab Booking
-                      </span>
-                    </div>
-
-                    {/* Booking Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-center">
-                      {/* Pickup Location */}
-                      <div>
-                        <label className="text-xs uppercase font-medium text-slate-500">
-                          From
-                        </label>
-                        <select
-                          value={from}
-                          onChange={(e) => setFrom(e.target.value)}
-                          className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-                        >
-                          <option value="">Select Pickup Location</option>
-                          {indianCities.map((city, index) => (
-                            <option key={index} value={city}>
-                              {city}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Drop Location */}
-                      <div>
-                        <label className="text-xs uppercase font-medium text-slate-500">
-                          To
-                        </label>
-
-                        <select
-                          value={to}
-                          onChange={(e) => setTo(e.target.value)}
-                          className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-                        >
-                          <option
-                            value=""
-                            className=" flex items-center justify-center "
-                          >
-                            Select Drop Location
-                          </option>
-                          {indianCities.map((city, index) => (
-                            <option key={index} value={city}>
-                              {city}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Departure Date */}
-                      <div className="relative">
-                        <label className="text-xs uppercase font-medium text-slate-500">
-                          Departure
-                        </label>
-
-                        {/* Date Display (click to toggle calendar) */}
-                        <div
-                          className="flex items-center  gap-2 w-full justify-center font-bold text-sm border rounded-xl px-3 p-4 bg-white shadow-sm w-fit cursor-pointer"
-                          onClick={() => setOpen(!open)}
-                        >
-                          <CalendarIcon className="w-5 h-5 text-orange-500 " />
-                          <span>
-                            {selected
-                              ? selected.toLocaleDateString("en-GB", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })
-                              : "Pick a date"}
-                          </span>
-                          {/* Show weekday */}
-                          {selected && (
-                            <p className="text-xs text-orange-500 ">
-                              {selected.toLocaleDateString("en-US", {
-                                weekday: "long",
-                              })}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Calendar Dropdown */}
-                        {open && (
-                          <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-10">
-                            <DayPicker
-                              mode="single"
-                              selected={selected}
-                              onSelect={(date) => {
-                                setSelected(date);
-                                setOpen(false); // ✅ close after selecting date
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Pickup Time */}
-                      <div className="w-full max-w-md mx-auto space-y-2">
-                        {/* Label */}
-                        <label className="text-xs uppercase font-medium text-slate-500">
-                          Pickup Time
-                        </label>
-
-                        {/* Time + Timezone Selector */}
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 font-bold p-2 border rounded-xl shadow-sm text-base sm:text-lg bg-white">
-                          <Clock className="w-5 h-5 text-orange-500 flex-shrink-0" />
-
-                          {/* Time Input */}
-                          <input
-                            type="time"
-                            value={pickupTime}
-                            onChange={(e) => setPickupTime(e.target.value)}
-                            className="w-full sm:w-auto  px-3 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-
-                          {/* Timezone Selector */}
-                          {/* <select
-          value={timezone}
-          onChange={(e) => setTimezone(e.target.value)}
-          className="w-full sm:w-auto border rounded-lg px-3 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          <option value="Asia/Kolkata">India (IST)</option>
-          <option value="America/New_York">New York (EST)</option>
-          <option value="Europe/London">London (GMT)</option>
-          <option value="Asia/Dubai">Dubai (GST)</option>
-        </select> */}
-                        </div>
-
-                        {/* Info Text */}
-                        {/* <p className="text-sm text-gray-500 text-center sm:text-left md:">
-        Pickup time is{" "}
-        <span className="font-semibold">{pickupTime}</span> as per{" "}
-        <span className="font-semibold">{timezone}</span> timezone
-      </p> */}
-                      </div>
-                      {/* Search Button */}
-                      <div className="flex justify-center  mt-6">
-                        <Button className="w-full md:w-auto px-6 py-3 rounded-sm bg-gray-400 hover:bg-gray-500 text-white font-semibold transition-colors duration-300">
-                          SEARCH CABS
-                        </Button>
-                      </div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                  <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50">
+                    <span className="text-xs uppercase text-gray-400 block mb-1">
+                      Trip Type
+                    </span>
+                    <div className="text-xl font-bold text-gray-800">
+                      {cabTripType === "oneway" && "Outstation One-Way"}
+                      {cabTripType === "round" && "Outstation Round-Trip"}
+                      {cabTripType === "airport" && "Airport Transfers"}
+                      {cabTripType === "hourly" && "Hourly Rentals"}
                     </div>
                   </div>
-                </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+                  <div className="lg:col-span-3 p-4 hover:bg-gray-50/80 transition cursor-pointer">
+                    <LocationSearchBox
+                      label="From Location"
+                      value={cabFrom}
+                      placeholder="Delhi NCR"
+                      onSelect={setCabFrom}
+                    />
+                  </div>
+                  <div className="lg:col-span-3 p-4 hover:bg-gray-50/80 transition cursor-pointer">
+                    <LocationSearchBox
+                      label="To Location"
+                      value={cabTo}
+                      placeholder="Agra"
+                      onSelect={setCabTo}
+                    />
+                  </div>
+                  <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50 relative">
+                    <span
+                      className="text-xs uppercase text-gray-400 block mb-1"
+                      onClick={() => setOpenCabDate(!openCabDate)}
+                    >
+                      Pickup Date &amp; Time
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="text-xl font-bold text-gray-800"
+                        onClick={() => setOpenCabDate(!openCabDate)}
+                      >
+                        {cabDate ? cabDate.getDate() : "--"}{" "}
+                        <span className="text-sm font-semibold">
+                          {cabDate
+                            ? cabDate.toLocaleDateString("en-GB", {
+                                month: "short",
+                              })
+                            : ""}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 border-l pl-2 border-gray-200">
+                        <Clock className="w-4 h-4 text-orange-500" />
+                        <input
+                          type="time"
+                          value={pickupTime}
+                          onChange={(e) => setPickupTime(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-sm font-semibold text-gray-800 outline-none w-[70px]"
+                        />
+                      </div>
+                    </div>
+                    {openCabDate && (
+                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
+                        <DayPicker
+                          mode="single"
+                          selected={cabDate}
+                          onSelect={(date) => {
+                            setCabDate(date);
+                            setOpenCabDate(false);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button className="absolute left-1/2 -translate-x-1/2 -bottom-18 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition">
+  Search Cabs
+</button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </section>
   );
