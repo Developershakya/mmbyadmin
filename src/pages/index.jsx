@@ -12,7 +12,6 @@ export default function Home() {
     <div className="min-h-screen bg-slate-50" style={{ backgroundImage: "url('')" }} >
       <Header />
       <HeroSection />
-      <HolidayPackages />
       <AlertOverlay />
       <PopularDestinations />
       <TravelOffers />
