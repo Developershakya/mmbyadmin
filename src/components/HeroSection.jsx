@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/router";
 import { useState, useRef, useEffect } from "react";
 import {
   Plane,
@@ -10,6 +11,7 @@ import {
   ChevronDown,
   Search,
 } from "lucide-react";
+import { FaPlane, FaHotel, FaMapMarkerAlt, FaBus, FaCar } from "react-icons/fa";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
@@ -37,6 +39,7 @@ const indianCities = [
   { code: "NAG", name: "Nagpur, India", sub: "Dr. Babasaheb Ambedkar Airport" },
   { code: "STV", name: "Surat, India", sub: "Surat Airport" },
   { code: "ATQ", name: "Amritsar, India", sub: "Sri Guru Ram Dass Jee Airport" },
+  { code: "IXL", name: "Leh", sub: "Leh Kushok Bakula Rimpoche Airport" },
 ];
 
 const visaFreeDestinations = [
@@ -140,45 +143,43 @@ function LocationSearchBox({ label, value, placeholder, onSelect, align = "left"
   }
 
   return (
-  <div
-    className="relative w-full h-full"
-    ref={boxRef}
-  >
-      <span className="text-xs uppercase tracking-wider text-gray-400 block mb-1">
-        {label}
-      </span>
- <button
-  type="button"
+ <div
+  className="relative w-full h-full cursor-pointer"
+  ref={boxRef}
   onClick={() => setOpen((prev) => !prev)}
-  className="w-full h-full text-left block cursor-pointer"
 >
-        <div className="text-xl font-bold text-gray-800 truncate">
-          {value ? value.name : placeholder}
-        </div>
-        {value?.sub && (
-          <span className="text-xs text-gray-500 truncate block">
-            {value.sub}
-          </span>
-        )}
-      </button>
+  <span className="text-xs uppercase tracking-wider text-gray-400 block mb-1">
+    {label}
+  </span>
+  <div className="pointer-events-none">
+    <div className="text-xl font-bold text-gray-800 truncate">
+      {value ? value.name : placeholder}
+    </div>
+{value?.sub && (
+  <span className="text-xs text-gray-500 truncate block">
+    {value.code}, {value.sub}
+  </span>
+)}
+  </div>
 
-      {open && (
-        <div
-          className={`absolute mt-2 w-[340px] max-h-[420px] overflow-y-auto bg-white shadow-2xl rounded-xl border border-gray-100 z-30 p-3 ${
-            align === "right" ? "right-0" : "left-0"
-          }`}
-        >
-          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 mb-3 sticky top-0 bg-white">
-            <Search className="w-4 h-4 text-gray-400" />
-            <input
-              autoFocus
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Search ${label.toLowerCase()}`}
-              className="w-full text-sm outline-none"
-            />
-          </div>
+  {open && (
+    <div
+      className={`absolute mt-2 w-[340px] max-h-[420px] overflow-y-auto bg-white shadow-2xl rounded-xl border border-gray-100 z-30 p-3 ${
+        align === "right" ? "right-0" : "left-0"
+      }`}
+      onClick={(e) => e.stopPropagation()}  // 👈 zaruri hai, dropdown ke andar click pe band na ho
+    >
+      <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 mb-3 sticky top-0 bg-white">
+        <Search className="w-4 h-4 text-gray-400" />
+        <input
+          autoFocus
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Search ${label.toLowerCase()}`}
+          className="w-full text-sm outline-none"
+        />
+      </div>
 
           {filtered ? (
             <div>
@@ -309,11 +310,104 @@ function LocationSearchBox({ label, value, placeholder, onSelect, align = "left"
     </div>
   );
 }
+function RoomsGuestsBox({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef(null);
 
+  const rooms = value?.rooms ?? 1;
+  const adults = value?.adults ?? 2;
+  const children = value?.children ?? 0;
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (boxRef.current && !boxRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function update(patch) {
+    onChange({ rooms, adults, children, ...patch });
+  }
+
+  function Counter({ label, sub, val, min, onDec, onInc }) {
+    return (
+      <div className="flex items-center justify-between py-2">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">{label}</p>
+          {sub && <p className="text-xs text-gray-400">{sub}</p>}
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDec(); }}
+            disabled={val <= min}
+            className="w-8 h-8 rounded-full border border-gray-300 text-gray-600 font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:border-orange-400 hover:text-orange-500 transition"
+          >
+            –
+          </button>
+          <span className="w-5 text-center font-semibold text-gray-800">{val}</span>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onInc(); }}
+            className="w-8 h-8 rounded-full border border-gray-300 text-gray-600 font-bold hover:border-orange-400 hover:text-orange-500 transition"
+          >
+            +
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full h-full cursor-pointer" ref={boxRef}>
+      <span className="text-xs uppercase text-gray-400 block mb-1">Rooms &amp; Guests</span>
+      <div onClick={() => setOpen((p) => !p)}>
+        <div className="text-xl font-bold text-gray-800 flex items-center gap-1">
+          {rooms} Room{rooms > 1 ? "s" : ""}, {adults} Adult{adults > 1 ? "s" : ""}
+          {children > 0 ? `, ${children} Child${children > 1 ? "ren" : ""}` : ""}
+          <ChevronDown className="w-3 h-3 text-gray-400" />
+        </div>
+      </div>
+
+      {open && (
+        <div
+          className="absolute right-0 mt-2 w-80 bg-white shadow-2xl rounded-xl border border-gray-100 z-30 p-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Counter label="Room" val={rooms} min={1}
+            onDec={() => update({ rooms: Math.max(1, rooms - 1) })}
+            onInc={() => update({ rooms: Math.min(9, rooms + 1) })} />
+          <div className="border-t border-gray-100" />
+          <Counter label="Adults" val={adults} min={1}
+            onDec={() => update({ adults: Math.max(1, adults - 1) })}
+            onInc={() => update({ adults: Math.min(20, adults + 1) })} />
+          <div className="border-t border-gray-100" />
+          <Counter label="Children" sub="0 - 17 Years Old" val={children} min={0}
+            onDec={() => update({ children: Math.max(0, children - 1) })}
+            onInc={() => update({ children: Math.min(10, children + 1) })} />
+          <p className="text-xs text-gray-400 mt-3 leading-relaxed">
+            Please provide the right number of children along with their correct age for the best options and prices.
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="w-full mt-4 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-lg py-2.5 transition"
+          >
+            Apply
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 /* ---------------------------------------------------------
    MAIN COMPONENT
 --------------------------------------------------------- */
 export default function HeroSection() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("flights");
   const [tripType, setTripType] = useState("oneway");
   const [adults, setAdults] = useState(1);
@@ -345,10 +439,18 @@ export default function HeroSection() {
   const [pickupTime, setPickupTime] = useState("10:00");
 
   // Location values now hold objects: { code, name, sub } | null
-  const [from, setFrom] = useState(null);
-  const [to, setTo] = useState(null);
-  const [hotelDestination, setHotelDestination] = useState(null);
-  const [rooms, setRooms] = useState("");
+const [from, setFrom] = useState(
+  indianCities.find((c) => c.code === "DEL")
+);
+const [to, setTo] = useState(
+  indianCities.find((c) => c.code === "IXL")
+);
+const [hotelDestination, setHotelDestination] = useState(null);
+const [roomsGuests, setRoomsGuests] = useState({
+  rooms: 1,
+  adults: 2,
+  children: 0,
+});
 
   const [holidayFrom, setHolidayFrom] = useState(null);
   const [holidayTo, setHolidayTo] = useState(null);
@@ -360,13 +462,61 @@ export default function HeroSection() {
   const [cabFrom, setCabFrom] = useState(null);
   const [cabTo, setCabTo] = useState(null);
 
-  const tabs = [
-    { id: "flights", label: "Flights", icon: Plane },
-    { id: "hotels", label: "Hotels", icon: Hotel },
-    { id: "holidays", label: "Holidays", icon: MapPin },
-    { id: "buses", label: "Buses", icon: Bus },
-    { id: "cabs", label: "Cabs", icon: Car },
-  ];
+const tabs = [
+  { id: "flights", label: "Flights", icon: FaPlane },
+  { id: "hotels", label: "Hotels", icon: FaHotel },
+  { id: "holidays", label: "Holidays", icon: FaMapMarkerAlt },
+  { id: "buses", label: "Buses", icon: FaBus },
+  { id: "cabs", label: "Cabs", icon: FaCar },
+];
+  const searchLabels = {
+  flights: "Search Flights",
+  hotels: "Search Hotels",
+  holidays: "Search Holidays",
+  buses: "Search Buses",
+  cabs: "Search Cabs",
+};
+function handleSearch() {
+  if (activeTab === "flights") {
+    if (!from || !to) {
+      alert("Please select From and To locations.");
+      return;
+    }
+    router.push(
+      `/flights?from=${from.code}&to=${to.code}&date=${departureDate?.toISOString().split("T")[0]}&trip=${tripType}`
+    );
+  } else if (activeTab === "hotels") {
+    if (!hotelDestination) {
+      alert("Please select a destination.");
+      return;
+    }
+    router.push(
+      `/hotels?destination=${hotelDestination.code}&checkin=${checkIn?.toISOString().split("T")[0]}&checkout=${checkOut?.toISOString().split("T")[0]}`
+    );
+  } else if (activeTab === "holidays") {
+    if (!holidayFrom || !holidayTo) {
+      alert("Please select From and To.");
+      return;
+    }
+    router.push(`/holidays?from=${holidayFrom.code}&to=${holidayTo.code}`);
+  } else if (activeTab === "buses") {
+    if (!busFrom || !busTo) {
+      alert("Please select From and To cities.");
+      return;
+    }
+    router.push(
+      `/buses?from=${busFrom.code}&to=${busTo.code}&date=${travelDate?.toISOString().split("T")[0]}`
+    );
+  } else if (activeTab === "cabs") {
+    if (!cabFrom || !cabTo) {
+      alert("Please select pickup and drop locations.");
+      return;
+    }
+    router.push(
+      `/cabs?from=${cabFrom.code}&to=${cabTo.code}&type=${cabTripType}`
+    );
+  }
+}
 
   const formatWeekday = (date) =>
     date ? date.toLocaleDateString("en-US", { weekday: "long" }) : "";
@@ -379,7 +529,7 @@ export default function HeroSection() {
           "linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.35)), url('https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=1920&q=80')",
       }}
     >
-      <div className="max-w-7xl mx-auto w-full px-6 relative z-10 -mt-4">
+      <div className="max-w-7xl mx-auto w-full px-12 relative z-10 -mt-4">
         <h1 className="text-5xl font-bold text-white mb-2 tracking-wide">
           Make My Bharat Yatra
         </h1>
@@ -413,7 +563,7 @@ export default function HeroSection() {
           </div>
 
           {/* Panel */}
-          <div className="relative rounded-b-xl bg-white p-6 pb-24">
+<div className="relative rounded-b-xl bg-white p-6 pb-24 min-h-[320px]">
             {/* ---------------- FLIGHTS ---------------- */}
             {activeTab === "flights" && (
               <div>
@@ -523,6 +673,7 @@ export default function HeroSection() {
                             setDepartureDate(date);
                             setOpenDeparture(false);
                           }}
+
                         />
                       </div>
                     )}
@@ -703,9 +854,6 @@ export default function HeroSection() {
                       )
                     )}
                   </div>
-                  <button className="absolute left-1/2 -translate-x-1/2 -bottom-18 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition">
-                    Search Flights
-                  </button>
                 </div>
               </div>
             )}
@@ -805,29 +953,13 @@ export default function HeroSection() {
                     )}
                   </div>
 
-                  <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50">
-                    <span className="text-xs uppercase text-gray-400 block mb-1">
-                      Rooms &amp; Guests
-                    </span>
-                    <select
-                      value={rooms}
-                      onChange={(e) => setRooms(e.target.value)}
-                      className="w-full text-xl font-bold text-gray-800 bg-transparent outline-none cursor-pointer"
-                    >
-                      <option value="">1 Room, 2 Adults</option>
-                      <option value="2-1">2 Adult 1 Room</option>
-                      <option value="2-2">2 Adult 2 Room</option>
-                      <option value="3-1">3 Adult 1 Room</option>
-                      <option value="3-2">3 Adult 2 Room</option>
-                      <option value="4-1">4 Adult 1 Room</option>
-                      <option value="4-2">4 Adult 2 Room</option>
-                    </select>
-                  </div>
+               <div className="lg:col-span-3 p-4 hover:bg-gray-50">
+  <RoomsGuestsBox
+    value={roomsGuests}
+    onChange={setRoomsGuests}
+  />
+</div>
                 </div>
-
-               <button className="absolute left-1/2 -translate-x-1/2 -bottom-20 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition">
-  Search Hotels
-</button>
               </div>
             )}
 
@@ -853,9 +985,6 @@ export default function HeroSection() {
                     />
                   </div>
                 </div>
-               <button className="absolute left-1/2 -translate-x-1/2 -bottom-20 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition">
-  Search Holidays
-</button>
               </div>
             )}
 
@@ -914,9 +1043,6 @@ export default function HeroSection() {
                     )}
                   </div>
                 </div>
-               <button className="absolute left-1/2 -translate-x-1/2 -bottom-20 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition">
-  Search Buses
-</button>
               </div>
             )}
 
@@ -1019,17 +1145,23 @@ export default function HeroSection() {
                           }}
                         />
                       </div>
+                      
                     )}
                   </div>
                 </div>
-                <button className="absolute left-1/2 -translate-x-1/2 -bottom-18 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition">
-  Search Cabs
-</button>
               </div>
             )}
+                {/* ✅ SINGLE SEARCH BUTTON — sabhi tabs ke liye ek hi jagah */}
+         <button
+  onClick={handleSearch}
+  className="absolute left-1/2 -translate-x-1/2 -bottom-9 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition"
+>
+  {searchLabels[activeTab]}
+</button>
           </div>
         </div>
       </div>
-    </section>
+ </section>
+  
   );
 }
