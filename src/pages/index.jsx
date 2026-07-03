@@ -4,7 +4,6 @@ import HeroSection from "../components/HeroSection"
 import PopularDestinations from "../components/PopularDestinations"
 import TravelOffers from "../components/TravelPackages"
 import Footer from "../components/Footer"
-// import AlertOverlay from "@/components/AlertOverlay"
 import HolidayPackages from "@/components/HolidayPackages/HolidayPackages";
 
 export default function Home() {
@@ -12,9 +11,7 @@ export default function Home() {
     <div className="min-h-screen bg-slate-50" style={{ backgroundImage: "url('')" }} >
       <Header />
       <HeroSection />
-      <AlertOverlay />
-      <HolidayPackages />
-      {/* <AlertOverlay /> */}
+      <HolidayPackages />  
       <PopularDestinations />
       <TravelOffers />
       <Footer />
