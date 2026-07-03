@@ -1,4 +1,6 @@
 "use client";
+import Link from "next/link";
+import React from "react";
 import Image from "next/image";
 
 const destinations = [
@@ -123,6 +125,78 @@ export default function PopularDestinations() {
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
         <div>
           <h2 className="text-3xl md:text-4xl font-bold text-[#163B8C]">
+            Popular Destinations
+          </h2>
+          <p className="text-gray-500 mt-2 text-sm">
+            Top routes loved by travelers across India
+          </p>
+        </div>
+
+        <button className="border border-gray-300 text-gray-700 hover:bg-gray-100 transition px-5 py-2 rounded-lg text-sm font-medium">
+          View All Destinations
+        </button>
+        
+      </div>
+
+      {/* Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-5">
+  {destinations.map((item, index) => (
+    <Link key={index} href="/holiday-packages" className="relative h-62 rounded-2xl overflow-hidden cursor-pointer group shadow-md">
+      <div className="relative h-62 rounded-2xl overflow-hidden cursor-pointer group shadow-md">
+        <Image
+          src={item.image}
+          alt={item.name}
+          fill
+          className="object-cover group-hover:scale-110 transition duration-500"
+        />
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+
+        <div className="absolute top-3 right-3 text-white text-sm">
+          <i className="fa-solid fa-plane"></i>
+        </div>
+
+        <div className="absolute bottom-4 left-4 text-white">
+          <h3 className="text-lg font-bold">{item.name}</h3>
+          <p className="text-xs text-gray-300">{item.code}</p>
+          <p className="text-sm font-semibold mt-1">{item.price}</p>
+        </div>
+      </div>
+    </Link>
+  ))}
+
+  {/* Offer Card */}
+  <Link href="/flights">
+    <div className="relative rounded-2xl bg-sky-100 border border-sky-200 p-5 flex flex-col justify-between overflow-hidden shadow-md cursor-pointer">
+      <div>
+        <span className="uppercase text-[10px] font-bold tracking-widest text-sky-600">
+          Get Up To
+        </span>
+
+        <h3 className="text-4xl font-black text-sky-900 leading-none mt-2">
+          25% OFF
+        </h3>
+
+        <p className="text-sm text-sky-700 mt-2">
+          On Domestic Flights
+        </p>
+      </div>
+
+      <button className="bg-sky-600 hover:bg-sky-700 transition text-white text-sm font-semibold px-5 py-2 rounded-lg w-fit z-10">
+        Book Now
+      </button>
+
+      <i className="fa-solid fa-plane-departure absolute -bottom-5 -right-5 text-[110px] text-sky-200 rotate-[-15deg]"></i>
+    </div>
+  </Link>
+</div>
+    </div>
+
+    <div className="max-w-7xl mx-auto py-12">
+      {/* Heading */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
+        <div>
+          <h2 className="text-3xl md:text-4xl font-bold text-[#163B8C]">
             Popular Flight Destinations
           </h2>
           <p className="text-gray-500 mt-2 text-sm">
@@ -131,7 +205,7 @@ export default function PopularDestinations() {
         </div>
 
         <button className="border border-gray-300 text-gray-700 hover:bg-gray-100 transition px-5 py-2 rounded-lg text-sm font-medium">
-          View All Flights
+          View All Destinations
         </button>
       </div>
 
@@ -170,22 +244,17 @@ export default function PopularDestinations() {
         <div className="relative rounded-2xl bg-sky-100 border border-sky-200 p-5 flex flex-col justify-between overflow-hidden shadow-md">
           <div>
             <span className="uppercase text-[10px] font-bold tracking-widest text-sky-600">
-              Get Up To
-            </span>
+              Get Up To</span>
 
             <h3 className="text-4xl font-black text-sky-900 leading-none mt-2">
-              25% OFF
-            </h3>
+              25% OFF</h3>
 
             <p className="text-sm text-sky-700 mt-2">
-              On Domestic Flights
-            </p>
+              On Domestic Flights</p>
           </div>
 
           <button className="bg-sky-600 hover:bg-sky-700 transition text-white text-sm font-semibold px-5 py-2 rounded-lg w-fit z-10">
-            Book Now
-          </button>
-
+            Book Now</button>
           <i className="fa-solid fa-plane-departure absolute -bottom-5 -right-5 text-[110px] text-sky-200 rotate-[-15deg]"></i>
         </div>
       </div>

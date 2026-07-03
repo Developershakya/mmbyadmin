@@ -4,14 +4,12 @@ import HeroSection from "../components/HeroSection"
 import PopularDestinations from "../components/PopularDestinations"
 import TravelOffers from "../components/TravelPackages"
 import Footer from "../components/Footer"
-import HolidayPackages from "@/components/HolidayPackages/HolidayPackages";
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50" style={{ backgroundImage: "url('')" }} >
       <Header />
-      <HeroSection />
-      <HolidayPackages />  
+      <HeroSection /> 
       <PopularDestinations />
       <TravelOffers />
       <Footer />
