@@ -2,7 +2,7 @@
 import Image from "next/image"
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+// import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
 const offers = [
@@ -53,7 +53,7 @@ export default function TravelPackages() {
                     height={150}
                     className="w-full h-40 object-fill"
                   />
-                  <Badge className="absolute top-1 right-1 bg-orange-500 hover:bg-orange-600 text-white">Limited Time</Badge>
+
                 </div>
                 <div className="p-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-2">{offer.title}</h3>

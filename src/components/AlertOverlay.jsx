@@ -16,7 +16,7 @@ export default function AlertOverlay() {
     };
   }, []);
 
-  return (
+  return (null);
     <>
       {/* Floating Message Icon */}
       <div
@@ -26,7 +26,7 @@ export default function AlertOverlay() {
         💬
       </div>
 
-      {/* Overlay */}
+      Overlay
       {isVisible && (
         <div className="fixed bottom-20 right-4 z-40">
           {/* Close Button */}

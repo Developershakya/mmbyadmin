@@ -4,7 +4,7 @@ import HeroSection from "../components/HeroSection"
 import PopularDestinations from "../components/PopularDestinations"
 import TravelOffers from "../components/TravelPackages"
 import Footer from "../components/Footer"
-import AlertOverlay from "@/components/AlertOverlay"
+// import AlertOverlay from "@/components/AlertOverlay"
 import HolidayPackages from "@/components/HolidayPackages/HolidayPackages";
 
 export default function Home() {
@@ -13,6 +13,8 @@ export default function Home() {
       <Header />
       <HeroSection />
       <AlertOverlay />
+      <HolidayPackages />
+      {/* <AlertOverlay /> */}
       <PopularDestinations />
       <TravelOffers />
       <Footer />

@@ -139,7 +139,9 @@
   background: #444;
   border-radius: 4px;
 }
-
+body {
+  font-family: 'Poppins', sans-serif;
+}
 /* Optional responsive button tweak */
 @media (max-width: 640px) {
   .close-btn {
