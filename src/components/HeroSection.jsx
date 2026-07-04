@@ -66,10 +66,9 @@ const eVisaDestinations = [
 const popularSearches = [
   { code: "BOM", name: "Mumbai, India", sub: "Chhatrapati Shivaji International Airport" },
   { code: "DEL", name: "New Delhi, India", sub: "Indira Gandhi International Airport" },
-  { code: "SIN", name: "Singapore", sub: "Changi Airport" },
-  { code: "BKK", name: "Bangkok, Thailand", sub: "Suvarnabhumi Airport" },
+  { code: "SIN", name: "Hyderabad", sub: "Rajiv Gandhi International Airport" },
+  { code: "BKK", name: "Bangalore", sub: "Nashville International Airport" },
 ];
-
 const RECENT_KEY = "bharatYatra_recentSearches";
 
 function getRecentSearches() {
@@ -104,6 +103,8 @@ function LocationSearchBox({ label, value, placeholder, onSelect, align = "left"
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [recents, setRecents] = useState([]);
+  const [apiResults, setApiResults] = useState([]);   // 👈 NEW
+  const [loading, setLoading] = useState(false); 
   const boxRef = useRef(null);
 
   useEffect(() => {
@@ -120,6 +121,35 @@ function LocationSearchBox({ label, value, placeholder, onSelect, align = "left"
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+  // 👇 NEW: Laravel API se airports fetch karna, debounce ke saath
+  useEffect(() => {
+    if (!query) {
+      setApiResults([]);
+      return;
+    }
+
+    setLoading(true);
+    const timer = setTimeout(() => {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/fetch-airports?query=${encodeURIComponent(query)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          // Laravel response: [{airport_city_name, airport_name, airport_code}, ...]
+          const mapped = data.map((a) => ({
+            code: a.airport_code,
+            name: a.airport_city_name,
+            sub: a.airport_name,
+          }));
+          setApiResults(mapped);
+        })
+        .catch((err) => {
+          console.error("Airport fetch failed:", err);
+          setApiResults([]);
+        })
+        .finally(() => setLoading(false));
+    }, 300); // 300ms debounce — bar bar type karte hi call nahi hoga
+
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const allOptions = [
     ...indianCities,
@@ -127,13 +157,7 @@ function LocationSearchBox({ label, value, placeholder, onSelect, align = "left"
     ...eVisaDestinations,
   ];
 
-  const filtered = query
-    ? allOptions.filter(
-        (c) =>
-          c.name.toLowerCase().includes(query.toLowerCase()) ||
-          c.code.toLowerCase().includes(query.toLowerCase())
-      )
-    : null;
+const filtered = query ? apiResults : null;
 
   function handleSelect(item) {
     onSelect(item);
@@ -183,36 +207,40 @@ function LocationSearchBox({ label, value, placeholder, onSelect, align = "left"
           </div>
 
           <div className="overflow-y-auto px-3 pb-3">
-            {filtered ? (
-              <div>
-                {filtered.length === 0 ? (
-                  <p className="text-sm text-gray-400 px-1 py-4 text-center">
-                    No destinations found
-                  </p>
-                ) : (
-                  filtered.map((item) => (
-                    <button
-                      key={item.code}
-                      type="button"
-                      onClick={() => handleSelect(item)}
-                      className="w-full flex items-start gap-3 p-2.5 rounded-lg hover:bg-orange-50 transition text-left"
-                    >
-                      <span className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-600">
-                        {item.code}
-                      </span>
-                      <span>
-                        <span className="block text-sm font-semibold text-gray-800">
-                          {item.name}
-                        </span>
-                        <span className="block text-[11px] text-gray-400">
-                          {item.sub}
-                        </span>
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            ) : (
+{filtered ? (
+  <div>
+    {loading ? (
+      <p className="text-sm text-gray-400 px-1 py-4 text-center">
+        Searching...
+      </p>
+    ) : filtered.length === 0 ? (
+      <p className="text-sm text-gray-400 px-1 py-4 text-center">
+        No destinations found
+      </p>
+    ) : (
+      filtered.map((item) => (
+        <button
+          key={item.code}
+          type="button"
+          onClick={() => handleSelect(item)}
+          className="w-full flex items-start gap-3 p-2.5 rounded-lg hover:bg-orange-50 transition text-left"
+        >
+          <span className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-600">
+            {item.code}
+          </span>
+          <span>
+            <span className="block text-sm font-semibold text-gray-800">
+              {item.name}
+            </span>
+            <span className="block text-[11px] text-gray-400">
+              {item.sub}
+            </span>
+          </span>
+        </button>
+      ))
+    )}
+  </div>
+) : (
               <>
                 {showAllSections && (
                   <>
