@@ -34,6 +34,7 @@ const packages = [
 
 export default function PackageCard() {
   return (
+    <>
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
       {packages.map((item) => (
         <div
@@ -65,5 +66,6 @@ export default function PackageCard() {
         </div>
       ))}
     </div>
+    </>
   );
 }
