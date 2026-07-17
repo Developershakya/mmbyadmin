@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react';
 
 export default function FlightsPage() {
   const router = useRouter();
-  const { from, to, date, trip } = router.query;
+const { from, to, date, trip, adults, children, infants, returnDate, legs } = router.query;
 
   const [flights, setFlights] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,30 +16,82 @@ export default function FlightsPage() {
   const [maxPrice, setMaxPrice] = useState(50000);
   const [sortBy, setSortBy] = useState('recommended');
 
-  useEffect(() => {
-    if (!router.isReady) return;
-    if (!from || !to || !date) return;
+useEffect(() => {
+  if (!router.isReady) return;
 
-    async function fetchFlights() {
-      try {
-        setLoading(true);
-        setError('');
-const res = await fetch(
-  `/api/flights/search?from=${from}&to=${to}&date=${date}&trip=${trip}`
-);
-        if (!res.ok) throw new Error('Failed to fetch');
-        const data = await res.json();
-        const list = data.flights || data.data || (Array.isArray(data) ? data : []);
-        setFlights(list);
-      } catch (err) {
-        setError('Flights fetch nahi ho paaye. Baad me try karo.');
-      } finally {
-        setLoading(false);
-      }
+  // Oneway/Roundtrip ke liye from, to, date zaroori hai
+  // Multicity ke liye sirf legs zaroori hai
+  if (trip === 'multicity') {
+    if (!legs) return;
+  } else {
+    if (!from || !to || !date) return;
+  }
+
+async function fetchFlights() {
+  try {
+    setLoading(true);
+    setError('');
+
+    let segments = [];
+    let journeyType = '1';
+
+    if (trip === 'roundtrip') {
+      journeyType = '2';
+      segments = [
+        { origin: from, destination: to, date: date },
+        { origin: to, destination: from, date: returnDate },
+      ];
+    } else if (trip === 'multicity') {
+      journeyType = '3';
+      segments = (legs || '').split(',').map((leg) => {
+        const parts = leg.split('-');
+        // Format: ORIGIN-DEST-YYYY-MM-DD (date ke andar bhi '-' hote hain)
+        const origin = parts[0];
+        const destination = parts[1];
+        const date = parts.slice(2).join('-'); // YYYY-MM-DD reconstruct
+        return { origin, destination, date };
+      });
+    } else {
+      segments = [{ origin: from, destination: to, date: date }];
     }
 
-    fetchFlights();
-  }, [router.isReady, from, to, date, trip]);
+    const res = await fetch('/api/flights/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        adultCount: Number(adults) || 1,
+        childCount: Number(children) || 0,
+        infantCount: Number(infants) || 0,
+        journeyType,
+        segments,
+      })
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.error('API status:', res.status, 'body:', body);
+      throw new Error('Failed to fetch');
+    }
+
+    const data = await res.json();
+
+    if (!data.success) {
+      setError(data.message || 'Flights fetch nahi ho paaye. Baad me try karo.');
+      setFlights([]);
+      return;
+    }
+
+    setFlights(data.results || []);
+  } catch (err) {
+    console.error('fetchFlights error:', err);
+    setError('Flights fetch nahi ho paaye. Baad me try karo.');
+  } finally {
+    setLoading(false);
+  }
+}
+
+  fetchFlights();
+}, [router.isReady, from, to, date, trip, adults, children, infants, returnDate, legs]);
 
   // Derived: airline counts for filter sidebar
   const airlineCounts = useMemo(() => {
@@ -89,6 +141,11 @@ const res = await fetch(
 
     return result;
   }, [flights, selectedStops, selectedAirlines, maxPrice, sortBy]);
+  const onwardFlights = useMemo(() => visibleFlights.filter(f => f.legIndex === 0), [visibleFlights]);
+const returnFlights = useMemo(() => visibleFlights.filter(f => f.legIndex === 1), [visibleFlights]);
+
+const [selectedOnward, setSelectedOnward] = useState(null);
+const [selectedReturn, setSelectedReturn] = useState(null);
 
   function toggleStop(key) {
     setSelectedStops((prev) =>
@@ -109,7 +166,7 @@ const res = await fetch(
   }
 
   function goToDate(newDate) {
-    router.push(`/flight?from=${from}&to=${to}&date=${newDate}&trip=${trip || 'oneway'}`);
+    router.push(`/flights?from=${from}&to=${to}&date=${newDate}&trip=${trip || 'oneway'}`);
   }
 
   // Generate a 7-day date strip centered on selected date
@@ -133,9 +190,12 @@ const dateStrip = useMemo(() => {
     return d.toLocaleDateString('en-US', { weekday: 'short' });
   }
 
-  function toISODate(d) {
-    return d.toISOString().split('T')[0];
-  }
+function toISODate(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
   return (
     <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen">
@@ -147,7 +207,9 @@ const dateStrip = useMemo(() => {
           <div className="flex-1 min-w-[110px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center">
             <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Trip Type</label>
             <div className="flex justify-between items-center mt-0.5 cursor-pointer">
-              <span className="text-xs font-bold capitalize">{trip === 'roundtrip' ? 'Round Trip' : 'One Way'}</span>
+              <span className="text-xs font-bold capitalize">
+                {trip === 'roundtrip' ? 'Round Trip' : trip === 'multicity' ? 'Multi City' : 'One Way'}
+              </span>
               <i className="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
             </div>
           </div>
@@ -193,7 +255,7 @@ const dateStrip = useMemo(() => {
           </div>
 
           <button
-            onClick={() => router.push(`/flight?from=${from}&to=${to}&date=${date}&trip=${trip || 'oneway'}`)}
+            onClick={() => router.push(`/flights?from=${from}&to=${to}&date=${date}&trip=${trip || 'oneway'}`)}
             className="bg-gradient-to-r from-[#0B1523] to-orange-500 text-white text-base rounded-tr-full rounded-br-full px-6 h-[54px] ml-1.5 rounded font-black uppercase tracking-wider hover:opacity-95 transition-all flex items-center justify-center shadow-md"
           >
             Search
@@ -301,9 +363,14 @@ const dateStrip = useMemo(() => {
           <div className="flex justify-between items-center text-sm pt-2">
             <div>
               <h1 className="text-base font-bold text-gray-900">
-                Showing flights for {from} <i className="fa-solid fa-arrow-right text-xs mx-1"></i> {to}
+                {trip === 'multicity'
+                  ? `Multi City: ${(legs || '').split(',').map(l => { const p = l.split('-'); return `${p[0]} → ${p[1]}`; }).join(' | ')}`
+                  : <>Showing flights for {from} <i className="fa-solid fa-arrow-right text-xs mx-1"></i> {to}{trip === 'roundtrip' && returnDate ? <> &amp; back on {returnDate}</> : null}</>}
               </h1>
-              <p className="text-xs text-gray-500 mt-0.5">{date} • 1 Pass, Economy • {visibleFlights.length} results</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {trip !== 'multicity' ? `${date} • ` : ''}
+                {Number(adults) || 1} Pass{(Number(adults) || 1) > 1 ? 'es' : ''}, Economy • {visibleFlights.length} results
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">Sort by:</span>
@@ -331,124 +398,249 @@ const dateStrip = useMemo(() => {
             </div>
           )}
 
-          {!loading && !error && visibleFlights.length === 0 && (
+          {/* ONE WAY: flat list */}
+          {!loading && !error && trip !== 'roundtrip' && trip !== 'multicity' && visibleFlights.length === 0 && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
-              Is route ke liye koi flight nahi mila.
+              Is route ke liye koi flight nahi mili.
             </div>
           )}
 
-          {!loading && !error && visibleFlights.map((flight) => {
-            const isExpanded = expandedId === flight.id;
-            return (
-              <div key={flight.id} className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-5 flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-[120px]">
-                    <div className="w-8 h-8 bg-blue-900 text-white font-black flex items-center justify-center text-xs rounded">
-                      {flight.airline_code || 'FL'}
+          {!loading && !error && trip !== 'roundtrip' && trip !== 'multicity' && visibleFlights.map((flight) => (
+            <FlightCard key={flight.id} flight={flight} from={from} to={to} date={date}
+              isExpanded={expandedId === flight.id}
+              onToggle={() => setExpandedId(expandedId === flight.id ? null : flight.id)} />
+          ))}
+
+          {/* ROUND TRIP / MULTI CITY: show each leg in its own section */}
+          {!loading && !error && (trip === 'roundtrip' || trip === 'multicity') && (() => {
+            // Group flights by legIndex
+            const legMap = {};
+            visibleFlights.forEach(f => {
+              if (!legMap[f.legIndex]) legMap[f.legIndex] = [];
+              legMap[f.legIndex].push(f);
+            });
+            const legCount = trip === 'roundtrip' ? 2 : (legs || '').split(',').length;
+            const legLabels = trip === 'roundtrip'
+              ? [`Onward: ${from} → ${to} (${date})`, `Return: ${to} → ${from} (${returnDate || ''})`]
+              : (legs || '').split(',').map((l, i) => {
+                  const p = l.split('-');
+                  return `Leg ${i + 1}: ${p[0]} → ${p[1]} (${p.slice(2).join('-')})`;
+                });
+
+            return Array.from({ length: legCount }, (_, idx) => {
+              const legFlights = legMap[idx] || [];
+              return (
+                <div key={idx} className="mb-6">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="inline-flex items-center gap-1.5 bg-blue-900 text-white text-xs font-bold px-3 py-1.5 rounded-full">
+                      <i className="fa-solid fa-plane text-[10px]"></i>
+                      {legLabels[idx] || `Leg ${idx + 1}`}
+                    </span>
+                    <span className="text-xs text-gray-400">{legFlights.length} results</span>
+                  </div>
+                  {legFlights.length === 0 ? (
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 text-center text-gray-500">
+                      Is leg ke liye koi flight nahi mili.
                     </div>
-                    <div>
-                      <div className="font-bold text-blue-900 text-base">{flight.airline_name}</div>
-                      <div className="text-xs text-gray-400">{flight.flight_number}</div>
-                    </div>
-                  </div>
+                  ) : (
+                    legFlights.map(flight => (
+                      <FlightCard key={flight.id} flight={flight} from={flight.origin_code} to={flight.destination_code} date={date}
+                        isExpanded={expandedId === flight.id}
+                        onToggle={() => setExpandedId(expandedId === flight.id ? null : flight.id)} />
+                    ))
+                  )}
+                </div>
+              );
+            });
+          })()}
+        </section>
+      </main>
+    </div>
+  );
+}
 
-                  <div className="text-center">
-                    <div className="text-lg font-bold">{flight.departure_time}</div>
-                    <div className="text-xs font-semibold text-gray-500">{flight.origin_code}</div>
-                  </div>
+/** Reusable flight card component */
+function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
+  const [activeDetailTab, setActiveDetailTab] = useState('details');
 
-                  <div className="text-center min-w-[100px]">
-                    <div className="text-xs text-gray-400">{flight.duration}</div>
-                    <div className="relative my-1 flex items-center justify-center">
-                      <div className="w-full border-t border-dashed border-gray-300 absolute"></div>
-                      <i className="fa-solid fa-plane text-xs text-emerald-500 relative bg-white px-2 z-10"></i>
-                    </div>
-                    <div className="text-xs font-bold text-emerald-500">
-                      {flight.stops === 0 ? 'Non Stop' : `${flight.stops} Stop`}
-                    </div>
-                  </div>
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mb-3">
+      <div className="p-5 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-[120px]">
+          <div className="w-8 h-8 bg-blue-900 text-white font-black flex items-center justify-center text-xs rounded">
+            {flight.airline_code || 'FL'}
+          </div>
+          <div>
+            <div className="font-bold text-blue-900 text-base">{flight.airline_name}</div>
+            <div className="text-xs text-gray-400">{flight.flight_number}</div>
+          </div>
+        </div>
 
-                  <div className="text-center">
-                    <div className="text-lg font-bold">{flight.arrival_time}</div>
-                    <div className="text-xs font-semibold text-gray-500">{flight.destination_code}</div>
-                  </div>
+        <div className="text-center">
+          <div className="text-lg font-bold">{flight.departure_time}</div>
+          <div className="text-xs font-semibold text-gray-500">{flight.origin_code}</div>
+        </div>
 
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-gray-900">₹ {Number(flight.price).toLocaleString()}</div>
-                    <div className="text-[10px] text-gray-400">per adult</div>
-                  </div>
+        <div className="text-center min-w-[100px]">
+          <div className="text-xs text-gray-400">{flight.duration}</div>
+          <div className="relative my-1 flex items-center justify-center">
+            <div className="w-full border-t border-dashed border-gray-300 absolute"></div>
+            <i className="fa-solid fa-plane text-xs text-emerald-500 relative bg-white px-2 z-10"></i>
+          </div>
+          <div className="text-xs font-bold text-emerald-500">
+            {flight.stops === 0 ? 'Non Stop' : `${flight.stops} Stop`}
+          </div>
+        </div>
 
-                  <div className="flex flex-col items-end gap-1">
-                    <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-5 py-2 rounded uppercase tracking-wider transition-colors">
-                      View Price
-                    </button>
-                    {flight.seats_left && (
-                      <span className="text-[11px] text-orange-600 font-medium">{flight.seats_left} seats left at this price</span>
-                    )}
-                    <button
-                      onClick={() => setExpandedId(isExpanded ? null : flight.id)}
-                      className="text-[10px] text-orange-500 font-bold mt-1 flex items-center gap-0.5"
-                    >
-                      {isExpanded ? 'Hide' : 'View'} Flight Details
-                      <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-[8px]`}></i>
-                    </button>
-                  </div>
+        <div className="text-center">
+          <div className="text-lg font-bold">{flight.arrival_time}</div>
+          <div className="text-xs font-semibold text-gray-500">{flight.destination_code}</div>
+        </div>
+
+        <div className="text-right">
+          <div className="text-lg font-bold text-gray-900">₹ {Number(flight.price).toLocaleString()}</div>
+          <div className="text-[10px] text-gray-400">per adult</div>
+        </div>
+
+        <div className="flex flex-col items-end gap-1">
+          <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-5 py-2 rounded uppercase tracking-wider transition-colors">
+            View Price
+          </button>
+          {flight.seats_left && (
+            <span className="text-[11px] text-orange-600 font-medium">{flight.seats_left} seats left at this price</span>
+          )}
+          <button
+            onClick={onToggle}
+            className="text-[10px] text-orange-500 font-bold mt-1 flex items-center gap-0.5"
+          >
+            {isExpanded ? 'Hide' : 'View'} Flight Details
+            <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-[8px]`}></i>
+          </button>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="bg-gray-50 border-t border-gray-100">
+          {/* Tabs */}
+          <div className="flex gap-1 px-5 pt-3">
+            {[
+              { id: 'details', label: 'Flight Details' },
+              { id: 'fare', label: 'Fare Summary' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveDetailTab(tab.id)}
+                className={`px-4 py-2 text-xs font-bold uppercase tracking-wide rounded-t ${
+                  activeDetailTab === tab.id
+                    ? 'bg-orange-500 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-5 text-xs text-gray-600">
+            {activeDetailTab === 'details' && (
+              <div>
+                <div className="font-bold text-gray-900 mb-3">
+                  {flight.origin_code} → {flight.destination_code}{date ? `, ${date}` : ''}
                 </div>
 
-                {isExpanded && (
-                  <div className="p-5 bg-gray-50 text-xs text-gray-600 border-t border-gray-100">
-                    <div className="font-bold text-gray-900 mb-3">
-                      {from} to {to}, {date}
-                    </div>
+                {(flight.legDetails || []).map((leg, i) => (
+                  <div key={i} className="mb-4 pb-4 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
                       <div className="flex items-start gap-3 col-span-2">
                         <div className="w-6 h-6 bg-blue-900 text-white font-black flex items-center justify-center text-[10px] rounded mt-0.5">
-                          {flight.airline_code || 'FL'}
+                          {leg.airline_code || 'FL'}
                         </div>
                         <div>
                           <div className="font-bold text-gray-900">
-                            {flight.airline_name}{' '}
-                            <span className="font-normal text-gray-500 text-[11px]">{flight.flight_number}</span>
-                            {flight.aircraft && (
-                              <span className="ml-2 bg-gray-100 px-1.5 py-0.5 rounded text-[10px] text-gray-500">{flight.aircraft}</span>
+                            {leg.airline_name}{' '}
+                            <span className="font-normal text-gray-500 text-[11px]">{leg.flight_number}</span>
+                            {leg.aircraft && (
+                              <span className="ml-2 bg-gray-200 text-gray-600 text-[10px] px-2 py-0.5 rounded">{leg.aircraft}</span>
                             )}
                           </div>
-                          <div className="flex items-center gap-6 mt-4 relative">
+                          <div className="flex items-center gap-6 mt-4">
                             <div>
-                              <div className="text-sm font-bold text-gray-900">{flight.departure_time}</div>
-                              <div className="text-gray-400 mt-1 text-[11px]">{flight.origin_airport || flight.origin_code}</div>
+                              <div className="text-sm font-bold text-gray-900">{leg.departure_time}</div>
+                              <div className="text-gray-400 mt-1 text-[11px]">{leg.origin_airport}</div>
+                              {leg.origin_terminal && (
+  <div className="text-gray-400 text-[11px]">{leg.origin_terminal}</div>
+)}
                             </div>
                             <div className="text-center px-2">
-                              <div className="text-gray-400 text-[11px]">{flight.duration}</div>
-                              <div className="text-emerald-500 font-bold text-[11px] mt-1">
-                                {flight.stops === 0 ? 'Non Stop' : `${flight.stops} Stop`}
-                              </div>
+                              <div className="text-gray-400 text-[11px]">{leg.duration}</div>
+                              <div className="text-emerald-500 font-bold text-[11px] mt-1">Non Stop</div>
                             </div>
                             <div>
-                              <div className="text-sm font-bold text-gray-900">{flight.arrival_time}</div>
-                              <div className="text-gray-400 mt-1 text-[11px]">{flight.destination_airport || flight.destination_code}</div>
+                              <div className="text-sm font-bold text-gray-900">{leg.arrival_time}</div>
+                              <div className="text-gray-400 mt-1 text-[11px]">{leg.destination_airport}</div>
+{leg.destination_terminal && (
+  <div className="text-gray-400 text-[11px]">{leg.destination_terminal}</div>
+)}
                             </div>
                           </div>
                         </div>
                       </div>
-
                       <div className="space-y-1.5 border-l pl-4 border-gray-100">
                         <div className="font-bold text-gray-900 uppercase text-[10px] tracking-wider mb-1">Baggage</div>
-                        <div className="flex justify-between"><span>Check-in:</span><span className="font-medium text-gray-900">{flight.baggage || 'N/A'}</span></div>
+                        <div className="flex justify-between"><span>Check-in:</span><span className="font-medium text-gray-900">{leg.baggage}</span></div>
+                        <div className="flex justify-between"><span>Cabin:</span><span className="font-medium text-gray-900">{leg.cabin_baggage}</span></div>
                       </div>
-
                       <div className="space-y-1.5 border-l pl-4 border-gray-100">
-                        <div className="font-bold text-gray-900 uppercase text-[10px] tracking-wider mb-1">Cabin</div>
-                        <div className="flex justify-between"><span>Allowance:</span><span className="font-medium text-gray-900">{flight.cabin_baggage || 'N/A'}</span></div>
+                        <div className="font-bold text-gray-900 uppercase text-[10px] tracking-wider mb-1">Class & Seats</div>
+                        <div className="flex justify-between"><span>Cabin:</span><span className="font-medium text-gray-900">{leg.cabin_class}</span></div>
+                        {leg.seats_left && (
+                          <div className="flex justify-between"><span>Seats left:</span><span className="font-medium text-gray-900">{leg.seats_left}</span></div>
+                        )}
                       </div>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex gap-2 mt-2">
+                  <span className={`text-[11px] font-bold px-2 py-1 rounded ${flight.is_refundable ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+                    {flight.is_refundable ? 'Refundable' : 'Non-Refundable'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {activeDetailTab === 'fare' && (
+              <div className="max-w-sm">
+                <div className="font-bold text-gray-900 mb-3">Fare Breakdown (per adult)</div>
+                <div className="space-y-2 bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="flex justify-between"><span>Base Fare</span><span className="font-medium text-gray-900">₹ {Number(flight.base_fare || 0).toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span>Tax & Surcharges</span><span className="font-medium text-gray-900">₹ {Number(flight.tax || 0).toLocaleString()}</span></div>
+                  {flight.yq_tax > 0 && (
+                    <div className="flex justify-between"><span>YQ Tax</span><span className="font-medium text-gray-900">₹ {Number(flight.yq_tax).toLocaleString()}</span></div>
+                  )}
+                  <div className="border-t border-gray-200 pt-2 flex justify-between font-bold text-gray-900">
+                    <span>Total</span><span>₹ {Number(flight.price).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {flight.fareOptions?.length > 1 && (
+                  <div className="mt-4">
+                    <div className="font-bold text-gray-900 mb-2">Other Fare Options</div>
+                    <div className="space-y-2">
+                      {flight.fareOptions.map((fo, i) => (
+                        <div key={i} className="flex justify-between items-center bg-white border border-gray-200 rounded px-3 py-2">
+                          <span className="text-gray-600">{fo.source} {fo.is_refundable ? '(Refundable)' : '(Non-Refundable)'}</span>
+                          <span className="font-bold text-gray-900">₹ {Number(fo.price).toLocaleString()}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
               </div>
-            );
-          })}
-        </section>
-      </main>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

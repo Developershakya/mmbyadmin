@@ -1,7 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 
 const BookingSearch = () => {
+  const router = useRouter();
   const [startingFrom, setStartingFrom] = useState("New Delhi");
   const [travellingOn, setTravellingOn] = useState("Tue, 21 Oct 2025");
   const [roomsGuests, setRoomsGuests] = useState("2 Adults");
@@ -15,8 +17,14 @@ const BookingSearch = () => {
   const roomsOptions = ["1 Adult", "2 Adults", "3 Adults", "2 Adults, 1 Child"];
 
   const handleSearch = () => {
-    // Example: store data to backend
-    console.log({ startingFrom, travellingOn, roomsGuests });
+    // Holiday search - redirect to search page
+    const encodedDestination = encodeURIComponent(startingFrom);
+    const encodedDate = encodeURIComponent(travellingOn);
+    const encodedGuests = encodeURIComponent(roomsGuests);
+    
+    router.push(
+      `/holiday/search?destination=${encodedDestination}&startDate=${encodedDate}&guests=${encodedGuests}`
+    );
   };
   useEffect(() => {
     const handleResize = () => setIsLarge(window.innerWidth >= 640); // lg breakpoint = 1024px

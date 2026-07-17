@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/router";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Plane, Hotel, Car, Bus, MapPin, Calendar, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,12 +14,124 @@ import { Calendar as CalendarIcon } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
+function CitySearchBox({ label, value, placeholder, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const boxRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (boxRef.current && !boxRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery("");
+        setResults([]);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!query || query.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/cities/cab?query=${encodeURIComponent(query.trim())}`);
+        const data = await res.json();
+        setResults(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("City search error:", err);
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [query]);
+
+  function handleSelect(item) {
+    onSelect(item);
+    setOpen(false);
+    setQuery("");
+    setResults([]);
+  }
+
+  return (
+    <div className="relative" ref={boxRef}>
+      <label className="text-xs uppercase font-medium text-slate-500">{label}</label>
+      <div
+        onClick={() => setOpen(!open)}
+        className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer truncate"
+      >
+        {value ? value.Destination : placeholder}
+      </div>
+
+      {open && (
+        <div className="absolute mt-2 w-72 bg-white shadow-2xl rounded-xl border border-gray-100 z-30 overflow-hidden">
+          <div className="p-2">
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Search ${label.toLowerCase()}`}
+              className="w-full text-sm border rounded-lg px-3 py-2 outline-none"
+            />
+          </div>
+          <div className="max-h-60 overflow-y-auto px-2 pb-2">
+            {loading ? (
+              <p className="text-sm text-gray-400 px-1 py-4 text-center">Searching...</p>
+            ) : query.trim().length < 2 ? (
+              <p className="text-xs text-gray-400 px-1 py-4 text-center">Type at least 2 letters</p>
+            ) : results.length === 0 ? (
+              <p className="text-sm text-gray-400 px-1 py-4 text-center">No cities found</p>
+            ) : (
+              results.map((item, idx) => (
+                <button
+                  key={item.cityid || idx}
+                  type="button"
+                  onClick={() => handleSelect(item)}
+                  className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-orange-50 transition"
+                >
+                  <span className="block font-semibold text-gray-800">{item.Destination}</span>
+                  <span className="block text-[11px] text-gray-400">{item.country}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 export default function CabsPage() {
+  const router = useRouter();
+
+useEffect(() => {
+  if (!router.isReady) return;
+  const { from: fromCode, to: toCode } = router.query;
+  if (fromCode) {
+    setFrom({ cityid: fromCode, Destination: fromCode, country: "" });
+  }
+  if (toCode) {
+    setTo({ cityid: toCode, Destination: toCode, country: "" });
+  }
+}, [router.isReady, router.query]);
   const [tripType, setTripType] = useState("airport");
   const [selected, setSelected] = useState(new Date());
   const [open, setOpen] = useState(false); // ✅ state for calendar visibility
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+const [from, setFrom] = useState(null); // { cityid, Destination }
+const [to, setTo] = useState(null);
+const [loading, setLoading] = useState(false);
+const [results, setResults] = useState(null);
+const [errorMsg, setErrorMsg] = useState("");
 
   const [pickupTime, setPickupTime] = useState("10:00");
   // const [timezone, setTimezone] = useState("Asia/Kolkata");
@@ -59,28 +172,45 @@ export default function CabsPage() {
       image: "/flights/ahmedabad.jpeg",
     },
   ];
-  const indianCities = [
-    "Delhi",
-    "Mumbai",
-    "Bengaluru",
-    "Chennai",
-    "Kolkata",
-    "Hyderabad",
-    "Pune",
-    "Jaipur",
-    "Ahmedabad",
-    "Lucknow",
-    "Chandigarh",
-    "Goa",
-    "Agra",
-    "Varanasi",
-    "Patna",
-    "Bhopal",
-    "Indore",
-    "Nagpur",
-    "Surat",
-    "Amritsar",
-  ];
+  function formatDDMMYYYY(date) {
+  if (!date) return "";
+  const d = String(date.getDate()).padStart(2, "0");
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const y = date.getFullYear();
+  return `${d}/${m}/${y}`;
+}
+
+async function handleSearchCabs() {
+  if (!from || !to) {
+    setErrorMsg("Please select pickup and drop location.");
+    return;
+  }
+  setLoading(true);
+  setErrorMsg("");
+  try {
+    const res = await fetch("/api/cabs/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pickupLocationCode: from.cityid,
+        dropoffLocationCode: to.cityid,
+        pickupDate: formatDDMMYYYY(selected),
+        tripType: "0",
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      setErrorMsg(data.message || "No cabs found.");
+      setResults(null);
+    } else {
+      setResults(data);
+    }
+  } catch (err) {
+    setErrorMsg("Something went wrong. Try again.");
+  } finally {
+    setLoading(false);
+  }
+}
 
   return (
     <>
@@ -169,105 +299,24 @@ export default function CabsPage() {
 
                 <TabsContent value="cabs">
                   <div className="w-full max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-3">
-                    {/* Trip Type Tabs */}
-                    <div className="flex flex-wrap items-center gap-6 text-sm font-medium text-black mb-6">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tripType"
-                          value="oneway"
-                          checked={tripType === "oneway"}
-                          onChange={(e) => setTripType(e.target.value)}
-                        />
-                        Outstation One-Way
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tripType"
-                          value="round"
-                          checked={tripType === "round"}
-                          onChange={(e) => setTripType(e.target.value)}
-                        />
-                        Outstation Round-Trip
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tripType"
-                          value="airport"
-                          checked={tripType === "airport"}
-                          onChange={(e) => setTripType(e.target.value)}
-                        />
-                        <span className="">Airport Transfers</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer relative">
-                        <input
-                          type="radio"
-                          name="tripType"
-                          value="hourly"
-                          checked={tripType === "hourly"}
-                          onChange={(e) => setTripType(e.target.value)}
-                        />
-                        Hourly Rentals
-                        <span className="absolute -top-3 -right-8 text-[10px] bg-orange-500 text-white px-2 py-0.5 rounded-full">
-                          NEW
-                        </span>
-                      </label>
-
-                      <span className="ml-auto text-lg  text-black font-bold ">
-                        Online Cab Booking
-                      </span>
-                    </div>
-
+  
                     {/* Booking Grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 items-end">
-                      {/* Pickup Location */}
-                      <div>
-                        <label className="text-xs uppercase font-medium text-slate-500">
-                          From
-                        </label>
-                        <select
-                          value={from}
-                          onChange={(e) => setFrom(e.target.value)}
-                          className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-                        >
-                          <option value="">Select Pickup Location</option>
-                          {indianCities.map((city, index) => (
-                            <option key={index} value={city}>
-                              {city}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+{/* Pickup Location */}
+<CitySearchBox
+  label="From"
+  value={from}
+  placeholder="Select Pickup Location"
+  onSelect={setFrom}
+/>
 
-                      {/* Drop Location */}
-                      <div>
-                        <label className="text-xs uppercase font-medium text-slate-500">
-                          To
-                        </label>
-
-                        <select
-                          value={to}
-                          onChange={(e) => setTo(e.target.value)}
-                          className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-                        >
-                          <option
-                            value=""
-                            className=" flex items-center justify-center "
-                          >
-                            Select Drop Location
-                          </option>
-                          {indianCities.map((city, index) => (
-                            <option key={index} value={city}>
-                              {city}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+{/* Drop Location */}
+<CitySearchBox
+  label="To"
+  value={to}
+  placeholder="Select Drop Location"
+  onSelect={setTo}
+/>
 
                       {/* Departure Date */}
                       <div className="relative">
@@ -333,34 +382,15 @@ export default function CabsPage() {
                             onChange={(e) => setPickupTime(e.target.value)}
                             className="w-full sm:w-auto  px-3 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
-
-                          {/* Timezone Selector */}
-                          {/* <select
-          value={timezone}
-          onChange={(e) => setTimezone(e.target.value)}
-          className="w-full sm:w-auto border rounded-lg px-3 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          <option value="Asia/Kolkata">India (IST)</option>
-          <option value="America/New_York">New York (EST)</option>
-          <option value="Europe/London">London (GMT)</option>
-          <option value="Asia/Dubai">Dubai (GST)</option>
-        </select> */}
-                        </div>
-
-                        {/* Info Text */}
-                        {/* <p className="text-sm text-gray-500 text-center sm:text-left md:">
-        Pickup time is{" "}
-        <span className="font-semibold">{pickupTime}</span> as per{" "}
-        <span className="font-semibold">{timezone}</span> timezone
-      </p> */}
                       </div>
                       {/* Search Button */}
                       <div className="col-span-full flex justify-center mt-6">
-                        <Button className="w-full sm:w-auto px-8 py-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold transition-colors duration-300">
-                          SEARCH CABS
-                        </Button>
+                        <Button onClick={handleSearchCabs} disabled={loading} className="...">
+  {loading ? "Searching..." : "SEARCH CABS"}
+</Button>
                       </div>
                     </div>
+                  </div>
                   </div>
                 </TabsContent>
               </Tabs>
@@ -368,6 +398,16 @@ export default function CabsPage() {
           </Card>
         </div>
       </section>
+      {errorMsg && <p className="text-red-500 text-center mt-4">{errorMsg}</p>}
+
+{results?.cars?.length > 0 && (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+    {results.cars.map((car, i) => (
+      <div key={i} className="border rounded-xl p-4 shadow-sm">
+      </div>
+    ))}
+  </div>
+)}
 
       {/* Routes Section */}
       <section className="py-10 px-4">
@@ -396,5 +436,5 @@ export default function CabsPage() {
 
       <Footer />
     </>
-  );
+      );
 }

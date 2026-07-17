@@ -1,349 +1,301 @@
-
-"use client";
-// import { useState } from "react";
-import  Link  from "next/link";
-import {
-  Plane,
-  Hotel,
-  Car,
-  Bus,
-  MapPin,
-} from "lucide-react";
-import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useRouter } from 'next/router';
+import { useEffect, useState, useMemo } from 'react';
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { useState, useEffect, useRef } from "react";
-import { Calendar as CalendarIcon } from "lucide-react";
-import { DayPicker } from "react-day-picker";
-import "react-day-picker/dist/style.css";
-
-
-
 
 export default function BusPage() {
-    const [selected, setSelected] = useState();
-      const [open, setOpen] = useState(false); // ✅ state for calendar visibility
-      const [from, setFrom] = useState("");
-    const [to, setTo] = useState("");
-    const ref = useRef(null);
+  const router = useRouter();
+  const { from, to, date } = router.query;
 
-      // ✅ Close calendar when clicking outside
+  const [buses, setBuses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+
+  const [selectedBusTypes, setSelectedBusTypes] = useState([]);
+  const [maxPrice, setMaxPrice] = useState(5000);
+  const [sortBy, setSortBy] = useState('recommended');
+
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (ref.current && !ref.current.contains(event.target)) {
-        setOpen(false);
+    if (!router.isReady) return;
+    if (!from || !to || !date) return;
+
+    async function fetchBuses() {
+      try {
+        setLoading(true);
+        setError('');
+
+        const res = await fetch('/api/buses/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({
+  sourceCity: from,
+  destinationCity: to,
+}),
+        });
+
+        if (!res.ok) {
+          const body = await res.text();
+          console.error('Bus API status:', res.status, 'body:', body);
+          throw new Error('Failed to fetch');
+        }
+
+        const data = await res.json();
+
+        if (!data.success) {
+          setError(data.message || 'Buses fetch nahi ho paayi. Baad me try karo.');
+          setBuses([]);
+          return;
+        }
+
+        setBuses(data.results || []);
+      } catch (err) {
+        console.error('fetchBuses error:', err);
+        setError('Buses fetch nahi ho paayi. Baad me try karo.');
+      } finally {
+        setLoading(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-  
 
+    fetchBuses();
+  }, [router.isReady, from, to, date]);
 
-      const indianCities = [
-    "Delhi",
-    "Mumbai",
-    "Bengaluru",
-    "Chennai",
-    "Kolkata",
-    "Hyderabad",
-    "Pune",
-    "Jaipur",
-    "Ahmedabad",
-    "Lucknow",
-    "Chandigarh",
-    "Goa",
-    "Agra",
-    "Varanasi",
-    "Patna",
-    "Bhopal",
-    "Indore",
-    "Nagpur",
-    "Surat",
-    "Amritsar",
-  ];
+  const busTypeCounts = useMemo(() => {
+    const counts = {};
+    buses.forEach((b) => {
+      const type = b.bus_type || 'Unknown';
+      counts[type] = (counts[type] || 0) + 1;
+    });
+    return counts;
+  }, [buses]);
 
+  const visibleBuses = useMemo(() => {
+    let result = [...buses];
+    if (selectedBusTypes.length > 0) {
+      result = result.filter((b) => selectedBusTypes.includes(b.bus_type));
+    }
+    result = result.filter((b) => Number(b.price) <= maxPrice);
+    if (sortBy === 'price_low') {
+      result.sort((a, b) => Number(a.price) - Number(b.price));
+    } else if (sortBy === 'departure_early') {
+      result.sort((a, b) => (a.departure_time || '').localeCompare(b.departure_time || ''));
+    }
+    return result;
+  }, [buses, selectedBusTypes, maxPrice, sortBy]);
 
-  const buses = [
-  {
-    city: "Buses From Chennai To",
-    routes: "Bangalore, Coimbatore, Madurai, Hyderabad, Trichy",
-    image: "/flights/Coimbatore.png",
-  },
+  function toggleBusType(type) {
+    setSelectedBusTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  }
 
-  {
-    city: "Buses From Mumbai To",
-    routes: "Bangalore, Goa, Pune, Indore, Ahmedabad",
-    image: "/flights/marine drive.jpeg",
-  },
-  {
-    city: "Buses From Hyderabad To",
-    routes: "Bangalore, Chennai, Mumbai, Pune, Vijayawada",
-    image: "/flights/hyderabad.jpeg",
-  },
-  {
-    city: "Buses From Delhi To",
-    routes: "Lucknow, Dehradun, Manali, Kanpur, Jaipur",
-    image: "/flights/delhi.jpg",
-  },
-  {
-    city: "Buses From Pune To",
-    routes: "Goa, Bangalore, Nagpur, Hyderabad, Mumbai",
-    image: "/flights/pune.jpeg",
-  },
-  {
-    city: "Buses From Kolkata To",
-    routes: "Durgapur, Asansol, Siliguri, Bhubaneshwar, Bardhaman",
-    image: "/flights/kolkata.jpeg",
-  },
-  {
-    city: "Buses From Bangalore To",
-    routes: "Chennai, Hyderabad, Coimbatore, Mumbai, Goa",
-    image: "/flights/bangalore.jpeg",
-  },
-  {
-    city: "Buses From Ahmedabad To",
-    routes: "Mumbai, Rajkot, Surat, Pune, Indore",
-    image: "/flights/ahmedabad.jpeg",
-  },
-];
+  function resetFilters() {
+    setSelectedBusTypes([]);
+    setMaxPrice(5000);
+  }
 
-
-  
   return (
     <>
     <Header />
-     <section
-      className="relative  bg-center py-16"
-      style={{ backgroundImage: "url('/img/bg/map.png')" }}
-    >
-      {/* Background Video */}
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover z-[-1]"
-      >
-        <source src="/images/video/buss.MP4" type="video/MP4" />
-        Your browser does not support the video tag.
-      </video>
-      {/* <div className="absolute inset-0 bg-black opacity-20"></div> */}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h1 className="text-xl lg:text-7xl md:text-4xl sm:text-3xl font-bold captalize text-white mb-4">
-            MAKE MY BHARAT YATRA
-          </h1>
-          <p className="text-xl text-white font-bold mb-8">
-            Flights • Hotels • Holiday Packages • Buses • Cabs
-          </p>
+    <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen">
+
+      <header className="bg-[#0B1523] text-white p-3 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex-[2.5] min-w-[320px] bg-[#1E2A38] rounded h-[54px] flex items-center relative px-4">
+            <div className="flex-1 flex flex-col justify-center pr-4">
+              <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">From</label>
+              <div className="text-xs font-black mt-0.5 whitespace-nowrap text-white">{from || '--'}</div>
+            </div>
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-full">
+              <div className="h-8 border-l border-gray-600/50 absolute"></div>
+              <div className="bg-[#1E2A38] border border-gray-600 rounded-full w-5 h-5 flex items-center justify-center z-10 text-gray-400">
+                <i className="fa-solid fa-arrows-left-right text-[9px]"></i>
+              </div>
+            </div>
+            <div className="flex-1 flex flex-col justify-center pl-8">
+              <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">To</label>
+              <div className="text-xs font-black mt-0.5 whitespace-nowrap text-white">{to || '--'}</div>
+            </div>
+          </div>
+
+          <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center">
+            <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Travel Date</label>
+            <div className="text-xs font-black mt-0.5 flex justify-between items-center whitespace-nowrap">
+              <span>{date || '--'}</span>
+              <i className="fa-regular fa-calendar text-[11px] text-gray-400 ml-1"></i>
+            </div>
+          </div>
+
+          <button
+            onClick={() => router.push(`/bus?from=${from}&to=${to}&date=${date}`)}
+            className="bg-gradient-to-r from-[#0B1523] to-orange-500 text-white text-base rounded-tr-full rounded-br-full px-6 h-[54px] ml-1.5 rounded font-black uppercase tracking-wider hover:opacity-95 transition-all flex items-center justify-center shadow-md"
+          >
+            Search
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
+
+        <aside className="w-1/4 bg-white p-5 rounded-lg shadow-sm h-fit hidden md:block">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-bold tracking-wide">FILTERS</h2>
+            <button onClick={resetFilters} className="text-xs font-semibold text-orange-500 uppercase">Reset</button>
+          </div>
+
+          <div className="mb-6">
+            <h3 className="text-sm font-bold mb-3">Bus Type</h3>
+            <div className="space-y-2 text-sm">
+              {Object.keys(busTypeCounts).length === 0 && (
+                <p className="text-xs text-gray-400">Search karne ke baad bus types yahan dikhengi</p>
+              )}
+              {Object.entries(busTypeCounts).map(([type, count]) => (
+                <label key={type} className="flex items-center justify-between cursor-pointer">
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="accent-orange-500"
+                      checked={selectedBusTypes.includes(type)}
+                      onChange={() => toggleBusType(type)}
+                    />
+                    {type}
+                  </span>
+                  <span className="text-gray-400">{count}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <hr className="my-4 border-gray-100" />
+
+          <div>
+            <h3 className="text-sm font-bold mb-2">Max Price</h3>
+            <div className="text-xs text-gray-500 mb-2">Up to ₹ {maxPrice.toLocaleString()}</div>
+            <input
+              type="range"
+              className="w-full accent-orange-500"
+              min="200"
+              max="5000"
+              step="100"
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(Number(e.target.value))}
+            />
+          </div>
+        </aside>
+
+        <section className="w-full md:w-3/4 space-y-4">
+          <div className="flex justify-between items-center text-sm pt-2">
+            <div>
+              <h1 className="text-base font-bold text-gray-900">
+                Showing buses for {from} <i className="fa-solid fa-arrow-right text-xs mx-1"></i> {to}
+              </h1>
+              <p className="text-xs text-gray-500 mt-0.5">{date} • {visibleBuses.length} results</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Sort by:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="border border-gray-200 rounded p-1.5 bg-white text-xs font-semibold outline-none"
+              >
+                <option value="recommended">Recommended</option>
+                <option value="price_low">Price: Low to High</option>
+                <option value="departure_early">Departure: Earliest</option>
+              </select>
+            </div>
+          </div>
+
+          {loading && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
+              Buses load ho rahi hain...
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="bg-white rounded-lg shadow-sm border border-red-100 p-10 text-center text-red-500">
+              {error}
+            </div>
+          )}
+
+          {!loading && !error && visibleBuses.length === 0 && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
+              Is route ke liye koi bus nahi mili.
+            </div>
+          )}
+
+          {!loading && !error && visibleBuses.map((bus) => (
+            <BusCard
+              key={bus.id}
+              bus={bus}
+              isExpanded={expandedId === bus.id}
+              onToggle={() => setExpandedId(expandedId === bus.id ? null : bus.id)}
+            />
+          ))}
+        </section>
+      </main>
+    </div>
+    <Footer />
+    </>
+  );
+}
+
+function BusCard({ bus, isExpanded, onToggle }) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mb-3">
+      <div className="p-5 flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-[140px]">
+          <div className="font-bold text-blue-900 text-base">{bus.operator_name}</div>
+          <div className="text-xs text-gray-400">{bus.bus_type}</div>
         </div>
 
-        <Card>
-          <CardContent>
-            <Tabs defaultValue="bus" className="w-full">
-             <TabsList className="flex justify-around w-full grid-cols-5  mb-6 bg- ">
-                
-                  {/* Flights */}
-                <Link href="/flight">
-
-                <TabsTrigger
-                  value="flights"
-                  className="flex items-center gap-2"
-                >
-                  <Plane className="w-10 h-10" />
-                </TabsTrigger>
-                </Link>
-
-                
-                 {/* Hotels */}
-                <Link href="/hotel">
-
-                <TabsTrigger value="hotels" className="flex items-center gap-2">
-                  <Hotel className="w-10 h-10" />
-                </TabsTrigger>
-                </Link>
-
-
-                  {/* Packages */}
-                <Link href="/package">
-
-                <TabsTrigger
-                  value="packages"
-                  className="flex items-center gap-2"
-                >
-                  <MapPin className="w-10 h-10" />
-                </TabsTrigger>
-                </Link>
-
-                
-                  {/* Bus */}
-                <Link href="/bus">
-                <TabsTrigger value="bus" className="flex items-center gap-2">
-                  <Bus className="w-10 h-10" />
-                </TabsTrigger>
-                </Link>
-
-
-                  {/* Cabs */}
-                <Link href="/cab">
-
-                <TabsTrigger value="cabs" className="flex items-center gap-2">
-                  <Car className="w-10 h-10" />
-                </TabsTrigger>
-                </Link>
-
-
-              </TabsList>
-    
-
-     <TabsContent value="bus">
-            <div className="w-full max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-3">
-                <div className="flex flex-wrap items-center gap-6 text-sm font-medium text-black mb-6">
-         <span className="ml-auto text-lg text-black font-bold "> Online Bus Booking</span> 
+        <div className="text-center">
+          <div className="text-lg font-bold">{bus.departure_time}</div>
+          <div className="text-xs font-semibold text-gray-500">{bus.origin}</div>
         </div>
 
-      {/* Booking Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4 md:gap-6 items-end">
-        {/* Pickup Location */}
-      <div>
-        <label className="text-xs uppercase font-medium text-slate-500">
-          From
-        </label>
-        <select
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-        >
+        <div className="text-center min-w-[100px]">
+          <div className="text-xs text-gray-400">{bus.duration}</div>
+          <div className="relative my-1 flex items-center justify-center">
+            <div className="w-full border-t border-dashed border-gray-300 absolute"></div>
+            <i className="fa-solid fa-bus text-xs text-emerald-500 relative bg-white px-2 z-10"></i>
+          </div>
+        </div>
 
-          <option value="">Select Pickup Location</option>
-          {indianCities.map((city, index) => (
-            <option key={index} value={city}>
-              {city}
-            </option>
-          ))}
-        </select>
+        <div className="text-center">
+          <div className="text-lg font-bold">{bus.arrival_time}</div>
+          <div className="text-xs font-semibold text-gray-500">{bus.destination}</div>
+        </div>
+
+        <div className="text-right">
+          <div className="text-lg font-bold text-gray-900">₹ {Number(bus.price).toLocaleString()}</div>
+          <div className="text-[10px] text-gray-400">per seat</div>
+        </div>
+
+        <div className="flex flex-col items-end gap-1">
+          <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-5 py-2 rounded uppercase tracking-wider transition-colors">
+            View Seats
+          </button>
+          {bus.seats_available != null && (
+            <span className="text-[11px] text-orange-600 font-medium">{bus.seats_available} seats left</span>
+          )}
+          <button onClick={onToggle} className="text-[10px] text-orange-500 font-bold mt-1 flex items-center gap-0.5">
+            {isExpanded ? 'Hide' : 'View'} Details
+            <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-[8px]`}></i>
+          </button>
+        </div>
       </div>
 
-      {/* Drop Location */}
-      <div>
-        <label className="text-xs uppercase font-medium text-slate-500">
-          To
-        </label>
-        
-        <select
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
-        >
-          <option value="" className=" flex items-center justify-center ">Select Drop Location</option>
-          {indianCities.map((city, index) => (
-            <option key={index} value={city}>
-              {city}
-            </option>
-          ))}
-        </select>
-      </div>
-
-        {/* Departure Date */}
-   <div className="relative" ref={ref}>
-      <label className="text-xs uppercase font-medium text-slate-500">
-        Departure
-      </label>
-
-      {/* Date Display (click to toggle calendar) */}
-      <div
-        className="flex items-center gap-2 w-full justify-center font-bold text-sm border rounded-xl px-3 p-4 bg-white shadow-sm cursor-pointer"
-        onClick={() => setOpen(!open)}
-      >
-        <CalendarIcon className="w-5 h-5 text-orange-500" />
-        <span>
-          {selected
-            ? selected.toLocaleDateString("en-GB", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })
-            : "Pick a date"}
-        </span>
-
-        {/* Show weekday */}
-        {selected && (
-          <p className="text-xs text-orange-500">
-            {selected.toLocaleDateString("en-US", { weekday: "long" })}
-          </p>
-        )}
-      </div>
-
-      {/* Calendar Dropdown */}
-      {open && (
-        <div className="absolute left-0 mt-2 p-2 bg-white shadow-lg rounded-xl z-10">
-          <DayPicker
-            mode="single"
-            selected={selected}
-            onSelect={(date) => {
-              setSelected(date);
-              setOpen(false); // ✅ select karte hi band
-            }}
-          />
+      {isExpanded && (
+        <div className="p-5 bg-gray-50 text-xs text-gray-600 border-t border-gray-100">
+          <div className="font-bold text-gray-900 mb-3">{bus.origin} → {bus.destination}</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div><span className="text-gray-400 block">Operator</span>{bus.operator_name}</div>
+            <div><span className="text-gray-400 block">Bus Type</span>{bus.bus_type}</div>
+            <div><span className="text-gray-400 block">Rating</span>{bus.rating || 'N/A'}</div>
+            <div><span className="text-gray-400 block">Seats Available</span>{bus.seats_available ?? 'N/A'}</div>
+          </div>
         </div>
       )}
     </div>
-
-        {/* Pickup Time */}
-       
-       {/* Search Button */}
- <div className="col-span-full flex justify-center mt-6">
-                        <Button className="w-full sm:w-auto px-8 py-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold transition-colors duration-300">
-                          SEARCH BUSES
-                        </Button>
-                      </div>
-       
-      </div>
-        
-    </div>
-                
-              </TabsContent>
-
-              </Tabs>
-              </CardContent>
-           </Card>
-           </div> 
-      </section>
-
-  <section className="py-10 px-4">
-      <div className="max-w-7xl mx-auto  rounded-2xl shadow-md p-6" >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {buses.map((bus) => (
-            <div key={bus.city} className="flex items-center space-x-4">
-              {/* Circular Image */}
-              <div className="w-14 h-14 rounded-full overflow-hidden">
-                <Image
-                  src={bus.image}
-                  alt={bus.city}
-                  width={56}
-                  height={56}
-                  className="object-cover w-full h-full"
-                />
-              </div>
-              {/* City + Routes */}
-              <div>
-                <h3 className="font-semibold text-lg">{bus.city}</h3>
-                <p className="text-sm text-slate-900">{bus.routes}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-
-
-   
-
-      <Footer />
-      </>
   );
 }

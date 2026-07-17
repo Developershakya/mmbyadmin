@@ -5,9 +5,11 @@ export default async function handler(req, res) {
   try {
     const connection = await getConnection();
     const [rows] = await connection.execute(
-      `SELECT DISTINCT airport_city_name, airport_name, airport_code FROM airport_list 
-       WHERE airport_city_name LIKE ? OR airport_name LIKE ? OR airport_code LIKE ? LIMIT 10`,
-      [`%${query}%`, `%${query}%`, `%${query}%`]
+      `SELECT DISTINCT location AS Destination, location AS cityid, 'India' AS country
+       FROM package
+       WHERE status = 1 AND location LIKE ?
+       LIMIT 10`,
+      [`%${query}%`]
     );
     await connection.end();
     res.status(200).json(rows);
