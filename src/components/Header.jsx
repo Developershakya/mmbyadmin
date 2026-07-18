@@ -93,36 +93,36 @@ export default function Header() {
                 <ChevronDown className="w-3 h-3" />
               </button>
               <div className="absolute left-0 top-full mt-3 w-72 bg-white rounded-xl shadow-2xl border border-gray-100 p-2 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition">
-                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-orange-50 transition">
+                <Link href="/flights" className="flex items-center gap-3 p-3 rounded-lg hover:bg-orange-50 transition cursor-pointer">
                   <span className="w-9 h-9 flex items-center justify-center rounded-full bg-orange-50 text-orange-600">
                     <Plane className="w-4 h-4" />
                   </span>
                   <span className="text-sm font-semibold text-gray-800">Flights</span>
-                </a>
-                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-orange-50 transition">
+                </Link>
+                <Link href="/hotel" className="flex items-center gap-3 p-3 rounded-lg hover:bg-orange-50 transition cursor-pointer">
                   <span className="w-9 h-9 flex items-center justify-center rounded-full bg-orange-50 text-orange-600">
                     <Hotel className="w-4 h-4" />
                   </span>
                   <span className="text-sm font-semibold text-gray-800">Hotels</span>
-                </a>
-                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-orange-50 transition">
+                </Link>
+                <Link href="/buses" className="flex items-center gap-3 p-3 rounded-lg hover:bg-orange-50 transition cursor-pointer">
                   <span className="w-9 h-9 flex items-center justify-center rounded-full bg-orange-50 text-orange-600">
                     <Bus className="w-4 h-4" />
                   </span>
                   <span className="text-sm font-semibold text-gray-800">Buses</span>
-                </a>
-                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-orange-50 transition">
+                </Link>
+                <Link href="/cabs" className="flex items-center gap-3 p-3 rounded-lg hover:bg-orange-50 transition cursor-pointer">
                   <span className="w-9 h-9 flex items-center justify-center rounded-full bg-orange-50 text-orange-600">
                     <Car className="w-4 h-4" />
                   </span>
                   <span className="text-sm font-semibold text-gray-800">Cabs</span>
-                </a>
-                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-orange-50 transition">
+                </Link>
+                <Link href="/holidays" className="flex items-center gap-3 p-3 rounded-lg hover:bg-orange-50 transition cursor-pointer">
                   <span className="w-9 h-9 flex items-center justify-center rounded-full bg-orange-50 text-orange-600">
                     <MapPin className="w-4 h-4" />
                   </span>
                   <span className="text-sm font-semibold text-gray-800">Holiday Packages</span>
-                </a>
+                </Link>
               </div>
             </div>
 

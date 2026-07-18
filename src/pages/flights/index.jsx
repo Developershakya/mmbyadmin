@@ -1,9 +1,12 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState, useMemo } from 'react';
+import LocationSearchBox from '../../components/LocationSearchBox';
+import { DayPicker } from 'react-day-picker';
+import 'react-day-picker/dist/style.css';
 
 export default function FlightsPage() {
   const router = useRouter();
-const { from, to, date, trip, adults, children, infants, returnDate, legs } = router.query;
+  const { from, to, date, trip, adults, children, infants, returnDate, legs } = router.query;
 
   const [flights, setFlights] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,82 +19,136 @@ const { from, to, date, trip, adults, children, infants, returnDate, legs } = ro
   const [maxPrice, setMaxPrice] = useState(50000);
   const [sortBy, setSortBy] = useState('recommended');
 
-useEffect(() => {
-  if (!router.isReady) return;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  // Oneway/Roundtrip ke liye from, to, date zaroori hai
-  // Multicity ke liye sirf legs zaroori hai
-  if (trip === 'multicity') {
-    if (!legs) return;
-  } else {
-    if (!from || !to || !date) return;
-  }
+  // ---------------- Header (editable search bar) states ----------------
+  const [headerFrom, setHeaderFrom] = useState(null);
+  const [headerTo, setHeaderTo] = useState(null);
+  const [headerDate, setHeaderDate] = useState(null);
+  const [headerReturnDate, setHeaderReturnDate] = useState(null);
+  const [headerTrip, setHeaderTrip] = useState('oneway');
+  const [headerAdults, setHeaderAdults] = useState(1);
+  const [headerChildren, setHeaderChildren] = useState(0);
+  const [headerInfants, setHeaderInfants] = useState(0);
 
-async function fetchFlights() {
-  try {
-    setLoading(true);
-    setError('');
+  const [openHeaderDeparture, setOpenHeaderDeparture] = useState(false);
+  const [openHeaderReturn, setOpenHeaderReturn] = useState(false);
+  const [headerTravelersOpen, setHeaderTravelersOpen] = useState(false);
+  const [headerTripTypeOpen, setHeaderTripTypeOpen] = useState(false);
 
-    let segments = [];
-    let journeyType = '1';
+  useEffect(() => {
+    if (!router.isReady) return;
 
-    if (trip === 'roundtrip') {
-      journeyType = '2';
-      segments = [
-        { origin: from, destination: to, date: date },
-        { origin: to, destination: from, date: returnDate },
-      ];
-    } else if (trip === 'multicity') {
-      journeyType = '3';
-      segments = (legs || '').split(',').map((leg) => {
-        const parts = leg.split('-');
-        // Format: ORIGIN-DEST-YYYY-MM-DD (date ke andar bhi '-' hote hain)
-        const origin = parts[0];
-        const destination = parts[1];
-        const date = parts.slice(2).join('-'); // YYYY-MM-DD reconstruct
-        return { origin, destination, date };
-      });
+    // Oneway/Roundtrip ke liye from, to, date zaroori hai
+    // Multicity ke liye sirf legs zaroori hai
+    if (trip === 'multicity') {
+      if (!legs) return;
     } else {
-      segments = [{ origin: from, destination: to, date: date }];
+      if (!from || !to || !date) return;
     }
 
-    const res = await fetch('/api/flights/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        adultCount: Number(adults) || 1,
-        childCount: Number(children) || 0,
-        infantCount: Number(infants) || 0,
-        journeyType,
-        segments,
-      })
-    });
+    async function fetchFlights() {
+      try {
+        setLoading(true);
+        setError('');
 
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('API status:', res.status, 'body:', body);
-      throw new Error('Failed to fetch');
+        let segments = [];
+        let journeyType = '1';
+
+        if (trip === 'roundtrip') {
+          journeyType = '2';
+          segments = [
+            { origin: from, destination: to, date: date },
+            { origin: to, destination: from, date: returnDate },
+          ];
+        } else if (trip === 'multicity') {
+          journeyType = '3';
+          segments = (legs || '').split(',').map((leg) => {
+            const parts = leg.split('-');
+            const origin = parts[0];
+            const destination = parts[1];
+            const date = parts.slice(2).join('-');
+            return { origin, destination, date };
+          });
+        } else {
+          segments = [{ origin: from, destination: to, date: date }];
+        }
+
+        const res = await fetch('/api/flights/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adultCount: Number(adults) || 1,
+            childCount: Number(children) || 0,
+            infantCount: Number(infants) || 0,
+            journeyType,
+            segments,
+          })
+        });
+
+        if (!res.ok) {
+          const body = await res.text();
+          console.error('API status:', res.status, 'body:', body);
+          throw new Error('Failed to fetch');
+        }
+
+        const data = await res.json();
+
+        if (!data.success) {
+          setError(data.message || 'Flights fetch nahi ho paaye. Baad me try karo.');
+          setFlights([]);
+          return;
+        }
+
+        setFlights(data.results || []);
+      } catch (err) {
+        console.error('fetchFlights error:', err);
+        setError('Flights fetch nahi ho paaye. Baad me try karo.');
+      } finally {
+        setLoading(false);
+      }
     }
 
-    const data = await res.json();
+    fetchFlights();
+  }, [router.isReady, from, to, date, trip, adults, children, infants, returnDate, legs]);
 
-    if (!data.success) {
-      setError(data.message || 'Flights fetch nahi ho paaye. Baad me try karo.');
-      setFlights([]);
-      return;
+  // ---------------- Header sync: URL query se DB lookup karke header states bharo ----------------
+  async function lookupCity(code) {
+    if (!code) return null;
+    try {
+      const res = await fetch(`/api/cities/airports?code=${encodeURIComponent(code)}`);
+      const rows = await res.json();
+      if (Array.isArray(rows) && rows.length > 0) {
+        const row = rows[0];
+        return {
+          code: row.airport_code,
+          name: row.airport_city_name,
+          sub: row.airport_name,
+        };
+      }
+    } catch (err) {
+      console.error('lookupCity error:', err);
     }
-
-    setFlights(data.results || []);
-  } catch (err) {
-    console.error('fetchFlights error:', err);
-    setError('Flights fetch nahi ho paaye. Baad me try karo.');
-  } finally {
-    setLoading(false);
+    return { code, name: code, sub: '' }; // fallback agar DB mein na mile
   }
-}
 
-  fetchFlights();
-}, [router.isReady, from, to, date, trip, adults, children, infants, returnDate, legs]);
+  useEffect(() => {
+    if (!router.isReady) return;
+
+    (async () => {
+      const [fromCity, toCity] = await Promise.all([lookupCity(from), lookupCity(to)]);
+      setHeaderFrom(fromCity);
+      setHeaderTo(toCity);
+    })();
+
+    setHeaderDate(date && !isNaN(new Date(date).getTime()) ? new Date(date) : null);
+    setHeaderReturnDate(returnDate && !isNaN(new Date(returnDate).getTime()) ? new Date(returnDate) : null);
+    setHeaderTrip(trip || 'oneway');
+    setHeaderAdults(Number(adults) || 1);
+    setHeaderChildren(Number(children) || 0);
+    setHeaderInfants(Number(infants) || 0);
+  }, [router.isReady, from, to, date, trip, adults, children, infants, returnDate]);
 
   // Derived: airline counts for filter sidebar
   const airlineCounts = useMemo(() => {
@@ -141,11 +198,12 @@ async function fetchFlights() {
 
     return result;
   }, [flights, selectedStops, selectedAirlines, maxPrice, sortBy]);
-  const onwardFlights = useMemo(() => visibleFlights.filter(f => f.legIndex === 0), [visibleFlights]);
-const returnFlights = useMemo(() => visibleFlights.filter(f => f.legIndex === 1), [visibleFlights]);
 
-const [selectedOnward, setSelectedOnward] = useState(null);
-const [selectedReturn, setSelectedReturn] = useState(null);
+  const onwardFlights = useMemo(() => visibleFlights.filter(f => f.legIndex === 0), [visibleFlights]);
+  const returnFlights = useMemo(() => visibleFlights.filter(f => f.legIndex === 1), [visibleFlights]);
+
+  const [selectedOnward, setSelectedOnward] = useState(null);
+  const [selectedReturn, setSelectedReturn] = useState(null);
 
   function toggleStop(key) {
     setSelectedStops((prev) =>
@@ -169,18 +227,44 @@ const [selectedReturn, setSelectedReturn] = useState(null);
     router.push(`/flights?from=${from}&to=${to}&date=${newDate}&trip=${trip || 'oneway'}`);
   }
 
-  // Generate a 7-day date strip centered on selected date
-const dateStrip = useMemo(() => {
-  if (!date || date === 'undefined' || isNaN(new Date(date).getTime())) return [];
-  const base = new Date(date);
-  const days = [];
-  for (let i = -3; i <= 3; i++) {
-    const d = new Date(base);
-    d.setDate(base.getDate() + i);
-    days.push(d);
+  function toISODate(d) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
-  return days;
-}, [date]);
+
+  // ---------------- Header search button ----------------
+  function handleHeaderSearch() {
+    if (!headerFrom || !headerTo) {
+      alert('Please select From and To locations.');
+      return;
+    }
+    if (headerTrip === 'roundtrip' && !headerReturnDate) {
+      alert('Please select a return date for round trip.');
+      return;
+    }
+    const dateStr = headerDate ? toISODate(headerDate) : '';
+    const returnStr = headerReturnDate ? toISODate(headerReturnDate) : '';
+    router.push(
+      `/flights?from=${headerFrom.code}&to=${headerTo.code}&date=${dateStr}` +
+      (headerTrip === 'roundtrip' ? `&returnDate=${returnStr}` : '') +
+      `&trip=${headerTrip}&adults=${headerAdults}&children=${headerChildren}&infants=${headerInfants}`
+    );
+  }
+
+  // Generate a 7-day date strip centered on selected date
+  const dateStrip = useMemo(() => {
+    if (!date || date === 'undefined' || isNaN(new Date(date).getTime())) return [];
+    const base = new Date(date);
+    const days = [];
+    for (let i = -3; i <= 3; i++) {
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  }, [date]);
 
   function formatDateShort(d) {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', ' ');
@@ -190,13 +274,6 @@ const dateStrip = useMemo(() => {
     return d.toLocaleDateString('en-US', { weekday: 'short' });
   }
 
-function toISODate(d) {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
   return (
     <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen">
 
@@ -204,58 +281,217 @@ function toISODate(d) {
       <header className="bg-[#0B1523] text-white p-3 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
 
-          <div className="flex-1 min-w-[110px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center">
+          {/* Trip Type */}
+          <div className="flex-1 min-w-[110px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
             <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Trip Type</label>
-            <div className="flex justify-between items-center mt-0.5 cursor-pointer">
-              <span className="text-xs font-bold capitalize">
-                {trip === 'roundtrip' ? 'Round Trip' : trip === 'multicity' ? 'Multi City' : 'One Way'}
+            <div
+              className="flex justify-between items-center mt-0.5 cursor-pointer"
+              onClick={() => setHeaderTripTypeOpen(!headerTripTypeOpen)}
+            >
+              <span className="text-xs font-bold capitalize text-white">
+                {headerTrip === 'roundtrip' ? 'Round Trip' : headerTrip === 'multicity' ? 'Multi City' : 'One Way'}
               </span>
               <i className="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
             </div>
+
+            {headerTripTypeOpen && (
+              <div
+                className="absolute top-full left-0 mt-2 w-48 bg-white shadow-2xl rounded-xl border border-gray-100 z-30 overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {[
+                  { id: 'oneway', label: 'One Way' },
+                  { id: 'roundtrip', label: 'Round Trip' },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => { setHeaderTrip(opt.id); setHeaderTripTypeOpen(false); }}
+                    className={`w-full text-left px-4 py-3 text-sm font-medium hover:bg-orange-50 transition ${
+                      headerTrip === opt.id ? "text-orange-600 bg-orange-50" : "text-gray-700"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
+          {/* From / To */}
           <div className="flex-[2.5] min-w-[320px] bg-[#1E2A38] rounded h-[54px] flex items-center relative px-4">
             <div className="flex-1 flex flex-col justify-center pr-4">
-              <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">From</label>
-              <div className="text-xs font-black mt-0.5 whitespace-nowrap text-white">{from || '--'}</div>
+              <LocationSearchBox
+                label="From"
+                value={headerFrom}
+                placeholder="Delhi"
+                onSelect={setHeaderFrom}
+                theme="dark"
+                citySearchApi="/api/cities/airports"
+              />
             </div>
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-full">
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-full pointer-events-none">
               <div className="h-8 border-l border-gray-600/50 absolute"></div>
-              <div className="bg-[#1E2A38] border border-gray-600 rounded-full w-5 h-5 flex items-center justify-center z-10 cursor-pointer text-gray-400 hover:text-white transition-colors">
+              <div className="bg-[#1E2A38] border border-gray-600 rounded-full w-5 h-5 flex items-center justify-center z-10 text-gray-400">
                 <i className="fa-solid fa-arrows-left-right text-[9px]"></i>
               </div>
             </div>
             <div className="flex-1 flex flex-col justify-center pl-8">
-              <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">To</label>
-              <div className="text-xs font-black mt-0.5 whitespace-nowrap text-white">{to || '--'}</div>
+              <LocationSearchBox
+                label="To"
+                value={headerTo}
+                placeholder="Leh"
+                onSelect={setHeaderTo}
+                theme="dark"
+                align="right"
+                citySearchApi="/api/cities/airports"
+              />
             </div>
           </div>
 
-          <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center">
-            <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Departure</label>
-            <div className="text-xs font-black mt-0.5 flex justify-between items-center whitespace-nowrap">
-              <span>{date || '--'}</span>
+          {/* Departure */}
+          <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
+            <label
+              className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium cursor-pointer"
+              onClick={() => { setOpenHeaderDeparture(!openHeaderDeparture); setOpenHeaderReturn(false); }}
+            >
+              Departure
+            </label>
+            <div
+              className="text-xs font-black mt-0.5 flex justify-between items-center whitespace-nowrap cursor-pointer text-white"
+              onClick={() => { setOpenHeaderDeparture(!openHeaderDeparture); setOpenHeaderReturn(false); }}
+            >
+              <span>{headerDate ? toISODate(headerDate) : '--'}</span>
               <i className="fa-regular fa-calendar text-[11px] text-gray-400 ml-1"></i>
             </div>
+{openHeaderDeparture && (
+  <div className="absolute top-full left-0 mt-2 p-2 bg-white shadow-2xl rounded-xl z-30 text-gray-900" onClick={(e) => e.stopPropagation()}>
+    <DayPicker
+      mode="single"
+      selected={headerDate}
+      onSelect={(d) => { setHeaderDate(d); setOpenHeaderDeparture(false); }}
+      disabled={{ before: today }}
+    />
+  </div>
+)}
           </div>
 
-          <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center opacity-60">
-            <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Return</label>
-            <div className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1 cursor-pointer whitespace-nowrap">
-              <i className="fa-regular fa-calendar text-[10px]"></i> <span>Add return details</span>
+          {/* Return */}
+          <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
+            <label
+              className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium cursor-pointer"
+              onClick={() => { setOpenHeaderReturn(!openHeaderReturn); setOpenHeaderDeparture(false); }}
+            >
+              Return
+            </label>
+            <div
+              className="text-[11px] mt-0.5 flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              onClick={() => { setOpenHeaderReturn(!openHeaderReturn); setOpenHeaderDeparture(false); }}
+            >
+              <i className="fa-regular fa-calendar text-[10px] text-gray-400"></i>
+              <span className={headerReturnDate ? "text-white font-black text-xs" : "text-gray-400"}>
+                {headerReturnDate ? toISODate(headerReturnDate) : 'Add return details'}
+              </span>
             </div>
+{openHeaderReturn && (
+  <div className="absolute top-full right-0 mt-2 p-2 bg-white shadow-2xl rounded-xl z-30 text-gray-900" onClick={(e) => e.stopPropagation()}>
+    <DayPicker
+      mode="single"
+      selected={headerReturnDate}
+      onSelect={(d) => { setHeaderReturnDate(d); setHeaderTrip('roundtrip'); setOpenHeaderReturn(false); }}
+      disabled={{ before: headerDate || today }}
+    />
+  </div>
+)}
           </div>
 
-          <div className="flex-1 min-w-[150px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center">
+          {/* Travellers & Class */}
+          <div className="flex-1 min-w-[150px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
             <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Travellers & Class</label>
-            <div className="flex justify-between items-center mt-0.5 cursor-pointer">
-              <span className="text-xs font-black whitespace-nowrap">1 Pass, Economy</span>
+            <div
+              className="flex justify-between items-center mt-0.5 cursor-pointer"
+              onClick={() => setHeaderTravelersOpen(!headerTravelersOpen)}
+            >
+              <span className="text-xs font-black whitespace-nowrap text-white">
+                {headerAdults} Pass{headerAdults > 1 ? 'es' : ''}, Economy
+              </span>
               <i className="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
             </div>
+
+            {headerTravelersOpen && (
+              <div
+                className="absolute top-full right-0 mt-2 w-[380px] p-5 bg-white shadow-2xl rounded-xl border border-gray-100 z-30"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-5">
+                  <p className="text-sm font-bold text-gray-800">Adults (12y +)</p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setHeaderAdults(n)}
+                        className={`w-9 h-9 rounded-md text-sm font-semibold transition ${
+                          headerAdults === n ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-orange-100"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-8 mb-5">
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">Children</p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {[0, 1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setHeaderChildren(n)}
+                          className={`w-9 h-9 rounded-md text-sm font-semibold transition ${
+                            headerChildren === n ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-orange-100"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">Infants</p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {[0, 1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setHeaderInfants(n)}
+                          className={`w-9 h-9 rounded-md text-sm font-semibold transition ${
+                            headerInfants === n ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-orange-100"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setHeaderTravelersOpen(false)}
+                    className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-md px-8 py-2.5 transition"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <button
-            onClick={() => router.push(`/flights?from=${from}&to=${to}&date=${date}&trip=${trip || 'oneway'}`)}
+            onClick={handleHeaderSearch}
             className="bg-gradient-to-r from-[#0B1523] to-orange-500 text-white text-base rounded-tr-full rounded-br-full px-6 h-[54px] ml-1.5 rounded font-black uppercase tracking-wider hover:opacity-95 transition-all flex items-center justify-center shadow-md"
           >
             Search
@@ -413,7 +649,6 @@ function toISODate(d) {
 
           {/* ROUND TRIP / MULTI CITY: show each leg in its own section */}
           {!loading && !error && (trip === 'roundtrip' || trip === 'multicity') && (() => {
-            // Group flights by legIndex
             const legMap = {};
             visibleFlights.forEach(f => {
               if (!legMap[f.legIndex]) legMap[f.legIndex] = [];
@@ -521,7 +756,6 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
 
       {isExpanded && (
         <div className="bg-gray-50 border-t border-gray-100">
-          {/* Tabs */}
           <div className="flex gap-1 px-5 pt-3">
             {[
               { id: 'details', label: 'Flight Details' },
@@ -568,8 +802,8 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
                               <div className="text-sm font-bold text-gray-900">{leg.departure_time}</div>
                               <div className="text-gray-400 mt-1 text-[11px]">{leg.origin_airport}</div>
                               {leg.origin_terminal && (
-  <div className="text-gray-400 text-[11px]">{leg.origin_terminal}</div>
-)}
+                                <div className="text-gray-400 text-[11px]">{leg.origin_terminal}</div>
+                              )}
                             </div>
                             <div className="text-center px-2">
                               <div className="text-gray-400 text-[11px]">{leg.duration}</div>
@@ -578,9 +812,9 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
                             <div>
                               <div className="text-sm font-bold text-gray-900">{leg.arrival_time}</div>
                               <div className="text-gray-400 mt-1 text-[11px]">{leg.destination_airport}</div>
-{leg.destination_terminal && (
-  <div className="text-gray-400 text-[11px]">{leg.destination_terminal}</div>
-)}
+                              {leg.destination_terminal && (
+                                <div className="text-gray-400 text-[11px]">{leg.destination_terminal}</div>
+                              )}
                             </div>
                           </div>
                         </div>

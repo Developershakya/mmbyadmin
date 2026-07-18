@@ -14,33 +14,8 @@ import {
 import { FaPlane, FaHotel, FaMapMarkerAlt, FaBus, FaCar } from "react-icons/fa";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
+import LocationSearchBox, { indianCities } from "./LocationSearchBox";
 
-/* ---------------------------------------------------------
-   STATIC DATA
---------------------------------------------------------- */
-const indianCities = [
-  { code: "DEL", name: "New Delhi, India", sub: "Indira Gandhi International Airport" },
-  { code: "BOM", name: "Mumbai, India", sub: "Chhatrapati Shivaji International Airport" },
-  { code: "BLR", name: "Bengaluru, India", sub: "Kempegowda International Airport" },
-  { code: "MAA", name: "Chennai, India", sub: "Chennai International Airport" },
-  { code: "CCU", name: "Kolkata, India", sub: "Netaji Subhas Chandra Bose Airport" },
-  { code: "HYD", name: "Hyderabad, India", sub: "Rajiv Gandhi International Airport" },
-  { code: "PNQ", name: "Pune, India", sub: "Pune Airport" },
-  { code: "JAI", name: "Jaipur, India", sub: "Jaipur International Airport" },
-  { code: "AMD", name: "Ahmedabad, India", sub: "Sardar Vallabhbhai Patel Airport" },
-  { code: "LKO", name: "Lucknow, India", sub: "Chaudhary Charan Singh Airport" },
-  { code: "IXC", name: "Chandigarh, India", sub: "Chandigarh Airport" },
-  { code: "GOI", name: "Goa, India", sub: "Dabolim Airport" },
-  { code: "AGR", name: "Agra, India", sub: "Agra Airport" },
-  { code: "VNS", name: "Varanasi, India", sub: "Lal Bahadur Shastri Airport" },
-  { code: "PAT", name: "Patna, India", sub: "Jay Prakash Narayan Airport" },
-  { code: "BHO", name: "Bhopal, India", sub: "Raja Bhoj Airport" },
-  { code: "IDR", name: "Indore, India", sub: "Devi Ahilyabai Holkar Airport" },
-  { code: "NAG", name: "Nagpur, India", sub: "Dr. Babasaheb Ambedkar Airport" },
-  { code: "STV", name: "Surat, India", sub: "Surat Airport" },
-  { code: "ATQ", name: "Amritsar, India", sub: "Sri Guru Ram Dass Jee Airport" },
-  { code: "IXL", name: "Leh", sub: "Leh Kushok Bakula Rimpoche Airport" },
-];
 function formatLocalDate(date) {
   if (!date) return "";
   const year = date.getFullYear();
@@ -49,339 +24,9 @@ function formatLocalDate(date) {
   return `${year}-${month}-${day}`;
 }
 
-// Component ke top mein, kisi state declaration ke baad add karo
 const today = new Date();
 today.setHours(0, 0, 0, 0);
-const visaFreeDestinations = [
-  { code: "MNL", name: "Manila", sub: "Philippines" },
-  { code: "MLE", name: "Male", sub: "Maldives" },
-  { code: "KUL", name: "Kuala Lumpur", sub: "Malaysia" },
-  { code: "CMB", name: "Colombo", sub: "Sri Lanka" },
-  { code: "MRU", name: "Mauritius", sub: "Mauritius" },
-  { code: "HKG", name: "Hong Kong", sub: "Hong Kong" },
-  { code: "PBH", name: "Paro", sub: "Bhutan" },
-  { code: "SEZ", name: "Mahe Island", sub: "Seychelles" },
-  { code: "NAN", name: "Nadi", sub: "Fiji" },
-];
 
-const eVisaDestinations = [
-  { code: "DPS", name: "Denpasar (Bali)", sub: "Indonesia" },
-  { code: "SGN", name: "Ho Chi Minh City", sub: "Vietnam" },
-  { code: "NRT", name: "Tokyo", sub: "Japan" },
-  { code: "REP", name: "Siem Reap", sub: "Cambodia" },
-  { code: "TBS", name: "Tbilisi", sub: "Georgia" },
-  { code: "DXB", name: "Dubai", sub: "UAE" },
-];
-
-const popularSearches = [
-  { code: "BOM", name: "Mumbai, India", sub: "Chhatrapati Shivaji International Airport" },
-  { code: "DEL", name: "New Delhi, India", sub: "Indira Gandhi International Airport" },
-  { code: "SIN", name: "Hyderabad", sub: "Rajiv Gandhi International Airport" },
-  { code: "BKK", name: "Bangalore", sub: "Nashville International Airport" },
-];
-const RECENT_KEY = "bharatYatra_recentSearches";
-
-function getRecentSearches() {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(RECENT_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveRecentSearch(item) {
-  if (typeof window === "undefined") return;
-  try {
-    const existing = getRecentSearches().filter((i) => i.code !== item.code);
-    const updated = [item, ...existing].slice(0, 5);
-    window.localStorage.setItem(RECENT_KEY, JSON.stringify(updated));
-  } catch {
-    /* ignore */
-  }
-}
-
-/* ---------------------------------------------------------
-   LocationSearchBox
-   A reusable MakeMyTrip-style search dropdown.
-   Click the trigger (label + value) -> opens a panel with:
-   search input, Recent Searches, Visa-Free/Visa-on-Arrival
-   Destinations, E-Visa Destinations, Popular Searches.
---------------------------------------------------------- */
-function LocationSearchBox({ label, value, placeholder, onSelect, align = "left", showAllSections = true, citySearchApi = null }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [recents, setRecents] = useState([]);
-  const [apiResults, setApiResults] = useState([]);
-  const [apiLoading, setApiLoading] = useState(false);
-  const boxRef = useRef(null);
-  const debounceRef = useRef(null);
-
-  useEffect(() => {
-    if (open) setRecents(getRecentSearches());
-  }, [open]);
-
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (boxRef.current && !boxRef.current.contains(e.target)) {
-        setOpen(false);
-        setQuery("");
-        setApiResults([]);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Dynamic (DB-backed) city search — sirf tab chalega jab citySearchApi diya ho
-  useEffect(() => {
-    if (!citySearchApi) return;
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (!query || query.trim().length < 2) {
-      setApiResults([]);
-      return;
-    }
-
-    debounceRef.current = setTimeout(async () => {
-      try {
-        setApiLoading(true);
-        const res = await fetch(`${citySearchApi}?query=${encodeURIComponent(query.trim())}`);
-        const data = await res.json();
-        // hotel_city_code_v8 se: { cityid, Destination, country }
-const mapped = (Array.isArray(data) ? data : []).map((row) => ({
-  code: row.airport_code || row.code || row.cityid || row.id,
-  name: row.airport_city_name || row.name || row.Destination || row.city,
-  sub: row.airport_name || row.sub || row.country || row.state,
-}));
-        setApiResults(mapped);
-      } catch (err) {
-        console.error("City search error:", err);
-        setApiResults([]);
-      } finally {
-        setApiLoading(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(debounceRef.current);
-  }, [query, citySearchApi]);
-
-  const allOptions = [
-    ...indianCities,
-    ...visaFreeDestinations,
-    ...eVisaDestinations,
-  ].filter(
-    (item, index, self) =>
-      index === self.findIndex((t) => t.code === item.code)
-  );
-
-  // Agar citySearchApi hai to API results use karo, warna static filter
-  const filtered = query
-    ? citySearchApi
-      ? apiResults
-      : allOptions.filter(
-          (item) =>
-            item.name.toLowerCase().includes(query.toLowerCase()) ||
-            item.code.toLowerCase().includes(query.toLowerCase()) ||
-            (item.sub && item.sub.toLowerCase().includes(query.toLowerCase()))
-        )
-    : null;
-
-  function handleSelect(item) {
-    onSelect(item);
-    saveRecentSearch(item);
-    setOpen(false);
-    setQuery("");
-    setApiResults([]);
-  }
-
-  return (
-    <div
-      className="relative w-full h-full cursor-pointer"
-      ref={boxRef}
-      onClick={() => setOpen((prev) => !prev)}
-    >
-      <span className="text-xs uppercase tracking-wider text-gray-400 block mb-1">
-        {label}
-      </span>
-      <div className="pointer-events-none">
-        <div className="text-xl font-bold text-gray-800 truncate">
-          {value ? value.name : placeholder}
-        </div>
-        {value?.sub && (
-          <span className="text-xs text-gray-500 truncate block">
-            {value.code}, {value.sub}
-          </span>
-        )}
-      </div>
-
-      {open && (
-        <div
-          className={`absolute mt-2 w-[340px] bg-white shadow-2xl rounded-xl border border-gray-100 z-30 flex flex-col overflow-hidden ${
-            align === "right" ? "right-0" : "left-0"
-          }`}
-          style={{ maxHeight: "420px" }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 m-3 mb-2 bg-white flex-shrink-0">
-            <Search className="w-4 h-4 text-gray-400" />
-            <input
-              autoFocus
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Search ${label.toLowerCase()}`}
-              className="w-full text-sm outline-none"
-            />
-          </div>
-
-          <div className="overflow-y-auto px-3 pb-3">
-            {filtered ? (
-              <div>
-                {apiLoading && citySearchApi ? (
-                  <p className="text-sm text-gray-400 px-1 py-4 text-center">Searching...</p>
-                ) : filtered.length === 0 ? (
-                  <p className="text-sm text-gray-400 px-1 py-4 text-center">
-                    No destinations found
-                  </p>
-                ) : (
-                  filtered.map((item) => (
-                    <button
-                      key={item.code}
-                      type="button"
-                      onClick={() => handleSelect(item)}
-                      className="w-full flex items-start gap-3 p-2.5 rounded-lg hover:bg-orange-50 transition text-left"
-                    >
-                      <span className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-600">
-                        {String(item.code).slice(0, 3).toUpperCase()}
-                      </span>
-                      <span>
-                        <span className="block text-sm font-semibold text-gray-800">
-                          {item.name}
-                        </span>
-                        <span className="block text-[11px] text-gray-400">
-                          {item.sub}
-                        </span>
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            ) : (
-              <>
-                {showAllSections && !citySearchApi && (
-                  <>
-                    {recents.length > 0 && (
-                      <div className="mb-3">
-                        <h4 className="text-[11px] uppercase font-bold text-gray-400 tracking-wide px-1 mb-1">
-                          Recent Searches
-                        </h4>
-                        {recents.map((item) => (
-                          <button
-                            key={`recent-${item.code}`}
-                            type="button"
-                            onClick={() => handleSelect(item)}
-                            className="w-full flex items-start gap-3 p-2.5 rounded-lg hover:bg-orange-50 transition text-left"
-                          >
-                            <span className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-600">
-                              {item.code}
-                            </span>
-                            <span>
-                              <span className="block text-sm font-semibold text-gray-800">
-                                {item.name}
-                              </span>
-                              <span className="block text-[11px] text-gray-400">
-                                {item.sub}
-                              </span>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mb-3">
-                      <h4 className="text-[11px] uppercase font-bold text-gray-400 tracking-wide px-1 mb-1">
-                        Visa-Free / Visa-on-Arrival Destinations
-                      </h4>
-                      <div className="grid grid-cols-3 gap-2 px-1">
-                        {visaFreeDestinations.map((item) => (
-                          <button
-                            key={item.code}
-                            type="button"
-                            onClick={() => handleSelect(item)}
-                            className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg py-2 px-2 hover:border-orange-400 hover:bg-orange-50 transition truncate"
-                            title={item.name}
-                          >
-                            {item.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mb-3">
-                      <h4 className="text-[11px] uppercase font-bold text-gray-400 tracking-wide px-1 mb-1">
-                        E-Visa Destinations
-                      </h4>
-                      <div className="grid grid-cols-3 gap-2 px-1">
-                        {eVisaDestinations.map((item) => (
-                          <button
-                            key={item.code}
-                            type="button"
-                            onClick={() => handleSelect(item)}
-                            className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg py-2 px-2 hover:border-orange-400 hover:bg-orange-50 transition truncate"
-                            title={item.name}
-                          >
-                            {item.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {!citySearchApi && (
-                  <div>
-                    <h4 className="text-[11px] uppercase font-bold text-gray-400 tracking-wide px-1 mb-1">
-                      Popular Searches
-                    </h4>
-                    {popularSearches.map((item) => (
-                      <button
-                        key={`popular-${item.code}`}
-                        type="button"
-                        onClick={() => handleSelect(item)}
-                        className="w-full flex items-start gap-3 p-2.5 rounded-lg hover:bg-orange-50 transition text-left"
-                      >
-                        <span className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-600">
-                          {item.code}
-                        </span>
-                        <span>
-                          <span className="block text-sm font-semibold text-gray-800">
-                            {item.name}
-                          </span>
-                          <span className="block text-[11px] text-gray-400">
-                            {item.sub}
-                          </span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {citySearchApi && (
-                  <p className="text-xs text-gray-400 px-1 py-4 text-center">
-                    Type at least 2 letters to search cities
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 function RoomsGuestsBox({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef(null);
@@ -475,6 +120,7 @@ function RoomsGuestsBox({ value, onChange }) {
     </div>
   );
 }
+
 /* ---------------------------------------------------------
    MAIN COMPONENT
 --------------------------------------------------------- */
@@ -486,14 +132,13 @@ export default function HeroSection() {
   const [children, setChildren] = useState(0);
   const [infants, setInfants] = useState(0);
   const [travelClass, setTravelClass] = useState("");
-const [openMultiDate, setOpenMultiDate] = useState(null); // index of open date picker
+  const [openMultiDate, setOpenMultiDate] = useState(null);
   const [travelersOpen, setTravelersOpen] = useState(false);
 
   const displayValue = `${adults} Adult${adults > 1 ? "s" : ""}${
     children > 0 ? `, ${children} Child${children > 1 ? "ren" : ""}` : ""
   }${infants > 0 ? `, ${infants} Infant${infants > 1 ? "s" : ""}` : ""}`;
 
-  // Dates
   const [departureDate, setDepartureDate] = useState(new Date());
   const [returnDate, setReturnDate] = useState(null);
   const [openDeparture, setOpenDeparture] = useState(false);
@@ -505,38 +150,37 @@ const [openMultiDate, setOpenMultiDate] = useState(null); // index of open date 
   const [openCheckOut, setOpenCheckOut] = useState(false);
   const [openPrice, setOpenPrice] = useState(false);
 
-const [priceRange, setPriceRange] = useState("₹0-₹1500");
+  const [priceRange, setPriceRange] = useState("₹0-₹1500");
 
   const [travelDate, setTravelDate] = useState(new Date());
   const [openTravelDate, setOpenTravelDate] = useState(false);
 
-  // Location values now hold objects: { code, name, sub } | null
-const [from, setFrom] = useState(
-  indianCities.find((c) => c.code === "DEL")
-);
-const [to, setTo] = useState(
-  indianCities.find((c) => c.code === "IXL")
-);
+  const [from, setFrom] = useState(
+    indianCities.find((c) => c.code === "DEL")
+  );
+  const [to, setTo] = useState(
+    indianCities.find((c) => c.code === "IXL")
+  );
 
-const [multiCityLegs, setMultiCityLegs] = useState([
-  { from: from, to: to, date: new Date() },
-  { from: to, to: null, date: new Date(Date.now() + 86400000) },
-]);
-const [hotelDestination, setHotelDestination] = useState(null);
-const [roomsGuests, setRoomsGuests] = useState({
-  rooms: 1,
-  adults: 2,
-  children: 0,
-});
+  const [multiCityLegs, setMultiCityLegs] = useState([
+    { from: from, to: to, date: new Date() },
+    { from: to, to: null, date: new Date(Date.now() + 86400000) },
+  ]);
+  const [hotelDestination, setHotelDestination] = useState(null);
+  const [roomsGuests, setRoomsGuests] = useState({
+    rooms: 1,
+    adults: 2,
+    children: 0,
+  });
 
-const [holidayFrom, setHolidayFrom] = useState(null);
-const [holidayTo, setHolidayTo] = useState(null);
-const [holidayDepartureDate, setHolidayDepartureDate] = useState("");
-const [holidayRooms, setHolidayRooms] = useState({
-  rooms: 1,
-  adults: 2,
-  children: 0,
-});
+  const [holidayFrom, setHolidayFrom] = useState(null);
+  const [holidayTo, setHolidayTo] = useState(null);
+  const [holidayDepartureDate, setHolidayDepartureDate] = useState("");
+  const [holidayRooms, setHolidayRooms] = useState({
+    rooms: 1,
+    adults: 2,
+    children: 0,
+  });
 
   const [busFrom, setBusFrom] = useState(null);
   const [busTo, setBusTo] = useState(null);
@@ -544,136 +188,141 @@ const [holidayRooms, setHolidayRooms] = useState({
   const [cabTripType, setCabTripType] = useState("oneway");
   const [cabFrom, setCabFrom] = useState(null);
   const [cabTo, setCabTo] = useState(null);
-  const [cabDate, setCabDate] = useState(null);        // departure date
-const [cabReturnDate, setCabReturnDate] = useState(null); // round-trip return date
-const [pickupTime, setPickupTime] = useState("10:00");
-const [dropTime, setDropTime] = useState("");         // round-trip drop time
-const [cabPackage, setCabPackage] = useState("1hr-10km"); // hourly rental package
-const [openCabDate, setOpenCabDate] = useState(false);
-const [openReturnDate, setOpenReturnDate] = useState(false);
-const [cabTripTypeOpen, setCabTripTypeOpen] = useState(false);
-const cabTripTypeRef = useRef(null);
-          
-const tabs = [
-  { id: "flights", label: "Flights", icon: FaPlane },
-  { id: "hotels", label: "Hotels", icon: FaHotel },
-  { id: "holidays", label: "Holidays", icon: FaMapMarkerAlt },
-  { id: "buses", label: "Buses", icon: FaBus },
-  { id: "cabs", label: "Cabs", icon: FaCar },
-];
+  const [cabDate, setCabDate] = useState(null);
+  const [cabReturnDate, setCabReturnDate] = useState(null);
+  const [pickupTime, setPickupTime] = useState("10:00");
+  const [dropTime, setDropTime] = useState("");
+  const [cabPackage, setCabPackage] = useState("1hr-10km");
+  const [openCabDate, setOpenCabDate] = useState(false);
+  const [openReturnDate, setOpenReturnDate] = useState(false);
+  const [cabTripTypeOpen, setCabTripTypeOpen] = useState(false);
+  const cabTripTypeRef = useRef(null);
+
+  const tabs = [
+    { id: "flights", label: "Flights", icon: FaPlane },
+    { id: "hotels", label: "Hotels", icon: FaHotel },
+    { id: "holidays", label: "Holidays", icon: FaMapMarkerAlt },
+    { id: "buses", label: "Buses", icon: FaBus },
+    { id: "cabs", label: "Cabs", icon: FaCar },
+  ];
   const searchLabels = {
-  flights: "Search Flights",
-  hotels: "Search Hotels",
-  holidays: "Search Holidays",
-  buses: "Search Buses",
-  cabs: "Search Cabs",
-};
-const cabTripTypeLabels = {
-  oneway: "Outstation One-Way",
-  round: "Outstation Round-Trip",
-  airport: "Airport Transfers",
-  hourly: "Hourly Rentals",
-};
+    flights: "Search Flights",
+    hotels: "Search Hotels",
+    holidays: "Search Holidays",
+    buses: "Search Buses",
+    cabs: "Search Cabs",
+  };
+  const cabTripTypeLabels = {
+    oneway: "Outstation One-Way",
+    round: "Outstation Round-Trip",
+    airport: "Airport Transfers",
+    hourly: "Hourly Rentals",
+  };
 
-useEffect(() => {
-  function handleClickOutside(e) {
-    if (cabTripTypeRef.current && !cabTripTypeRef.current.contains(e.target)) {
-      setCabTripTypeOpen(false);
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (cabTripTypeRef.current && !cabTripTypeRef.current.contains(e.target)) {
+        setCabTripTypeOpen(false);
+      }
     }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function handleSearch() {
+    if (activeTab === "flights") {
+      if (tripType === "multicity") {
+        const incomplete = multiCityLegs.some((leg) => !leg.from || !leg.to || !leg.date);
+        if (incomplete) {
+          alert("Please fill From, To and Date for all cities.");
+          return;
+        }
+
+        const legsParam = multiCityLegs
+          .map(
+            (leg) =>
+              `${leg.from.code}-${leg.to.code}-${formatLocalDate(leg.date)}`
+          )
+          .join(",");
+
+        router.push(`/flights?trip=multicity&legs=${legsParam}`);
+      } else {
+        if (!from || !to) {
+          alert("Please select From and To locations.");
+          return;
+        }
+        if (tripType === "roundtrip" && !returnDate) {
+          alert("Please select a return date for round trip.");
+          return;
+        }
+        router.push(
+          `/flights?from=${from.code}&to=${to.code}&date=${formatLocalDate(departureDate)}` +
+          (tripType === "roundtrip" ? `&returnDate=${formatLocalDate(returnDate)}` : "") +
+          `&trip=${tripType}&adults=${adults}&children=${children}&infants=${infants}`
+        );
+      }
+    } else if (activeTab === "hotels") {
+      if (!hotelDestination) {
+        alert("Please select a destination.");
+        return;
+      }
+      if (!checkIn || !checkOut) {
+        alert("Please select check-in and check-out dates.");
+        return;
+      }
+
+      const nights = Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+      if (nights <= 0) {
+        alert("Check-out date must be after check-in date.");
+        return;
+      }
+
+      router.push(
+        `/hotels?cityId=${hotelDestination.code}` +
+        `&cityName=${encodeURIComponent(hotelDestination.name)}` +
+        `&checkin=${formatLocalDate(checkIn)}` +
+        `&nights=${nights}` +
+        `&rooms=${roomsGuests.rooms}` +
+        `&adults=${roomsGuests.adults}` +
+        `&children=${roomsGuests.children}`
+      );
+    }
+else if (activeTab === "holidays") {
+  if (!holidayTo) {
+    alert("Please select a destination.");
+    return;
   }
-  document.addEventListener("mousedown", handleClickOutside);
-  return () => document.removeEventListener("mousedown", handleClickOutside);
-}, []);
+  
+  // Destination name ko safely extract karo
+  const destinationName = holidayTo.name || holidayTo.Destination || '';
+  
+  const query = new URLSearchParams({
+    destination: destinationName,
+  });
+  if (holidayDepartureDate) query.set("startDate", holidayDepartureDate);
+  query.set("guests", `${holidayRooms.rooms} Room, ${holidayRooms.adults} Adults`);
 
-function handleSearch() {
-if (activeTab === "flights") {
-  if (tripType === "multicity") {
-    // Validate all legs have From, To and Date filled
-    const incomplete = multiCityLegs.some((leg) => !leg.from || !leg.to || !leg.date);
-    if (incomplete) {
-      alert("Please fill From, To and Date for all cities.");
-      return;
-    }
-
-    // Build query string for multiple legs
-const legsParam = multiCityLegs
-  .map(
-    (leg) =>
-      `${leg.from.code}-${leg.to.code}-${formatLocalDate(leg.date)}`
-  )
-  .join(",");
-
-    router.push(`/flights?trip=multicity&legs=${legsParam}`);
-  } else {
-    if (!from || !to) {
-      alert("Please select From and To locations.");
-      return;
-    }
-if (tripType === "roundtrip" && !returnDate) {
-  alert("Please select a return date for round trip.");
-  return;
+  router.push(`/holiday/search?${query.toString()}`);
 }
-router.push(
-  `/flights?from=${from.code}&to=${to.code}&date=${formatLocalDate(departureDate)}` +
-  (tripType === "roundtrip" ? `&returnDate=${formatLocalDate(returnDate)}` : "") +
-  `&trip=${tripType}&adults=${adults}&children=${children}&infants=${infants}`
-);
+
+     else if (activeTab === "buses") {
+      if (!busFrom || !busTo) {
+        alert("Please select From and To cities.");
+        return;
+      }
+      router.push(
+        `/bus?from=${busFrom.code}&to=${busTo.code}&date=${formatLocalDate(travelDate)}`
+      );
+    } else if (activeTab === "cabs") {
+      if (!cabFrom || !cabTo) {
+        alert("Please select pickup and drop locations.");
+        return;
+      }
+      router.push(
+        `/cab?from=${cabFrom.code}&to=${cabTo.code}&type=${cabTripType}`
+      );
+    }
   }
-} else if (activeTab === "hotels") {
-    if (!hotelDestination) {
-      alert("Please select a destination.");
-      return;
-    }
-    if (!checkIn || !checkOut) {
-      alert("Please select check-in and check-out dates.");
-      return;
-    }
-
-    const nights = Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24));
-    if (nights <= 0) {
-      alert("Check-out date must be after check-in date.");
-      return;
-    }
-
-    router.push(
-      `/hotels?cityId=${hotelDestination.code}` +
-      `&cityName=${encodeURIComponent(hotelDestination.name)}` +
-      `&checkin=${formatLocalDate(checkIn)}` +
-      `&nights=${nights}` +
-      `&rooms=${roomsGuests.rooms}` +
-      `&adults=${roomsGuests.adults}` +
-      `&children=${roomsGuests.children}`
-    );
-} else if (activeTab === "holidays") {
-    if (!holidayTo) {
-      alert("Please select a destination.");
-      return;
-    }
-    const query = new URLSearchParams({
-      destination: holidayTo.name,
-    });
-    if (holidayDepartureDate) query.set("startDate", holidayDepartureDate);
-    query.set("guests", `${holidayRooms.rooms} Room, ${holidayRooms.adults} Adults`);
-
-    router.push(`/holiday/search?${query.toString()}`);
-  } else if (activeTab === "buses") {
-    if (!busFrom || !busTo) {
-      alert("Please select From and To cities.");
-      return;
-    }
-router.push(
-  `/bus?from=${busFrom.code}&to=${busTo.code}&date=${formatLocalDate(travelDate)}`
-);
-  } else if (activeTab === "cabs") {
-    if (!cabFrom || !cabTo) {
-      alert("Please select pickup and drop locations.");
-      return;
-    }
-    router.push(
-      `/cab?from=${cabFrom.code}&to=${cabTo.code}&type=${cabTripType}`
-    );
-  }
-}
 
   const formatWeekday = (date) =>
     date ? date.toLocaleDateString("en-US", { weekday: "long" }) : "";
@@ -720,7 +369,7 @@ router.push(
           </div>
 
           {/* Panel */}
-<div className="relative rounded-b-xl bg-white p-6 pb-28">
+          <div className="relative rounded-b-xl bg-white p-6 pb-28">
             {/* ---------------- FLIGHTS ---------------- */}
             {activeTab === "flights" && (
               <div>
@@ -766,239 +415,290 @@ router.push(
                   </span>
                 </div>
 
-{tripType !== "multicity" ? (
-  <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
-    <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-<LocationSearchBox label="From" value={from} placeholder="New Delhi" onSelect={setFrom} citySearchApi="/api/cities/airports" />
-    </div>
+                {tripType !== "multicity" ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                    <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition cursor-pointer">
+                      <LocationSearchBox label="From" value={from} placeholder="New Delhi" onSelect={setFrom} citySearchApi="/api/cities/airports" />
+                    </div>
 
-    <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition">
-<LocationSearchBox label="To" value={to} placeholder="Leh" onSelect={setTo} citySearchApi="/api/cities/airports" />
-    </div>
+                    <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition">
+                      <LocationSearchBox label="To" value={to} placeholder="Leh" onSelect={setTo} citySearchApi="/api/cities/airports" />
+                    </div>
 
-    {/* Departure */}
-    <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
-      <span
-        className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
-        onClick={() => { setOpenDeparture(!openDeparture); setOpenReturn(false); }}
-      >
-        Departure <ChevronDown className="w-3 h-3" />
-      </span>
-      <div onClick={() => { setOpenDeparture(!openDeparture); setOpenReturn(false); }}>
-        <div className="text-xl font-bold text-gray-800">
-          {departureDate ? departureDate.getDate() : "--"}{" "}
-          <span className="text-sm font-semibold">
-            {departureDate ? departureDate.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) : ""}
-          </span>
-        </div>
-        <span className="text-xs text-gray-500">{formatWeekday(departureDate)}</span>
-      </div>
-      {openDeparture && (
-        <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 left-0">
-<DayPicker 
-  mode="single" 
-  selected={departureDate} 
-  onSelect={(date) => { setDepartureDate(date); setOpenDeparture(false); }}
-  disabled={{ before: today }}
-/>
-        </div>
-      )}
-    </div>
+                    {/* Departure */}
+                    <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
+                      <span
+                        className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
+                        onClick={() => { setOpenDeparture(!openDeparture); setOpenReturn(false); }}
+                      >
+                        Departure <ChevronDown className="w-3 h-3" />
+                      </span>
+                      <div onClick={() => { setOpenDeparture(!openDeparture); setOpenReturn(false); }}>
+                        <div className="text-xl font-bold text-gray-800">
+                          {departureDate ? departureDate.getDate() : "--"}{" "}
+                          <span className="text-sm font-semibold">
+                            {departureDate ? departureDate.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) : ""}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-500">{formatWeekday(departureDate)}</span>
+                      </div>
+                      {openDeparture && (
+                        <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 left-0">
+                          <DayPicker
+                            mode="single"
+                            selected={departureDate}
+                            onSelect={(date) => { setDepartureDate(date); setOpenDeparture(false); }}
+                            disabled={{ before: today }}
+                          />
+                        </div>
+                      )}
+                    </div>
 
-    {/* Return — sirf roundtrip mein */}
-    {tripType === "roundtrip" && (
-      <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
-        <span
-          className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
-          onClick={() => { setOpenReturn(!openReturn); setOpenDeparture(false); }}
-        >
-          Return <ChevronDown className="w-3 h-3" />
-        </span>
-        <div onClick={() => { setOpenReturn(!openReturn); setOpenDeparture(false); }}>
-          <div className="text-xl font-bold text-gray-800">
-            {returnDate ? returnDate.getDate() : "--"}{" "}
-            <span className="text-sm font-semibold">
-              {returnDate ? returnDate.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) : ""}
-            </span>
-          </div>
-          <span className="text-xs text-gray-500">{formatWeekday(returnDate)}</span>
-        </div>
-        {openReturn && (
-          <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 left-0">
-<DayPicker 
-  mode="single" 
-  selected={returnDate} 
-  onSelect={(date) => { setReturnDate(date); setOpenReturn(false); }}
-  disabled={{ before: departureDate || today }}
-/>
-          </div>
-        )}
-      </div>
-    )}
+                    {/* Return — sirf roundtrip mein */}
+                    {tripType === "roundtrip" && (
+                      <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
+                        <span
+                          className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
+                          onClick={() => { setOpenReturn(!openReturn); setOpenDeparture(false); }}
+                        >
+                          Return <ChevronDown className="w-3 h-3" />
+                        </span>
+                        <div onClick={() => { setOpenReturn(!openReturn); setOpenDeparture(false); }}>
+                          <div className="text-xl font-bold text-gray-800">
+                            {returnDate ? returnDate.getDate() : "--"}{" "}
+                            <span className="text-sm font-semibold">
+                              {returnDate ? returnDate.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) : ""}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500">{formatWeekday(returnDate)}</span>
+                        </div>
+                        {openReturn && (
+                          <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 left-0">
+                            <DayPicker
+                              mode="single"
+                              selected={returnDate}
+                              onSelect={(date) => { setReturnDate(date); setOpenReturn(false); }}
+                              disabled={{ before: departureDate || today }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-    {/* Tap to add return — sirf oneway mein */}
-    {tripType === "oneway" && (
-      <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition" onClick={() => setTripType("roundtrip")}>
-        <span className="text-xs uppercase tracking-wider text-gray-400 mb-1 block">Return</span>
-        <div className="text-xs text-gray-400 font-medium mt-1 leading-tight">
-          Tap to add return date for savings
-        </div>
-      </div>
-    )}
+                    {/* Tap to add return — sirf oneway mein */}
+                    {tripType === "oneway" && (
+                      <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition" onClick={() => setTripType("roundtrip")}>
+                        <span className="text-xs uppercase tracking-wider text-gray-400 mb-1 block">Return</span>
+                        <div className="text-xs text-gray-400 font-medium mt-1 leading-tight">
+                          Tap to add return date for savings
+                        </div>
+                      </div>
+                    )}
 
-    {/* Travellers */}
-    <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
-      <span
-        className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
-        onClick={() => setTravelersOpen(!travelersOpen)}
-      >
-        Travellers <ChevronDown className="w-3 h-3" />
-      </span>
-      <div className="text-base font-bold text-gray-800 mt-0.5" onClick={() => setTravelersOpen(!travelersOpen)}>
-        {displayValue}
-      </div>
+                    {/* Travellers */}
+                    <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
+                      <span
+                        className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
+                        onClick={() => setTravelersOpen(!travelersOpen)}
+                      >
+                        Travellers <ChevronDown className="w-3 h-3" />
+                      </span>
+                      <div className="text-base font-bold text-gray-800 mt-0.5" onClick={() => setTravelersOpen(!travelersOpen)}>
+                        {displayValue}
+                      </div>
 
-      {travelersOpen && (
-        <div className="absolute right-0 mt-2 w-72 space-y-4 p-4 bg-white shadow-lg rounded-xl border border-gray-100 z-20">
-          <div className="flex items-center justify-between">
-            <label className="text-sm text-gray-700">Adults</label>
-            <input type="number" min={1} max={9} value={adults}
-              onChange={(e) => setAdults(Number(e.target.value))}
-              onClick={(e) => e.stopPropagation()}
-              className="w-20 border border-gray-300 rounded-md px-3 py-2 text-center text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-          </div>
-          <div className="flex items-center justify-between">
-            <label className="text-sm text-gray-700">Children</label>
-            <input type="number" min={0} max={9} value={children}
-              onChange={(e) => setChildren(Number(e.target.value))}
-              onClick={(e) => e.stopPropagation()}
-              className="w-20 border border-gray-300 rounded-md px-3 py-2 text-center text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-          </div>
-          <div className="flex items-center justify-between">
-            <label className="text-sm text-gray-700">Infants</label>
-            <input type="number" min={0} max={9} value={infants}
-              onChange={(e) => setInfants(Number(e.target.value))}
-              onClick={(e) => e.stopPropagation()}
-              className="w-20 border border-gray-300 rounded-md px-3 py-2 text-center text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-          </div>
-          <button onClick={() => setTravelersOpen(false)}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-md py-2 transition">
-            Done
-          </button>
-        </div>
-      )}
-    </div>
+                      {travelersOpen && (
+                        <div
+                          className="absolute right-0 mt-2 w-[420px] p-5 bg-white shadow-2xl rounded-xl border border-gray-100 z-30"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="mb-5">
+                            <p className="text-sm font-bold text-gray-800">Adults (12y +)</p>
+                            <p className="text-xs text-gray-400 mb-2">on the day of travel</p>
+                            <div className="flex flex-wrap gap-2">
+                              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                                <button
+                                  key={n}
+                                  type="button"
+                                  onClick={() => setAdults(n)}
+                                  className={`w-9 h-9 rounded-md text-sm font-semibold transition ${
+                                    adults === n
+                                      ? "bg-orange-500 text-white"
+                                      : "bg-gray-100 text-gray-700 hover:bg-orange-100"
+                                  }`}
+                                >
+                                  {n}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
 
-    {/* Cabin Class */}
-    <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition">
-      <span className="text-xs uppercase tracking-wider text-gray-400 mb-1 block">Cabin Class</span>
-      <select
-        value={travelClass}
-        onChange={(e) => setTravelClass(e.target.value)}
-        className="text-base font-bold text-gray-800 outline-none bg-transparent w-full"
-      >
-        <option value="Economy">Economy</option>
-        <option value="Premium Economy">Premium Economy</option>
-        <option value="Business">Business</option>
-        <option value="First Class">First Class</option>
-      </select>
-    </div>
-  </div>
-) : (
-  /* -------- MULTI CITY -------- */
-  <div className="space-y-3 mb-6">
-    {multiCityLegs.map((leg, idx) => (
-      <div key={idx} className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
-        <div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition">
-<LocationSearchBox
-            label="From"
-            value={leg.from}
-            placeholder="Delhi"
-            onSelect={(val) => {
-              const updated = [...multiCityLegs];
-              updated[idx].from = val;
-              setMultiCityLegs(updated);
-            }}
-            citySearchApi="/api/cities/airports"
-          />
-        </div>
-        <div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition">
-<LocationSearchBox
-            label="To"
-            value={leg.to}
-            placeholder="Select City"
-            onSelect={(val) => {
-              const updated = [...multiCityLegs];
-              updated[idx].to = val;
-              setMultiCityLegs(updated);
-            }}
-            citySearchApi="/api/cities/airports"
-          />
-        </div>
-        <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50 relative"
-          onClick={() => setOpenMultiDate(openMultiDate === idx ? null : idx)}>
-          <span className="text-xs uppercase text-gray-400 block mb-1">Departure</span>
-          <div className="text-xl font-bold text-gray-800">
-            {leg.date ? leg.date.getDate() : "--"}{" "}
-            <span className="text-sm font-semibold">
-              {leg.date ? leg.date.toLocaleDateString("en-GB", { month: "short" }) : ""}
-            </span>
-          </div>
-          {openMultiDate === idx && (
-            <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
-<DayPicker
-  mode="single"
-  selected={leg.date}
-  onSelect={(d) => {
-    const updated = [...multiCityLegs];
-    updated[idx].date = d;
-    setMultiCityLegs(updated);
-    setOpenMultiDate(null);
-  }}
-  disabled={{ before: today }}
-/>
-            </div>
-          )}
-        </div>
-        <div className="lg:col-span-1 p-4 flex items-center justify-center">
-          {idx === multiCityLegs.length - 1 && idx > 1 && (
-            <button
-              onClick={() => setMultiCityLegs(multiCityLegs.filter((_, i) => i !== idx))}
-              className="text-red-500 text-xs font-semibold"
-            >
-              Remove
-            </button>
-          )}
-        </div>
-      </div>
-    ))}
-    <button
-      onClick={() =>
-        setMultiCityLegs([...multiCityLegs, { from: multiCityLegs[multiCityLegs.length - 1].to, to: null, date: new Date() }])
-      }
-      className="text-orange-600 border border-orange-500 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-orange-50 transition"
-    >
-      + Add Another City
-    </button>
-  </div>
-)}
-  </div>
+                          <div className="flex gap-8 mb-5">
+                            <div>
+                              <p className="text-sm font-bold text-gray-800">Children (2y - 12y)</p>
+                              <p className="text-xs text-gray-400 mb-2">on the day of travel</p>
+                              <div className="flex flex-wrap gap-2">
+                                {[0, 1, 2, 3, 4, 5, 6].map((n) => (
+                                  <button
+                                    key={n}
+                                    type="button"
+                                    onClick={() => setChildren(n)}
+                                    className={`w-9 h-9 rounded-md text-sm font-semibold transition ${
+                                      children === n
+                                        ? "bg-orange-500 text-white"
+                                        : "bg-gray-100 text-gray-700 hover:bg-orange-100"
+                                    }`}
+                                  >
+                                    {n}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <p className="text-sm font-bold text-gray-800">Infants (below 2y)</p>
+                              <p className="text-xs text-gray-400 mb-2">on the day of travel</p>
+                              <div className="flex flex-wrap gap-2">
+                                {[0, 1, 2, 3, 4, 5, 6].map((n) => (
+                                  <button
+                                    key={n}
+                                    type="button"
+                                    onClick={() => setInfants(n)}
+                                    className={`w-9 h-9 rounded-md text-sm font-semibold transition ${
+                                      infants === n
+                                        ? "bg-orange-500 text-white"
+                                        : "bg-gray-100 text-gray-700 hover:bg-orange-100"
+                                    }`}
+                                  >
+                                    {n}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => setTravelersOpen(false)}
+                              className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-md px-8 py-2.5 transition"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Cabin Class */}
+                    <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition">
+                      <span className="text-xs uppercase tracking-wider text-gray-400 mb-1 block">Cabin Class</span>
+                      <select
+                        value={travelClass}
+                        onChange={(e) => setTravelClass(e.target.value)}
+                        className="text-base font-bold text-gray-800 outline-none bg-transparent w-full"
+                      >
+                        <option value="Economy">Economy</option>
+                        <option value="Premium Economy">Premium Economy</option>
+                        <option value="Business">Business</option>
+                        <option value="First Class">First Class</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  /* -------- MULTI CITY -------- */
+                  <div className="space-y-3 mb-6">
+                    {multiCityLegs.map((leg, idx) => (
+                      <div key={idx} className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
+                        <div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition">
+                          <LocationSearchBox
+                            label="From"
+                            value={leg.from}
+                            placeholder="Delhi"
+                            onSelect={(val) => {
+                              const updated = [...multiCityLegs];
+                              updated[idx].from = val;
+                              setMultiCityLegs(updated);
+                            }}
+                            citySearchApi="/api/cities/airports"
+                          />
+                        </div>
+                        <div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition">
+                          <LocationSearchBox
+                            label="To"
+                            value={leg.to}
+                            placeholder="Select City"
+                            onSelect={(val) => {
+                              const updated = [...multiCityLegs];
+                              updated[idx].to = val;
+                              setMultiCityLegs(updated);
+                            }}
+                            citySearchApi="/api/cities/airports"
+                          />
+                        </div>
+                        <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50 relative"
+                          onClick={() => setOpenMultiDate(openMultiDate === idx ? null : idx)}>
+                          <span className="text-xs uppercase text-gray-400 block mb-1">Departure</span>
+                          <div className="text-xl font-bold text-gray-800">
+                            {leg.date ? leg.date.getDate() : "--"}{" "}
+                            <span className="text-sm font-semibold">
+                              {leg.date ? leg.date.toLocaleDateString("en-GB", { month: "short" }) : ""}
+                            </span>
+                          </div>
+                          {openMultiDate === idx && (
+                            <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
+                              <DayPicker
+                                mode="single"
+                                selected={leg.date}
+                                onSelect={(d) => {
+                                  const updated = [...multiCityLegs];
+                                  updated[idx].date = d;
+                                  setMultiCityLegs(updated);
+                                  setOpenMultiDate(null);
+                                }}
+                                disabled={{ before: today }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="lg:col-span-1 p-4 flex items-center justify-center">
+                          {idx === multiCityLegs.length - 1 && idx > 1 && (
+                            <button
+                              onClick={() => setMultiCityLegs(multiCityLegs.filter((_, i) => i !== idx))}
+                              className="text-red-500 text-xs font-semibold"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() =>
+                        setMultiCityLegs([...multiCityLegs, { from: multiCityLegs[multiCityLegs.length - 1].to, to: null, date: new Date() }])
+                      }
+                      className="text-orange-600 border border-orange-500 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-orange-50 transition"
+                    >
+                      + Add Another City
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* ---------------- HOTELS ---------------- */}
             {activeTab === "hotels" && (
               <div>
                 <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
-<div className="lg:col-span-5 p-4 hover:bg-gray-50">
-  <LocationSearchBox
-    label="City, Area or Property Name"
-    value={hotelDestination}
-    placeholder="Goa, India"
-    onSelect={setHotelDestination}
-    showAllSections={false}
-    citySearchApi="/api/cities/hotel"
-  />
-</div>
+                  <div className="lg:col-span-5 p-4 hover:bg-gray-50">
+                    <LocationSearchBox
+                      label="City, Area or Property Name"
+                      value={hotelDestination}
+                      placeholder="Goa, India"
+                      onSelect={setHotelDestination}
+                      showAllSections={false}
+                      citySearchApi="/api/cities/hotel"
+                    />
+                  </div>
 
                   <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative">
                     <span
@@ -1029,12 +729,12 @@ router.push(
                     </div>
                     {openCheckIn && (
                       <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
-<DayPicker 
-  mode="single" 
-  selected={checkIn} 
-  onSelect={(date) => { setCheckIn(date); setOpenCheckIn(false); }}
-  disabled={{ before: today }}
-/>
+                        <DayPicker
+                          mode="single"
+                          selected={checkIn}
+                          onSelect={(date) => { setCheckIn(date); setOpenCheckIn(false); }}
+                          disabled={{ before: today }}
+                        />
                       </div>
                     )}
                   </div>
@@ -1068,83 +768,81 @@ router.push(
                     </div>
                     {openCheckOut && (
                       <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
-<DayPicker 
-  mode="single" 
-  selected={checkOut} 
-  onSelect={(date) => { setCheckOut(date); setOpenCheckOut(false); }}
-  disabled={{ before: checkIn || today }}
-/>
+                        <DayPicker
+                          mode="single"
+                          selected={checkOut}
+                          onSelect={(date) => { setCheckOut(date); setOpenCheckOut(false); }}
+                          disabled={{ before: checkIn || today }}
+                        />
                       </div>
                     )}
                   </div>
 
-               <div className="lg:col-span-3 p-4 hover:bg-gray-50">
-  <RoomsGuestsBox
-    value={roomsGuests}
-    onChange={setRoomsGuests}
-  />
-</div>
-
+                  <div className="lg:col-span-3 p-4 hover:bg-gray-50">
+                    <RoomsGuestsBox
+                      value={roomsGuests}
+                      onChange={setRoomsGuests}
+                    />
+                  </div>
                 </div>
               </div>
             )}
 
             {/* ---------------- HOLIDAYS ---------------- */}
-{activeTab === "holidays" && (
-  <div>
-    <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+            {activeTab === "holidays" && (
+              <div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                  {/* From City */}
+                  <div className="lg:col-span-6 p-4 hover:bg-gray-50">
+                    <LocationSearchBox
+                      label="From City"
+                      value={holidayFrom}
+                      placeholder="New Delhi"
+                      onSelect={setHolidayFrom}
+                      showAllSections={false}
+                      citySearchApi="/api/cities/airports"
+                    />
+                  </div>
 
-{/* From City */}
-      <div className="lg:col-span-6 p-4 hover:bg-gray-50">
-        <LocationSearchBox
-          label="From City"
-          value={holidayFrom}
-          placeholder="New Delhi"
-          onSelect={setHolidayFrom}
-          showAllSections={false}
-          citySearchApi="/api/cities/airports"
-        />
-      </div>
-
-      {/* Destination */}
-      <div className="lg:col-span-6 p-4 hover:bg-gray-50">
-        <LocationSearchBox
-          label="To City/Country/Category"
-          value={holidayTo}
-          placeholder="Goa"
-          onSelect={setHolidayTo}
-          align="right"
-          showAllSections={false}
-          citySearchApi="/api/cities/holiday"
-        />
-      </div>
-    </div>
-  </div>
-)}
+                  {/* Destination */}
+                  <div className="lg:col-span-6 p-4 hover:bg-gray-50">
+                    <LocationSearchBox
+                      label="To City/Country/Category"
+                      value={holidayTo}
+                      placeholder="Goa"
+                      onSelect={setHolidayTo}
+                      align="right"
+                      showAllSections={false}
+                      citySearchApi="/api/cities/holiday"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* ---------------- BUSES ---------------- */}
             {activeTab === "buses" && (
               <div>
                 <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
                   <div className="lg:col-span-4 p-4 hover:bg-gray-50">
-<LocationSearchBox
-  label="From City"
-  value={busFrom}
-  placeholder="Delhi"
-  onSelect={setBusFrom}
-  showAllSections={false}
-  citySearchApi="/api/cities/bus"
-/>
+                    <LocationSearchBox
+                      label="From City"
+                      value={busFrom}
+                      placeholder="Delhi"
+                      onSelect={setBusFrom}
+                      showAllSections={false}
+                      citySearchApi="/api/cities/bus"
+                    />
                   </div>
                   <div className="lg:col-span-4 p-4 hover:bg-gray-50">
-<LocationSearchBox
-  label="To City"
-  value={busTo}
-  placeholder="Manali"
-  onSelect={setBusTo}
-  showAllSections={false}
-  citySearchApi="/api/cities/bus"
-/>
+                    <LocationSearchBox
+                      label="To City"
+                      value={busTo}
+                      placeholder="Manali"
+                      onSelect={setBusTo}
+                      showAllSections={false}
+                      citySearchApi="/api/cities/bus"
+                    />
                   </div>
                   <div className="lg:col-span-4 p-4 cursor-pointer hover:bg-gray-50 relative">
                     <span
@@ -1169,12 +867,12 @@ router.push(
                     </div>
                     {openTravelDate && (
                       <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
-<DayPicker 
-  mode="single" 
-  selected={travelDate} 
-  onSelect={(date) => { setTravelDate(date); setOpenTravelDate(false); }}
-  disabled={{ before: today }}
-/>
+                        <DayPicker
+                          mode="single"
+                          selected={travelDate}
+                          onSelect={(date) => { setTravelDate(date); setOpenTravelDate(false); }}
+                          disabled={{ before: today }}
+                        />
                       </div>
                     )}
                   </div>
@@ -1182,222 +880,188 @@ router.push(
               </div>
             )}
 
-{/* ---------------- CABS ---------------- */}
-{activeTab === "cabs" && (
-  <div>
-    <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
-      {/* Trip Type Dropdown */}
-      <div
-        className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition relative cursor-pointer"
-        ref={cabTripTypeRef}
-      >
-        <span
-          className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
-          onClick={() => setCabTripTypeOpen(!cabTripTypeOpen)}
-        >
-          Trip Type <ChevronDown className="w-3 h-3" />
-        </span>
-        <div
-          className="text-xl font-bold text-gray-800"
-          onClick={() => setCabTripTypeOpen(!cabTripTypeOpen)}
-        >
-          {cabTripTypeLabels[cabTripType]}
-        </div>
+            {/* ---------------- CABS ---------------- */}
+            {activeTab === "cabs" && (
+              <div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                  {/* Trip Type Dropdown */}
+                  <div
+                    className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition relative cursor-pointer"
+                    ref={cabTripTypeRef}
+                  >
+                    <span
+                      className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
+                      onClick={() => setCabTripTypeOpen(!cabTripTypeOpen)}
+                    >
+                      Trip Type <ChevronDown className="w-3 h-3" />
+                    </span>
+                    <div
+                      className="text-xl font-bold text-gray-800"
+                      onClick={() => setCabTripTypeOpen(!cabTripTypeOpen)}
+                    >
+                      {cabTripTypeLabels[cabTripType]}
+                    </div>
 
-        {cabTripTypeOpen && (
-          <div
-            className="absolute mt-2 w-72 bg-white shadow-2xl rounded-xl border border-gray-100 z-30 left-0 overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
+                    {cabTripTypeOpen && (
+                      <div
+                        className="absolute mt-2 w-72 bg-white shadow-2xl rounded-xl border border-gray-100 z-30 left-0 overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {[
+                          { id: "oneway", label: "Outstation One-Way" },
+                          { id: "round", label: "Outstation Round-Trip" },
+                          { id: "hourly", label: "Hourly Rentals" },
+                        ].map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setCabTripType(opt.id);
+                              setCabTripTypeOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-sm font-medium hover:bg-orange-50 transition ${
+                              cabTripType === opt.id ? "text-orange-600 bg-orange-50" : "text-gray-700"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* From Location */}
+                  <div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition cursor-pointer">
+                    <LocationSearchBox
+                      label="From Location"
+                      value={cabFrom}
+                      placeholder="Mumbai"
+                      onSelect={setCabFrom}
+                      showAllSections={false}
+                      citySearchApi="/api/cities/cab"
+                    />
+                  </div>
+
+                  {/* To Location */}
+                  <div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition cursor-pointer">
+                    <LocationSearchBox
+                      label="To Location"
+                      value={cabTo}
+                      placeholder="Pune"
+                      onSelect={setCabTo}
+                      showAllSections={false}
+                      citySearchApi="/api/cities/cab"
+                    />
+                  </div>
+                </div>
+
+                {/* -------- OUTSTATION ROUND-TRIP -------- */}
+                {cabTripType === "round" && (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                    <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition cursor-pointer">
+                      <LocationSearchBox label="From" value={cabFrom} placeholder="Mumbai" onSelect={setCabFrom} showAllSections={false} citySearchApi="/api/cities/cab"/>
+                    </div>
+                    <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition cursor-pointer">
+                      <LocationSearchBox label="To" value={cabTo} placeholder="Pune" onSelect={setCabTo} showAllSections={false} citySearchApi="/api/cities/cab" />
+                    </div>
+                    <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative" onClick={() => setOpenCabDate(!openCabDate)}>
+                      <span className="text-xs uppercase text-gray-400 block mb-1">Departure</span>
+                      <div className="text-xl font-bold text-gray-800">
+                        {cabDate ? cabDate.getDate() : "--"}{" "}
+                        <span className="text-sm font-semibold">
+                          {cabDate ? cabDate.toLocaleDateString("en-GB", { month: "short" }) : ""}
+                        </span>
+                      </div>
+                      {openCabDate && (
+                        <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
+                          <DayPicker
+                            mode="single"
+                            selected={cabDate}
+                            onSelect={(d) => { setCabDate(d); setOpenCabDate(false); }}
+                            disabled={{ before: today }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative" onClick={() => setOpenReturnDate(!openReturnDate)}>
+                      <span className="text-xs uppercase text-gray-400 block mb-1">Return</span>
+                      <div className="text-xl font-bold text-gray-800">
+                        {cabReturnDate ? cabReturnDate.getDate() : "--"}{" "}
+                        <span className="text-sm font-semibold">
+                          {cabReturnDate ? cabReturnDate.toLocaleDateString("en-GB", { month: "short" }) : ""}
+                        </span>
+                      </div>
+                      {openReturnDate && (
+                        <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
+                          <DayPicker mode="single" selected={cabReturnDate} onSelect={(d) => { setCabReturnDate(d); setOpenReturnDate(false); }} disabled={{ before: cabDate || today }} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="lg:col-span-2 p-4">
+                      <span className="text-xs uppercase text-gray-400 block mb-1">Pickup-Time</span>
+                      <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)}
+                        className="text-xl font-bold text-gray-800 outline-none bg-transparent" />
+                    </div>
+                    <div className="lg:col-span-2 p-4">
+                      <span className="text-xs uppercase text-gray-400 block mb-1">Drop Time</span>
+                      <input type="time" value={dropTime} onChange={(e) => setDropTime(e.target.value)}
+                        className="text-xl font-bold text-gray-800 outline-none bg-transparent" />
+                    </div>
+                  </div>
+                )}
+
+                {/* -------- HOURLY RENTALS -------- */}
+                {cabTripType === "hourly" && (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                    <div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition cursor-pointer">
+                      <LocationSearchBox label="Pickup Location" value={cabFrom} placeholder="Bangalore" onSelect={setCabFrom} showAllSections={false} citySearchApi="/api/cities/cab" />
+                    </div>
+                    <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50 relative" onClick={() => setOpenCabDate(!openCabDate)}>
+                      <span className="text-xs uppercase text-gray-400 block mb-1">Pickup Date</span>
+                      <div className="text-xl font-bold text-gray-800">
+                        {cabDate ? cabDate.getDate() : "--"}{" "}
+                        <span className="text-sm font-semibold">
+                          {cabDate ? cabDate.toLocaleDateString("en-GB", { month: "short" }) : ""}
+                        </span>
+                      </div>
+                      {openCabDate && (
+                        <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
+                          <DayPicker mode="single" selected={cabDate} onSelect={(d) => { setCabDate(d); setOpenCabDate(false); }} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="lg:col-span-2 p-4">
+                      <span className="text-xs uppercase text-gray-400 block mb-1">Pickup-Time</span>
+                      <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)}
+                        className="text-xl font-bold text-gray-800 outline-none bg-transparent" />
+                    </div>
+                    <div className="lg:col-span-3 p-4">
+                      <span className="text-xs uppercase text-gray-400 block mb-1">Select Package</span>
+                      <select
+                        value={cabPackage}
+                        onChange={(e) => setCabPackage(e.target.value)}
+                        className="text-xl font-bold text-gray-800 outline-none bg-transparent w-full"
+                      >
+                        <option value="1hr-10km">1 hrs 10 kms</option>
+                        <option value="4hr-40km">4 hrs 40 kms</option>
+                        <option value="8hr-80km">8 hrs 80 kms</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ✅ SINGLE SEARCH BUTTON — sabhi tabs ke liye ek hi jagah */}
+          <button
+            onClick={handleSearch}
+            className="absolute left-1/2 -translate-x-1/2 -bottom-9 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition"
           >
-            {[
-              { id: "oneway", label: "Outstation One-Way" },
-              { id: "round", label: "Outstation Round-Trip" },
-              { id: "airport", label: "Airport Transfers" },
-              { id: "hourly", label: "Hourly Rentals" },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => {
-                  setCabTripType(opt.id);
-                  setCabTripTypeOpen(false);
-                }}
-                className={`w-full text-left px-4 py-3 text-sm font-medium hover:bg-orange-50 transition ${
-                  cabTripType === opt.id ? "text-orange-600 bg-orange-50" : "text-gray-700"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* From Location */}
-<div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-        <LocationSearchBox
-          label="From Location"
-          value={cabFrom}
-          placeholder="Mumbai"
-          onSelect={setCabFrom}
-          showAllSections={false}
-          citySearchApi="/api/cities/cab"
-        />
-      </div>
-
-      {/* To Location */}
-      <div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-        <LocationSearchBox
-          label="To Location"
-          value={cabTo}
-          placeholder="Pune"
-          onSelect={setCabTo}
-          showAllSections={false}
-          citySearchApi="/api/cities/cab"
-        />
-      </div>
-    </div>
-
-    {/* -------- OUTSTATION ROUND-TRIP -------- */}
-    {cabTripType === "round" && (
-      <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
-<div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-          <LocationSearchBox label="From" value={cabFrom} placeholder="Mumbai" onSelect={setCabFrom} showAllSections={false} citySearchApi="/api/cities/cab"/>
-        </div>
-        <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-          <LocationSearchBox label="To" value={cabTo} placeholder="Pune" onSelect={setCabTo} showAllSections={false} citySearchApi="/api/cities/cab" />
-        </div>
-        <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative" onClick={() => setOpenCabDate(!openCabDate)}>
-          <span className="text-xs uppercase text-gray-400 block mb-1">Departure</span>
-          <div className="text-xl font-bold text-gray-800">
-            {cabDate ? cabDate.getDate() : "--"}{" "}
-            <span className="text-sm font-semibold">
-              {cabDate ? cabDate.toLocaleDateString("en-GB", { month: "short" }) : ""}
-            </span>
-          </div>
-          {openCabDate && (
-            <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
-<DayPicker 
-  mode="single" 
-  selected={cabDate} 
-  onSelect={(d) => { setCabDate(d); setOpenCabDate(false); }}
-  disabled={{ before: today }}
-/>
-            </div>
-          )}
-        </div>
-        <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative" onClick={() => setOpenReturnDate(!openReturnDate)}>
-          <span className="text-xs uppercase text-gray-400 block mb-1">Return</span>
-          <div className="text-xl font-bold text-gray-800">
-            {cabReturnDate ? cabReturnDate.getDate() : "--"}{" "}
-            <span className="text-sm font-semibold">
-              {cabReturnDate ? cabReturnDate.toLocaleDateString("en-GB", { month: "short" }) : ""}
-            </span>
-          </div>
-          {openReturnDate && (
-            <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
-              <DayPicker mode="single" selected={cabReturnDate} onSelect={(d) => { setCabReturnDate(d); setOpenReturnDate(false); }} disabled={{ before: cabDate || today }} />
-            </div>
-          )}
-        </div>
-        <div className="lg:col-span-2 p-4">
-          <span className="text-xs uppercase text-gray-400 block mb-1">Pickup-Time</span>
-          <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)}
-            className="text-xl font-bold text-gray-800 outline-none bg-transparent" />
-        </div>
-        <div className="lg:col-span-2 p-4">
-          <span className="text-xs uppercase text-gray-400 block mb-1">Drop Time</span>
-          <input type="time" value={dropTime} onChange={(e) => setDropTime(e.target.value)}
-            className="text-xl font-bold text-gray-800 outline-none bg-transparent" />
+            {searchLabels[activeTab]}
+          </button>
         </div>
       </div>
-    )}
-
-    {/* -------- AIRPORT TRANSFERS -------- */}
-    {cabTripType === "airport" && (
-      <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
- <div className="lg:col-span-3 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-          <LocationSearchBox label="From" value={cabFrom} placeholder="Pick up Location" onSelect={setCabFrom} showAllSections={false} citySearchApi="/api/cities/cab" />
-        </div>
-        <div className="lg:col-span-3 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-          <LocationSearchBox label="To" value={cabTo} placeholder="Drop Location" onSelect={setCabTo} showAllSections={false} citySearchApi="/api/cities/cab"/>
-        </div>
-        <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50 relative" onClick={() => setOpenCabDate(!openCabDate)}>
-          <span className="text-xs uppercase text-gray-400 block mb-1">Departure</span>
-          <div className="text-xl font-bold text-gray-800">
-            {cabDate ? cabDate.getDate() : "--"}{" "}
-            <span className="text-sm font-semibold">
-              {cabDate ? cabDate.toLocaleDateString("en-GB", { month: "short" }) : ""}
-            </span>
-          </div>
-          {openCabDate && (
-            <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
-              <DayPicker mode="single" selected={cabDate} onSelect={(d) => { setCabDate(d); setOpenCabDate(false); }} />
-            </div>
-          )}
-        </div>
-        <div className="lg:col-span-3 p-4">
-          <span className="text-xs uppercase text-gray-400 block mb-1">Pickup-Time</span>
-          <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)}
-            className="text-xl font-bold text-gray-800 outline-none bg-transparent" />
-          <p className="text-[11px] text-gray-400 mt-1">pick up time as per journey city timezone</p>
-        </div>
-      </div>
-    )}
-
-    {/* -------- HOURLY RENTALS -------- */}
-    {cabTripType === "hourly" && (
-      <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
-<div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-          <LocationSearchBox label="Pickup Location" value={cabFrom} placeholder="Bangalore" onSelect={setCabFrom} showAllSections={false} citySearchApi="/api/cities/cab" />
-        </div>
-        <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50 relative" onClick={() => setOpenCabDate(!openCabDate)}>
-          <span className="text-xs uppercase text-gray-400 block mb-1">Pickup Date</span>
-          <div className="text-xl font-bold text-gray-800">
-            {cabDate ? cabDate.getDate() : "--"}{" "}
-            <span className="text-sm font-semibold">
-              {cabDate ? cabDate.toLocaleDateString("en-GB", { month: "short" }) : ""}
-            </span>
-          </div>
-          {openCabDate && (
-            <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
-              <DayPicker mode="single" selected={cabDate} onSelect={(d) => { setCabDate(d); setOpenCabDate(false); }} />
-            </div>
-          )}
-        </div>
-        <div className="lg:col-span-2 p-4">
-          <span className="text-xs uppercase text-gray-400 block mb-1">Pickup-Time</span>
-          <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)}
-            className="text-xl font-bold text-gray-800 outline-none bg-transparent" />
-        </div>
-        <div className="lg:col-span-3 p-4">
-          <span className="text-xs uppercase text-gray-400 block mb-1">Select Package</span>
-          <select
-            value={cabPackage}
-            onChange={(e) => setCabPackage(e.target.value)}
-            className="text-xl font-bold text-gray-800 outline-none bg-transparent w-full"
-          >
-            <option value="1hr-10km">1 hrs 10 kms</option>
-            <option value="4hr-40km">4 hrs 40 kms</option>
-            <option value="8hr-80km">8 hrs 80 kms</option>
-          </select>
-        </div>
-      </div>
-    )}
-  </div>
-)}
-</div>
-
-{/* ✅ SINGLE SEARCH BUTTON — sabhi tabs ke liye ek hi jagah */}
-<button
-  onClick={handleSearch}
-  className="absolute left-1/2 -translate-x-1/2 -bottom-9 bg-gradient-to-r from-[#9b3f00] via-[#c45100] to-[#ff5a00] text-white px-24 py-5 rounded-full font-bold text-2xl tracking-[3px] uppercase shadow-[0_15px_35px_rgba(0,0,0,.25)] hover:scale-105 transition"
->
-  {searchLabels[activeTab]}
-</button>
-</div>
-        </div>
-  
     </section>
   );
 }

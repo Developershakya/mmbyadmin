@@ -1,5 +1,10 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState, useMemo } from 'react';
+import { DayPicker } from 'react-day-picker';
+import 'react-day-picker/dist/style.css';
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { Calendar as CalendarIcon, ChevronDown } from 'lucide-react';
 
 function buildRoomGuests(rooms, adults, children) {
   const roomGuests = [];
@@ -14,8 +19,6 @@ function buildRoomGuests(rooms, adults, children) {
     roomGuests.push({
       adults: adultsThisRoom,
       children: childrenThisRoom,
-      // TODO: abhi UI se child age nahi le rahe, default 10 bhej rahe hain.
-      // Baad me per-room age input add karna hoga.
       childAge: Array(childrenThisRoom).fill(10),
     });
 
@@ -24,6 +27,12 @@ function buildRoomGuests(rooms, adults, children) {
   }
   return roomGuests;
 }
+
+const indianCities = [
+  "Delhi", "Mumbai", "Bengaluru", "Chennai", "Kolkata", "Hyderabad",
+  "Pune", "Jaipur", "Ahmedabad", "Lucknow", "Chandigarh", "Goa", "Agra",
+  "Varanasi", "Patna", "Bhopal", "Indore", "Nagpur", "Surat", "Amritsar",
+];
 
 export default function HotelsPage() {
   const router = useRouter();
@@ -39,6 +48,32 @@ export default function HotelsPage() {
   const [minRating, setMinRating] = useState(0);
   const [sortBy, setSortBy] = useState('recommended');
 
+  // Header search states
+  const [headerCity, setHeaderCity] = useState(cityName || '');
+  const [headerCheckIn, setHeaderCheckIn] = useState(null);
+  const [headerCheckOut, setHeaderCheckOut] = useState(null);
+  const [headerRooms, setHeaderRooms] = useState(Number(rooms) || 1);
+  const [headerAdults, setHeaderAdults] = useState(Number(adults) || 2);
+  const [headerChildren, setHeaderChildren] = useState(Number(children) || 0);
+
+  const [openCheckIn, setOpenCheckIn] = useState(false);
+  const [openCheckOut, setOpenCheckOut] = useState(false);
+  const [openGuestDropdown, setOpenGuestDropdown] = useState(false);
+
+  // Parse initial dates from query
+  useEffect(() => {
+    if (checkin && !isNaN(new Date(checkin).getTime())) {
+      setHeaderCheckIn(new Date(checkin));
+      
+      if (nights) {
+        const checkOutDate = new Date(checkin);
+        checkOutDate.setDate(checkOutDate.getDate() + Number(nights));
+        setHeaderCheckOut(checkOutDate);
+      }
+    }
+  }, [checkin, nights]);
+
+  // Fetch hotels
   useEffect(() => {
     if (!router.isReady) return;
     if (!cityId || !checkin || !nights) return;
@@ -108,19 +143,168 @@ export default function HotelsPage() {
     return result;
   }, [hotels, maxPrice, minRating, sortBy]);
 
+  function toISODate(d) {
+    if (!d) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function handleHeaderSearch() {
+    if (!headerCity || !headerCheckIn || !headerCheckOut) {
+      alert('कृपया सभी विवरण भरें');
+      return;
+    }
+
+    const nightsDiff = Math.ceil((headerCheckOut - headerCheckIn) / (1000 * 60 * 60 * 24));
+    if (nightsDiff <= 0) {
+      alert('चेक-आउट तारीख चेक-इन से बाद की होनी चाहिए');
+      return;
+    }
+
+    const checkinStr = toISODate(headerCheckIn);
+    
+    router.push(
+      `/hotels?cityName=${encodeURIComponent(headerCity)}&checkin=${checkinStr}&nights=${nightsDiff}&rooms=${headerRooms}&adults=${headerAdults}&children=${headerChildren}`
+    );
+  }
+
   return (
-    <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen">
-      <header className="bg-[#0B1523] text-white p-4 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold">{cityName || cityId}</h1>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {checkin} • {nights} Night{Number(nights) > 1 ? 's' : ''} • {rooms} Room{Number(rooms) > 1 ? 's' : ''}, {adults} Adults
-              {Number(children) > 0 ? `, ${children} Children` : ''}
-            </p>
+    <>
+      <Header />
+      <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen">
+
+        {/* Interactive Header */}
+        <header className="bg-[#0B1523] text-white p-3 sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
+            
+            {/* City */}
+            <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
+              <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">City</label>
+              <select
+                value={headerCity}
+                onChange={(e) => setHeaderCity(e.target.value)}
+                className="bg-transparent text-white text-xs font-bold mt-0.5 outline-none cursor-pointer text-gray-200 w-full h-full"
+              >
+                <option value="">Select City</option>
+                {indianCities.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Check-In */}
+            <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
+              <label
+                className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold cursor-pointer"
+                onClick={() => { setOpenCheckIn(!openCheckIn); setOpenCheckOut(false); }}
+              >
+                Check-In
+              </label>
+              <div
+                className="text-xs font-black mt-0.5 flex justify-between items-center whitespace-nowrap text-white cursor-pointer"
+                onClick={() => { setOpenCheckIn(!openCheckIn); setOpenCheckOut(false); }}
+              >
+                <span>{headerCheckIn ? toISODate(headerCheckIn) : '--'}</span>
+                <CalendarIcon className="w-3.5 h-3.5 text-orange-500 ml-1" />
+              </div>
+              {openCheckIn && (
+                <div className="absolute top-full left-0 mt-2 p-2 bg-white shadow-2xl rounded-xl z-30 text-gray-900">
+                  <DayPicker
+                    mode="single"
+                    selected={headerCheckIn}
+                    onSelect={(d) => { setHeaderCheckIn(d); setOpenCheckIn(false); }}
+                    disabled={{ before: new Date() }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Check-Out */}
+            <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
+              <label
+                className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold cursor-pointer"
+                onClick={() => { setOpenCheckOut(!openCheckOut); setOpenCheckIn(false); }}
+              >
+                Check-Out
+              </label>
+              <div
+                className="text-xs font-black mt-0.5 flex justify-between items-center whitespace-nowrap text-white cursor-pointer"
+                onClick={() => { setOpenCheckOut(!openCheckOut); setOpenCheckIn(false); }}
+              >
+                <span>{headerCheckOut ? toISODate(headerCheckOut) : '--'}</span>
+                <CalendarIcon className="w-3.5 h-3.5 text-orange-500 ml-1" />
+              </div>
+              {openCheckOut && (
+                <div className="absolute top-full right-0 mt-2 p-2 bg-white shadow-2xl rounded-xl z-30 text-gray-900">
+                  <DayPicker
+                    mode="single"
+                    selected={headerCheckOut}
+                    onSelect={(d) => { setHeaderCheckOut(d); setOpenCheckOut(false); }}
+                    disabled={{ before: headerCheckIn || new Date() }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Rooms & Guests */}
+            <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
+              <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium cursor-pointer"
+                onClick={() => setOpenGuestDropdown(!openGuestDropdown)}>
+                Rooms & Guests
+              </label>
+              <div
+                className="flex justify-between items-center mt-0.5 cursor-pointer"
+                onClick={() => setOpenGuestDropdown(!openGuestDropdown)}
+              >
+                <span className="text-xs font-black text-white">
+                  {headerRooms} Room{headerRooms > 1 ? 's' : ''} • {headerAdults} Adult{headerAdults > 1 ? 's' : ''}
+                </span>
+                <ChevronDown className="w-3 h-3 text-gray-400" />
+              </div>
+
+              {openGuestDropdown && (
+                <div className="absolute top-full left-0 mt-2 w-48 bg-white shadow-2xl rounded-xl z-30 p-3">
+                  <div className="mb-3">
+                    <label className="text-xs font-bold text-gray-700 block mb-2">Rooms</label>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setHeaderRooms(Math.max(1, headerRooms - 1))} className="bg-orange-500 text-white w-6 h-6 rounded">-</button>
+                      <span className="text-sm font-bold flex-1 text-center">{headerRooms}</span>
+                      <button onClick={() => setHeaderRooms(headerRooms + 1)} className="bg-orange-500 text-white w-6 h-6 rounded">+</button>
+                    </div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="text-xs font-bold text-gray-700 block mb-2">Adults</label>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setHeaderAdults(Math.max(1, headerAdults - 1))} className="bg-orange-500 text-white w-6 h-6 rounded">-</button>
+                      <span className="text-sm font-bold flex-1 text-center">{headerAdults}</span>
+                      <button onClick={() => setHeaderAdults(headerAdults + 1)} className="bg-orange-500 text-white w-6 h-6 rounded">+</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-700 block mb-2">Children</label>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setHeaderChildren(Math.max(0, headerChildren - 1))} className="bg-orange-500 text-white w-6 h-6 rounded">-</button>
+                      <span className="text-sm font-bold flex-1 text-center">{headerChildren}</span>
+                      <button onClick={() => setHeaderChildren(headerChildren + 1)} className="bg-orange-500 text-white w-6 h-6 rounded">+</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Search Button */}
+            <button
+              onClick={handleHeaderSearch}
+              className="bg-gradient-to-r from-[#0B1523] to-orange-500 text-white text-base rounded px-6 h-[54px] ml-1.5 font-bold uppercase tracking-wider hover:opacity-95 transition-all"
+            >
+              Search
+            </button>
           </div>
-        </div>
-      </header>
+        </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
 
@@ -218,6 +402,8 @@ export default function HotelsPage() {
         </section>
       </main>
     </div>
+    <Footer />
+    </>
   );
 }
 

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Plane, Hotel, Car, Bus, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-
+import { useRouter } from "next/router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -14,9 +14,13 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
 export default function HotelsPage() {
+  const router = useRouter();
   const [from, setFrom] = useState("");
   const [selectedCheckIn, setSelectedCheckIn] = useState(null);
   const [selectedCheckOut, setSelectedCheckOut] = useState(null);
+  const [rooms, setRooms] = useState("1");
+  const [adults, setAdults] = useState("2");
+  const [children, setChildren] = useState("0");
 
   const [openCheckIn, setOpenCheckIn] = useState(false);
   const [openCheckOut, setOpenCheckOut] = useState(false);
@@ -30,6 +34,35 @@ export default function HotelsPage() {
     setOpenCheckOut(!openCheckOut);
     setOpenCheckIn(false);
   };
+
+  const handleSearch = () => {
+    if (!from || !selectedCheckIn || !selectedCheckOut) {
+      alert("कृपया सभी विवरण भरें");
+      return;
+    }
+
+    // Calculate nights
+    const nights = Math.ceil(
+      (selectedCheckOut - selectedCheckIn) / (1000 * 60 * 60 * 24)
+    );
+    if (nights <= 0) {
+      alert("चेक-आउट तारीख चेक-इन से बाद की होनी चाहिए");
+      return;
+    }
+
+    // Get cityId from from value - for now using city name
+    const checkinStr = selectedCheckIn.toISOString().split("T")[0];
+
+    router.push(
+      `/hotels?cityName=${encodeURIComponent(
+        from
+      )}&checkin=${checkinStr}&nights=${nights}&rooms=${rooms}&adults=${adults}&children=${children}`
+    );
+  };
+
+  const toggleCheckOut = () => {
+    setOpenCheckOut(!openCheckOut);
+    setOpenCheckIn(false);
   const indianCities = [
     "Delhi",
     "Mumbai",
@@ -283,8 +316,7 @@ export default function HotelsPage() {
                           onChange={(e) => setFrom(e.target.value)}
                           className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
                         >
-                          <option value="">Goa</option>
-                          <span>india</span>
+                          <option value="">Select City</option>
                           {indianCities.map((city, index) => (
                             <option key={index} value={city}>
                               {city}
@@ -384,25 +416,24 @@ export default function HotelsPage() {
                         </label>
 
                         <select
-                          name=""
-                          id=""
+                          value={rooms}
+                          onChange={(e) => setRooms(e.target.value)}
                           className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer"
                         >
-                          <option value="">Select Rooms</option>
-                          <option value="">2 Adult 1 Room</option>
-                          <option value="">2 Adult 2 Room</option>
-                          <option value="">3 Adult 1 Room</option>
-                          <option value="">3 Adult 2 Room</option>
-                          <option value="">4 Adult 1 Room</option>
-                          <option value="">4 Adult 2 Room</option>
-                          <option value="">5 Adult 1 Room</option>
-                          <option value="">5 Adult 2 Room</option>
+                          <option value="1">1 Room, 2 Adults</option>
+                          <option value="2">2 Rooms, 2 Adults</option>
+                          <option value="2">2 Rooms, 3 Adults</option>
+                          <option value="1">1 Room, 3 Adults</option>
+                          <option value="1">1 Room, 4 Adults</option>
+                          <option value="2">2 Rooms, 4 Adults</option>
                         </select>
                       </div>
 
                       {/* Search Button */}
                       <div className="col-span-full flex justify-center mt-6">
-                        <Button className="w-full sm:w-auto px-8 py-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold transition-colors duration-300">
+                        <Button 
+                          onClick={handleSearch}
+                          className="w-full sm:w-auto px-8 py-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold transition-colors duration-300">
                           SEARCH HOTELS
                         </Button>
                       </div>
