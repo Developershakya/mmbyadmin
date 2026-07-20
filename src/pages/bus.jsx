@@ -2,6 +2,9 @@ import { useRouter } from 'next/router';
 import { useEffect, useState, useMemo } from 'react';
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { DayPicker } from 'react-day-picker';
+import 'react-day-picker/dist/style.css';
+import LocationSearchBox from '@/components/LocationSearchBox'; // apna actual path check karo
 
 export default function BusPage() {
   const router = useRouter();
@@ -11,10 +14,24 @@ export default function BusPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState(null);
+const [searchFrom, setSearchFrom] = useState(null);
+const [searchTo, setSearchTo] = useState(null);
+const [selectedDate, setSelectedDate] = useState(null);
+const [openDate, setOpenDate] = useState(false);
 
   const [selectedBusTypes, setSelectedBusTypes] = useState([]);
   const [maxPrice, setMaxPrice] = useState(5000);
   const [sortBy, setSortBy] = useState('recommended');
+
+useEffect(() => {
+  if (!router.isReady) return;
+  if (from) setSearchFrom({ name: from, code: from });
+  if (to) setSearchTo({ name: to, code: to });
+  if (date) {
+    const parsedDate = new Date(date);
+    if (!isNaN(parsedDate.getTime())) setSelectedDate(parsedDate);
+  }
+}, [router.isReady, from, to, date]);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -93,47 +110,87 @@ body: JSON.stringify({
     setSelectedBusTypes([]);
     setMaxPrice(5000);
   }
+function handleSearch() {
+  if (!searchFrom || !searchTo || !selectedDate) {
+    alert('Kripya From, To aur Date bharein.');
+    return;
+  }
+  const dateStr = selectedDate.toISOString().split('T')[0];
+  router.push(`/bus?from=${encodeURIComponent(searchFrom.name)}&to=${encodeURIComponent(searchTo.name)}&date=${dateStr}`);
+}
 
   return (
     <>
     <Header />
     <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen">
 
-      <header className="bg-[#0B1523] text-white p-3 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
-          <div className="flex-[2.5] min-w-[320px] bg-[#1E2A38] rounded h-[54px] flex items-center relative px-4">
-            <div className="flex-1 flex flex-col justify-center pr-4">
-              <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">From</label>
-              <div className="text-xs font-black mt-0.5 whitespace-nowrap text-white">{from || '--'}</div>
-            </div>
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-full">
-              <div className="h-8 border-l border-gray-600/50 absolute"></div>
-              <div className="bg-[#1E2A38] border border-gray-600 rounded-full w-5 h-5 flex items-center justify-center z-10 text-gray-400">
-                <i className="fa-solid fa-arrows-left-right text-[9px]"></i>
-              </div>
-            </div>
-            <div className="flex-1 flex flex-col justify-center pl-8">
-              <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">To</label>
-              <div className="text-xs font-black mt-0.5 whitespace-nowrap text-white">{to || '--'}</div>
-            </div>
-          </div>
-
-          <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center">
-            <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Travel Date</label>
-            <div className="text-xs font-black mt-0.5 flex justify-between items-center whitespace-nowrap">
-              <span>{date || '--'}</span>
-              <i className="fa-regular fa-calendar text-[11px] text-gray-400 ml-1"></i>
-            </div>
-          </div>
-
-          <button
-            onClick={() => router.push(`/bus?from=${from}&to=${to}&date=${date}`)}
-            className="bg-gradient-to-r from-[#0B1523] to-orange-500 text-white text-base rounded-tr-full rounded-br-full px-6 h-[54px] ml-1.5 rounded font-black uppercase tracking-wider hover:opacity-95 transition-all flex items-center justify-center shadow-md"
-          >
-            Search
-          </button>
+<header className="bg-[#0B1523] text-white p-3 sticky top-0 z-50">
+  <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
+    <div className="flex-[2.5] min-w-[320px] bg-[#1E2A38] rounded h-[54px] flex items-center relative px-4">
+      <div className="flex-1 flex flex-col justify-center pr-4">
+        <LocationSearchBox
+          label="From"
+          value={searchFrom}
+          placeholder="Delhi"
+          onSelect={setSearchFrom}
+          showAllSections={false}
+          citySearchApi="/api/cities/bus"
+          theme="dark"
+        />
+      </div>
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-full">
+        <div className="h-8 border-l border-gray-600/50 absolute"></div>
+        <div className="bg-[#1E2A38] border border-gray-600 rounded-full w-5 h-5 flex items-center justify-center z-10 text-gray-400">
+          <i className="fa-solid fa-arrows-left-right text-[9px]"></i>
         </div>
-      </header>
+      </div>
+      <div className="flex-1 flex flex-col justify-center pl-8">
+        <LocationSearchBox
+          label="To"
+          value={searchTo}
+          placeholder="Manali"
+          onSelect={setSearchTo}
+          showAllSections={false}
+          citySearchApi="/api/cities/bus"
+          theme="dark"
+        />
+      </div>
+    </div>
+
+    <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
+      <label
+        className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium cursor-pointer"
+        onClick={() => setOpenDate(!openDate)}
+      >
+        Travel Date
+      </label>
+      <div
+        className="text-xs font-black mt-0.5 flex justify-between items-center whitespace-nowrap cursor-pointer"
+        onClick={() => setOpenDate(!openDate)}
+      >
+        <span>{selectedDate ? selectedDate.toLocaleDateString('en-CA') : (date || '--')}</span>
+        <i className="fa-regular fa-calendar text-[11px] text-gray-400 ml-1"></i>
+      </div>
+      {openDate && (
+        <div className="absolute top-full left-0 mt-2 p-2 bg-white shadow-2xl rounded-xl z-30 text-gray-900">
+          <DayPicker
+            mode="single"
+            selected={selectedDate}
+            onSelect={(d) => { setSelectedDate(d); setOpenDate(false); }}
+            disabled={{ before: new Date() }}
+          />
+        </div>
+      )}
+    </div>
+
+    <button
+      onClick={handleSearch}
+      className="bg-gradient-to-r from-[#0B1523] to-orange-500 text-white text-base rounded-tr-full rounded-br-full px-6 h-[54px] ml-1.5 rounded font-black uppercase tracking-wider hover:opacity-95 transition-all flex items-center justify-center shadow-md"
+    >
+      Search
+    </button>
+  </div>
+</header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
 

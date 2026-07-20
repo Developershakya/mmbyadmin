@@ -173,10 +173,10 @@ export default function HeroSection() {
     children: 0,
   });
 
-  const [holidayFrom, setHolidayFrom] = useState(null);
-  const [holidayTo, setHolidayTo] = useState(null);
-  const [holidayDepartureDate, setHolidayDepartureDate] = useState("");
-  const [holidayRooms, setHolidayRooms] = useState({
+  const [holidaysFrom, setHolidaysFrom] = useState(null);
+  const [holidaysTo, setHolidaysTo] = useState(null);
+  const [holidaysDepartureDate, setHolidaysDepartureDate] = useState("");
+  const [holidaysRooms, setHolidaysRooms] = useState({
     rooms: 1,
     adults: 2,
     children: 0,
@@ -288,19 +288,18 @@ export default function HeroSection() {
       );
     }
 else if (activeTab === "holidays") {
-  if (!holidayTo) {
+  if (!holidaysTo) {
     alert("Please select a destination.");
     return;
   }
-  
-  // Destination name ko safely extract karo
-  const destinationName = holidayTo.name || holidayTo.Destination || '';
-  
+
+  const destinationName = holidaysTo.name || holidaysTo.Destination || "";
+
   const query = new URLSearchParams({
     destination: destinationName,
   });
-  if (holidayDepartureDate) query.set("startDate", holidayDepartureDate);
-  query.set("guests", `${holidayRooms.rooms} Room, ${holidayRooms.adults} Adults`);
+  if (holidaysDepartureDate) query.set("startDate", holidaysDepartureDate);
+  query.set("guests", `${holidaysRooms.rooms} Room, ${holidaysRooms.adults} Adults`);
 
   router.push(`/holiday/search?${query.toString()}`);
 }
@@ -313,15 +312,18 @@ else if (activeTab === "holidays") {
       router.push(
         `/bus?from=${busFrom.code}&to=${busTo.code}&date=${formatLocalDate(travelDate)}`
       );
-    } else if (activeTab === "cabs") {
-      if (!cabFrom || !cabTo) {
-        alert("Please select pickup and drop locations.");
-        return;
-      }
-      router.push(
-        `/cab?from=${cabFrom.code}&to=${cabTo.code}&type=${cabTripType}`
-      );
-    }
+} else if (activeTab === "cabs") {
+  if (!cabFrom || !cabTo) {
+    alert("Please select pickup and drop locations.");
+    return;
+  }
+  router.push(
+    `/cab?from=${cabFrom.code}&to=${cabTo.code}` +
+    `&fromName=${encodeURIComponent(cabFrom.name)}` +
+    `&toName=${encodeURIComponent(cabTo.name)}` +
+    `&type=${cabTripType}`
+  );
+}
   }
 
   const formatWeekday = (date) =>
@@ -796,9 +798,9 @@ else if (activeTab === "holidays") {
                   <div className="lg:col-span-6 p-4 hover:bg-gray-50">
                     <LocationSearchBox
                       label="From City"
-                      value={holidayFrom}
+                      value={holidaysFrom}
                       placeholder="New Delhi"
-                      onSelect={setHolidayFrom}
+                      onSelect={setHolidaysFrom}
                       showAllSections={false}
                       citySearchApi="/api/cities/airports"
                     />
@@ -808,12 +810,12 @@ else if (activeTab === "holidays") {
                   <div className="lg:col-span-6 p-4 hover:bg-gray-50">
                     <LocationSearchBox
                       label="To City/Country/Category"
-                      value={holidayTo}
+                      value={holidaysTo}
                       placeholder="Goa"
-                      onSelect={setHolidayTo}
+                      onSelect={setHolidaysTo}
                       align="right"
                       showAllSections={false}
-                      citySearchApi="/api/cities/holiday"
+                      citySearchApi="/api/cities/holidays"
                     />
                   </div>
                 </div>

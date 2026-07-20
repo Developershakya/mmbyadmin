@@ -1,12 +1,21 @@
 "use client";
 import { useRouter } from 'next/router';
-import { useEffect, useState, useMemo } from 'react';
-import Header from '@/components/Header';
-import { FiArrowLeft } from 'react-icons/fi';
+import { useEffect, useState, useMemo, useRef } from 'react';
+import { DayPicker } from 'react-day-picker';
+import 'react-day-picker/dist/style.css';
+import LocationSearchBox from '@/components/LocationSearchBox'; // apna actual path check kar lena
+
+function toISODate(d) {
+  if (!d) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 export default function HolidaySearchPage() {
   const router = useRouter();
-  const { destination, startDate, endDate, guests } = router.query;
+  const { destination, startDate, guests } = router.query;
 
   const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +24,19 @@ export default function HolidaySearchPage() {
   const [maxPrice, setMaxPrice] = useState(100000);
   const [sortBy, setSortBy] = useState('recommended');
 
+  // ---- Header (interactive) state ----
+const [headerFrom, setHeaderFrom] = useState(null);
+const [headerDestination, setHeaderDestination] = useState(null);
+
+  // Jab page pehli baar load ho, URL params se header ko prefill karo
+useEffect(() => {
+  if (!router.isReady) return;
+  if (destination) {
+    setHeaderDestination({ name: destination, code: destination });
+  }
+}, [router.isReady, destination]);
+
+  // ---- Fetch holidays jab bhi destination badle ----
   useEffect(() => {
     if (!router.isReady) return;
     if (!destination) return;
@@ -24,7 +46,7 @@ export default function HolidaySearchPage() {
         setLoading(true);
         setError('');
 
-        const res = await fetch('/api/holiday/search', {
+        const res = await fetch('/api/holidays/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -77,22 +99,62 @@ export default function HolidaySearchPage() {
     router.push(`/holiday/${slug}`);
   };
 
+  // ---- Header ka "Search" button dabne par naya search trigger karo ----
+function handleHeaderSearch() {
+  if (!headerDestination) {
+    alert('Kripya destination select karein.');
+    return;
+  }
+
+  const query = new URLSearchParams({
+    destination: headerDestination.name,
+  });
+
+  router.push(`/holiday/search?${query.toString()}`);
+}
+
   return (
     <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen">
-      <header className="bg-[#0B1523] text-white p-4 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <button onClick={() => router.back()} className="md:hidden">
-            <FiArrowLeft className="text-2xl" />
-          </button>
-          <div className="hidden md:block">
-            <h1 className="text-lg font-bold">{destination || 'Holidays'}</h1>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {startDate && ` ${startDate}`}
-              {guests && ` • ${guests}`}
-            </p>
-          </div>
-        </div>
-      </header>
+
+{/* ---- Interactive Header ---- */}
+<header className="bg-[#0B1523] text-white p-3 sticky top-0 z-50">
+  <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2.5">
+
+    {/* From City */}
+    <div className="flex-1 min-w-[180px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
+      <LocationSearchBox
+        label="From City"
+        value={headerFrom}
+        placeholder="New Delhi"
+        onSelect={setHeaderFrom}
+        showAllSections={false}
+        citySearchApi="/api/cities/airports"
+        theme="dark"
+      />
+    </div>
+
+    {/* To City */}
+    <div className="flex-1 min-w-[180px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
+      <LocationSearchBox
+        label="To City/Country/Category"
+        value={headerDestination}
+        placeholder="Goa"
+        onSelect={setHeaderDestination}
+        showAllSections={false}
+        citySearchApi="/api/cities/holidays"
+        theme="dark"
+      />
+    </div>
+
+    {/* Search Button */}
+    <button
+      onClick={handleHeaderSearch}
+      className="bg-gradient-to-r from-[#0B1523] to-orange-500 text-white text-base rounded px-8 h-[54px] font-bold uppercase tracking-wider hover:opacity-95 transition-all"
+    >
+      Search
+    </button>
+  </div>
+</header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
         {/* Sidebar Filters */}
@@ -170,10 +232,9 @@ export default function HolidaySearchPage() {
                         <div className="flex items-start justify-between mb-2">
                           <div>
                             <h3 className="text-xl font-bold text-gray-900">{holiday.package_name}</h3>
-                            <div
-                              className="text-sm text-gray-600 line-clamp-1"
-                              dangerouslySetInnerHTML={{ __html: holiday.location }}
-                            />
+                            <div className="text-sm text-gray-600 line-clamp-1">
+                              {holiday.city_name || destination}
+                            </div>
                           </div>
                         </div>
 

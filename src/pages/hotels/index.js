@@ -182,18 +182,18 @@ export default function HotelsPage() {
             {/* City */}
             <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
               <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">City</label>
-              <select
-                value={headerCity}
-                onChange={(e) => setHeaderCity(e.target.value)}
-                className="bg-transparent text-white text-xs font-bold mt-0.5 outline-none cursor-pointer text-gray-200 w-full h-full"
-              >
-                <option value="">Select City</option>
-                {indianCities.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
+<select
+  value={headerCity}
+  onChange={(e) => setHeaderCity(e.target.value)}
+  className="bg-transparent text-white text-xs font-bold mt-0.5 outline-none cursor-pointer text-gray-200 w-full h-full"
+>
+  <option value="" style={{ color: '#000' }}>Select City</option>
+  {indianCities.map((city) => (
+    <option key={city} value={city} style={{ color: '#000' }}>
+      {city}
+    </option>
+  ))}
+</select>
             </div>
 
             {/* Check-In */}
