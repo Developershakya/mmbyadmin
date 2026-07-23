@@ -3,25 +3,30 @@ import { useEffect, useState, useMemo } from 'react';
 import LocationSearchBox from '../../components/LocationSearchBox';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
-
+import AirlineLogo from '../../components/booking/AirlineLogo';
+ 
 export default function FlightsPage() {
   const router = useRouter();
   const { from, to, date, trip, adults, children, infants, returnDate, legs } = router.query;
-
+ 
   const [flights, setFlights] = useState([]);
+  const [dateStripPrices, setDateStripPrices] = useState({}); // { "2026-07-22": 6400, "2026-07-23": null (loading) }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState(null);
-
+ 
+  // ⭐ NEW: tracks which flight is picked for each leg -> { 0: flightObj, 1: flightObj }
+  const [selectedLegs, setSelectedLegs] = useState({});
+ 
   // Filter states
   const [selectedStops, setSelectedStops] = useState([]);
   const [selectedAirlines, setSelectedAirlines] = useState([]);
   const [maxPrice, setMaxPrice] = useState(50000);
   const [sortBy, setSortBy] = useState('recommended');
-
+ 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
+ 
   // ---------------- Header (editable search bar) states ----------------
   const [headerFrom, setHeaderFrom] = useState(null);
   const [headerTo, setHeaderTo] = useState(null);
@@ -31,31 +36,32 @@ export default function FlightsPage() {
   const [headerAdults, setHeaderAdults] = useState(1);
   const [headerChildren, setHeaderChildren] = useState(0);
   const [headerInfants, setHeaderInfants] = useState(0);
-
+ 
   const [openHeaderDeparture, setOpenHeaderDeparture] = useState(false);
   const [openHeaderReturn, setOpenHeaderReturn] = useState(false);
   const [headerTravelersOpen, setHeaderTravelersOpen] = useState(false);
   const [headerTripTypeOpen, setHeaderTripTypeOpen] = useState(false);
-
+ 
   useEffect(() => {
     if (!router.isReady) return;
-
-    // Oneway/Roundtrip ke liye from, to, date zaroori hai
-    // Multicity ke liye sirf legs zaroori hai
+ 
+    // ⭐ Naya search shuru hone par purani selection clear kar do
+    setSelectedLegs({});
+ 
     if (trip === 'multicity') {
       if (!legs) return;
     } else {
       if (!from || !to || !date) return;
     }
-
+ 
     async function fetchFlights() {
       try {
         setLoading(true);
         setError('');
-
+ 
         let segments = [];
         let journeyType = '1';
-
+ 
         if (trip === 'roundtrip') {
           journeyType = '2';
           segments = [
@@ -74,7 +80,7 @@ export default function FlightsPage() {
         } else {
           segments = [{ origin: from, destination: to, date: date }];
         }
-
+ 
         const res = await fetch('/api/flights/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -86,21 +92,21 @@ export default function FlightsPage() {
             segments,
           })
         });
-
+ 
         if (!res.ok) {
           const body = await res.text();
           console.error('API status:', res.status, 'body:', body);
           throw new Error('Failed to fetch');
         }
-
+ 
         const data = await res.json();
-
+ 
         if (!data.success) {
           setError(data.message || 'Flights fetch nahi ho paaye. Baad me try karo.');
           setFlights([]);
           return;
         }
-
+ 
         setFlights(data.results || []);
       } catch (err) {
         console.error('fetchFlights error:', err);
@@ -109,10 +115,10 @@ export default function FlightsPage() {
         setLoading(false);
       }
     }
-
+ 
     fetchFlights();
   }, [router.isReady, from, to, date, trip, adults, children, infants, returnDate, legs]);
-
+ 
   // ---------------- Header sync: URL query se DB lookup karke header states bharo ----------------
   async function lookupCity(code) {
     if (!code) return null;
@@ -132,16 +138,16 @@ export default function FlightsPage() {
     }
     return { code, name: code, sub: '' }; // fallback agar DB mein na mile
   }
-
+ 
   useEffect(() => {
     if (!router.isReady) return;
-
+ 
     (async () => {
       const [fromCity, toCity] = await Promise.all([lookupCity(from), lookupCity(to)]);
       setHeaderFrom(fromCity);
       setHeaderTo(toCity);
     })();
-
+ 
     setHeaderDate(date && !isNaN(new Date(date).getTime()) ? new Date(date) : null);
     setHeaderReturnDate(returnDate && !isNaN(new Date(returnDate).getTime()) ? new Date(returnDate) : null);
     setHeaderTrip(trip || 'oneway');
@@ -149,7 +155,7 @@ export default function FlightsPage() {
     setHeaderChildren(Number(children) || 0);
     setHeaderInfants(Number(infants) || 0);
   }, [router.isReady, from, to, date, trip, adults, children, infants, returnDate]);
-
+ 
   // Derived: airline counts for filter sidebar
   const airlineCounts = useMemo(() => {
     const counts = {};
@@ -159,7 +165,7 @@ export default function FlightsPage() {
     });
     return counts;
   }, [flights]);
-
+ 
   // Derived: stop counts for filter sidebar
   const stopCounts = useMemo(() => {
     const counts = { nonstop: 0, onestop: 0, multistop: 0 };
@@ -170,11 +176,11 @@ export default function FlightsPage() {
     });
     return counts;
   }, [flights]);
-
+ 
   // Apply filters + sorting
   const visibleFlights = useMemo(() => {
     let result = [...flights];
-
+ 
     if (selectedStops.length > 0) {
       result = result.filter((f) => {
         if (selectedStops.includes('nonstop') && f.stops === 0) return true;
@@ -183,57 +189,54 @@ export default function FlightsPage() {
         return false;
       });
     }
-
+ 
     if (selectedAirlines.length > 0) {
       result = result.filter((f) => selectedAirlines.includes(f.airline_name));
     }
-
+ 
     result = result.filter((f) => Number(f.price) <= maxPrice);
-
+ 
     if (sortBy === 'price_low') {
       result.sort((a, b) => Number(a.price) - Number(b.price));
     } else if (sortBy === 'duration') {
       result.sort((a, b) => (a.duration_minutes || 0) - (b.duration_minutes || 0));
     }
-
+ 
     return result;
   }, [flights, selectedStops, selectedAirlines, maxPrice, sortBy]);
-
+ 
   const onwardFlights = useMemo(() => visibleFlights.filter(f => f.legIndex === 0), [visibleFlights]);
   const returnFlights = useMemo(() => visibleFlights.filter(f => f.legIndex === 1), [visibleFlights]);
-
-  const [selectedOnward, setSelectedOnward] = useState(null);
-  const [selectedReturn, setSelectedReturn] = useState(null);
-
+ 
   function toggleStop(key) {
     setSelectedStops((prev) =>
       prev.includes(key) ? prev.filter((s) => s !== key) : [...prev, key]
     );
   }
-
+ 
   function toggleAirline(name) {
     setSelectedAirlines((prev) =>
       prev.includes(name) ? prev.filter((a) => a !== name) : [...prev, name]
     );
   }
-
+ 
   function resetFilters() {
     setSelectedStops([]);
     setSelectedAirlines([]);
     setMaxPrice(50000);
   }
-
+ 
   function goToDate(newDate) {
     router.push(`/flights?from=${from}&to=${to}&date=${newDate}&trip=${trip || 'oneway'}`);
   }
-
+ 
   function toISODate(d) {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
-
+ 
   // ---------------- Header search button ----------------
   function handleHeaderSearch() {
     if (!headerFrom || !headerTo) {
@@ -252,7 +255,7 @@ export default function FlightsPage() {
       `&trip=${headerTrip}&adults=${headerAdults}&children=${headerChildren}&infants=${headerInfants}`
     );
   }
-
+ 
   // Generate a 7-day date strip centered on selected date
   const dateStrip = useMemo(() => {
     if (!date || date === 'undefined' || isNaN(new Date(date).getTime())) return [];
@@ -266,21 +269,96 @@ export default function FlightsPage() {
     return days;
   }, [date]);
 
+  // ⭐ NEW: date-strip ke har date ka cheapest price fetch karo
+  useEffect(() => {
+    if (!router.isReady || trip === 'multicity' || dateStrip.length === 0) return;
+
+    let cancelled = false;
+
+    dateStrip.forEach(async (d) => {
+      const iso = toISODate(d);
+
+      setDateStripPrices((prev) => ({ ...prev, [iso]: prev[iso] === undefined ? null : prev[iso] }));
+
+      try {
+        let segments;
+        let journeyType = '1';
+
+        if (trip === 'roundtrip') {
+          journeyType = '2';
+          segments = [
+            { origin: from, destination: to, date: iso },
+            { origin: to, destination: from, date: returnDate },
+          ];
+        } else {
+          segments = [{ origin: from, destination: to, date: iso }];
+        }
+
+        const res = await fetch('/api/flights/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adultCount: Number(adults) || 1,
+            childCount: Number(children) || 0,
+            infantCount: Number(infants) || 0,
+            journeyType,
+            segments,
+          }),
+        });
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        if (data.success && data.results?.length > 0) {
+          const onwardOnly = data.results.filter((r) => r.legIndex === 0);
+          const minPrice = Math.min(...onwardOnly.map((r) => Number(r.price)));
+          setDateStripPrices((prev) => ({ ...prev, [iso]: minPrice }));
+        } else {
+          setDateStripPrices((prev) => ({ ...prev, [iso]: 'none' }));
+        }
+      } catch (err) {
+        if (!cancelled) setDateStripPrices((prev) => ({ ...prev, [iso]: 'none' }));
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [dateStrip, from, to, trip, adults, children, infants, returnDate]);
+ 
   function formatDateShort(d) {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).replace(' ', ' ');
   }
-
+ 
   function formatWeekday(d) {
     return d.toLocaleDateString('en-US', { weekday: 'short' });
   }
-
+ 
+  // ⭐ NEW: how many legs need to be picked for this trip type
+  const totalLegsNeeded =
+    trip === 'multicity' ? (legs || '').split(',').length : trip === 'roundtrip' ? 2 : 1;
+ 
+  const allLegsSelected = Object.keys(selectedLegs).length === totalLegsNeeded;
+ 
+  // ⭐ NEW: called when user clicks "Select" on a FlightCard
+  function selectFlight(legIndex, flight) {
+    setSelectedLegs((prev) => ({ ...prev, [legIndex]: flight }));
+  }
+ 
+  // ⭐ NEW: goes to the booking page once every leg is picked
+  function proceedToBooking() {
+    if (!allLegsSelected) return;
+    sessionStorage.setItem('selectedFlights', JSON.stringify(selectedLegs));
+    router.push(
+      `/flights/booking?trip=${trip || 'oneway'}&adults=${adults || 1}&children=${children || 0}&infants=${infants || 0}`
+    );
+  }
+ 
   return (
-    <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen">
-
+    <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen pb-24">
+ 
       {/* Search Bar Header */}
       <header className="bg-[#0B1523] text-white p-3 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
-
+ 
           {/* Trip Type */}
           <div className="flex-1 min-w-[110px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
             <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Trip Type</label>
@@ -293,7 +371,7 @@ export default function FlightsPage() {
               </span>
               <i className="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
             </div>
-
+ 
             {headerTripTypeOpen && (
               <div
                 className="absolute top-full left-0 mt-2 w-48 bg-white shadow-2xl rounded-xl border border-gray-100 z-30 overflow-hidden"
@@ -317,7 +395,7 @@ export default function FlightsPage() {
               </div>
             )}
           </div>
-
+ 
           {/* From / To */}
           <div className="flex-[2.5] min-w-[320px] bg-[#1E2A38] rounded h-[54px] flex items-center relative px-4">
             <div className="flex-1 flex flex-col justify-center pr-4">
@@ -348,7 +426,7 @@ export default function FlightsPage() {
               />
             </div>
           </div>
-
+ 
           {/* Departure */}
           <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
             <label
@@ -375,7 +453,7 @@ export default function FlightsPage() {
   </div>
 )}
           </div>
-
+ 
           {/* Return */}
           <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
             <label
@@ -404,7 +482,7 @@ export default function FlightsPage() {
   </div>
 )}
           </div>
-
+ 
           {/* Travellers & Class */}
           <div className="flex-1 min-w-[150px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center relative">
             <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Travellers & Class</label>
@@ -417,7 +495,7 @@ export default function FlightsPage() {
               </span>
               <i className="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
             </div>
-
+ 
             {headerTravelersOpen && (
               <div
                 className="absolute top-full right-0 mt-2 w-[380px] p-5 bg-white shadow-2xl rounded-xl border border-gray-100 z-30"
@@ -440,7 +518,7 @@ export default function FlightsPage() {
                     ))}
                   </div>
                 </div>
-
+ 
                 <div className="flex gap-8 mb-5">
                   <div>
                     <p className="text-sm font-bold text-gray-800">Children</p>
@@ -477,7 +555,7 @@ export default function FlightsPage() {
                     </div>
                   </div>
                 </div>
-
+ 
                 <div className="flex justify-end">
                   <button
                     onClick={() => setHeaderTravelersOpen(false)}
@@ -489,7 +567,7 @@ export default function FlightsPage() {
               </div>
             )}
           </div>
-
+ 
           <button
             onClick={handleHeaderSearch}
             className="bg-gradient-to-r from-[#0B1523] to-orange-500 text-white text-base rounded-tr-full rounded-br-full px-6 h-[54px] ml-1.5 rounded font-black uppercase tracking-wider hover:opacity-95 transition-all flex items-center justify-center shadow-md"
@@ -498,16 +576,16 @@ export default function FlightsPage() {
           </button>
         </div>
       </header>
-
+ 
       <main className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
-
+ 
         {/* Filters Sidebar - dynamic counts */}
-        <aside className="w-1/4 bg-white p-5 rounded-lg shadow-sm h-fit hidden md:block">
+        <aside className="w-1/4 bg-white p-5 rounded-lg shadow-sm h-fit hidden md:block sticky top-[90px] max-h-[calc(100vh-100px)] overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold tracking-wide">FILTERS</h2>
             <button onClick={resetFilters} className="text-xs font-semibold text-orange-500 uppercase">Reset</button>
           </div>
-
+ 
           <div className="mb-6">
             <h3 className="text-sm font-bold mb-3">Stops</h3>
             <div className="space-y-2 text-sm">
@@ -531,9 +609,9 @@ export default function FlightsPage() {
               </label>
             </div>
           </div>
-
+ 
           <hr className="my-4 border-gray-100" />
-
+ 
           <div className="mb-6">
             <h3 className="text-sm font-bold mb-3">Airlines</h3>
             <div className="space-y-2 text-sm">
@@ -550,9 +628,9 @@ export default function FlightsPage() {
               ))}
             </div>
           </div>
-
+ 
           <hr className="my-4 border-gray-100" />
-
+ 
           <div>
             <h3 className="text-sm font-bold mb-2">Max Price</h3>
             <div className="text-xs text-gray-500 mb-2">Up to ₹ {maxPrice.toLocaleString()}</div>
@@ -567,17 +645,18 @@ export default function FlightsPage() {
             />
           </div>
         </aside>
-
+ 
         {/* Results Section */}
         <section className="w-full md:w-3/4 space-y-4">
-
+ 
           {/* Date strip - navigates by changing the date query param */}
           {date && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 flex items-center gap-1 overflow-x-auto">
               <div className="flex-1 grid grid-cols-7 gap-1 text-center min-w-[500px]">
-                {dateStrip.map((d) => {
+{dateStrip.map((d) => {
                   const iso = toISODate(d);
                   const isActive = iso === date;
+                  const priceForDate = dateStripPrices[iso];
                   return (
                     <div
                       key={iso}
@@ -588,6 +667,13 @@ export default function FlightsPage() {
                     >
                       <div className={`text-[10px] uppercase font-medium ${isActive ? 'text-orange-100 font-bold' : 'text-gray-400'}`}>
                         {formatDateShort(d)}, {formatWeekday(d)}
+                      </div>
+                      <div className={`text-xs font-bold mt-0.5 ${isActive ? 'text-white' : 'text-gray-700'}`}>
+                        {priceForDate === undefined || priceForDate === null
+                          ? '...'
+                          : priceForDate === 'none'
+                          ? '—'
+                          : `₹${priceForDate.toLocaleString()}`}
                       </div>
                     </div>
                   );
@@ -621,32 +707,40 @@ export default function FlightsPage() {
               </select>
             </div>
           </div>
-
+ 
           {loading && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
               Flights load ho rahe hain...
             </div>
           )}
-
+ 
           {!loading && error && (
             <div className="bg-white rounded-lg shadow-sm border border-red-100 p-10 text-center text-red-500">
               {error}
             </div>
           )}
-
+ 
           {/* ONE WAY: flat list */}
           {!loading && !error && trip !== 'roundtrip' && trip !== 'multicity' && visibleFlights.length === 0 && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
               Is route ke liye koi flight nahi mili.
             </div>
           )}
-
+ 
           {!loading && !error && trip !== 'roundtrip' && trip !== 'multicity' && visibleFlights.map((flight) => (
-            <FlightCard key={flight.id} flight={flight} from={from} to={to} date={date}
+            <FlightCard
+              key={flight.id}
+              flight={flight}
+              from={from}
+              to={to}
+              date={date}
               isExpanded={expandedId === flight.id}
-              onToggle={() => setExpandedId(expandedId === flight.id ? null : flight.id)} />
+              onToggle={() => setExpandedId(expandedId === flight.id ? null : flight.id)}
+              isSelected={selectedLegs[0]?.id === flight.id}
+              onSelect={() => selectFlight(0, flight)}
+            />
           ))}
-
+ 
           {/* ROUND TRIP / MULTI CITY: show each leg in its own section */}
           {!loading && !error && (trip === 'roundtrip' || trip === 'multicity') && (() => {
             const legMap = {};
@@ -661,7 +755,7 @@ export default function FlightsPage() {
                   const p = l.split('-');
                   return `Leg ${i + 1}: ${p[0]} → ${p[1]} (${p.slice(2).join('-')})`;
                 });
-
+ 
             return Array.from({ length: legCount }, (_, idx) => {
               const legFlights = legMap[idx] || [];
               return (
@@ -672,6 +766,9 @@ export default function FlightsPage() {
                       {legLabels[idx] || `Leg ${idx + 1}`}
                     </span>
                     <span className="text-xs text-gray-400">{legFlights.length} results</span>
+                    {selectedLegs[idx] && (
+                      <span className="text-xs text-emerald-600 font-bold">✓ Selected: {selectedLegs[idx].airline_name} ₹{Number(selectedLegs[idx].price).toLocaleString()}</span>
+                    )}
                   </div>
                   {legFlights.length === 0 ? (
                     <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 text-center text-gray-500">
@@ -679,9 +776,17 @@ export default function FlightsPage() {
                     </div>
                   ) : (
                     legFlights.map(flight => (
-                      <FlightCard key={flight.id} flight={flight} from={flight.origin_code} to={flight.destination_code} date={date}
+                      <FlightCard
+                        key={flight.id}
+                        flight={flight}
+                        from={flight.origin_code}
+                        to={flight.destination_code}
+                        date={date}
                         isExpanded={expandedId === flight.id}
-                        onToggle={() => setExpandedId(expandedId === flight.id ? null : flight.id)} />
+                        onToggle={() => setExpandedId(expandedId === flight.id ? null : flight.id)}
+                        isSelected={selectedLegs[idx]?.id === flight.id}
+                        onSelect={() => selectFlight(idx, flight)}
+                      />
                     ))
                   )}
                 </div>
@@ -690,32 +795,51 @@ export default function FlightsPage() {
           })()}
         </section>
       </main>
+ 
+      {/* ⭐ NEW: Proceed to Book bar — sticks to bottom once every leg has a selection */}
+      {allLegsSelected && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] p-4 z-40">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              {Object.keys(selectedLegs).length} leg(s) selected •{' '}
+              <span className="font-bold text-gray-900">
+                ₹ {Object.values(selectedLegs).reduce((sum, f) => sum + Number(f.price), 0).toLocaleString()}
+              </span>{' '}
+              per passenger
+            </div>
+            <button
+              onClick={proceedToBooking}
+              className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm uppercase tracking-wide px-8 py-3 rounded-full transition"
+            >
+              Proceed to Book
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
+ 
 /** Reusable flight card component */
-function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
+function FlightCard({ flight, from, to, date, isExpanded, onToggle, isSelected, onSelect }) {
   const [activeDetailTab, setActiveDetailTab] = useState('details');
-
+ 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mb-3">
+    <div className={`bg-white rounded-lg shadow-sm border overflow-hidden mb-3 ${isSelected ? 'border-orange-400 ring-1 ring-orange-300' : 'border-gray-100'}`}>
       <div className="p-5 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-[120px]">
-          <div className="w-8 h-8 bg-blue-900 text-white font-black flex items-center justify-center text-xs rounded">
-            {flight.airline_code || 'FL'}
-          </div>
+<div className="flex items-center gap-3 min-w-[120px]">
+          <AirlineLogo code={flight.airline_code} size={32} />
           <div>
             <div className="font-bold text-blue-900 text-base">{flight.airline_name}</div>
             <div className="text-xs text-gray-400">{flight.flight_number}</div>
           </div>
         </div>
-
+ 
         <div className="text-center">
           <div className="text-lg font-bold">{flight.departure_time}</div>
           <div className="text-xs font-semibold text-gray-500">{flight.origin_code}</div>
         </div>
-
+ 
         <div className="text-center min-w-[100px]">
           <div className="text-xs text-gray-400">{flight.duration}</div>
           <div className="relative my-1 flex items-center justify-center">
@@ -726,20 +850,26 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
             {flight.stops === 0 ? 'Non Stop' : `${flight.stops} Stop`}
           </div>
         </div>
-
+ 
         <div className="text-center">
           <div className="text-lg font-bold">{flight.arrival_time}</div>
           <div className="text-xs font-semibold text-gray-500">{flight.destination_code}</div>
         </div>
-
+ 
         <div className="text-right">
           <div className="text-lg font-bold text-gray-900">₹ {Number(flight.price).toLocaleString()}</div>
           <div className="text-[10px] text-gray-400">per adult</div>
         </div>
-
+ 
         <div className="flex flex-col items-end gap-1">
-          <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-5 py-2 rounded uppercase tracking-wider transition-colors">
-            View Price
+          {/* ⭐ CHANGED: "View Price" -> "Select" (drives selectedLegs) */}
+          <button
+            onClick={onSelect}
+            className={`text-xs font-bold px-5 py-2 rounded uppercase tracking-wider transition-colors ${
+              isSelected ? 'bg-emerald-500 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'
+            }`}
+          >
+            {isSelected ? '✓ Selected' : 'Select'}
           </button>
           {flight.seats_left && (
             <span className="text-[11px] text-orange-600 font-medium">{flight.seats_left} seats left at this price</span>
@@ -753,7 +883,7 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
           </button>
         </div>
       </div>
-
+ 
       {isExpanded && (
         <div className="bg-gray-50 border-t border-gray-100">
           <div className="flex gap-1 px-5 pt-3">
@@ -774,21 +904,19 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
               </button>
             ))}
           </div>
-
+ 
           <div className="p-5 text-xs text-gray-600">
             {activeDetailTab === 'details' && (
               <div>
                 <div className="font-bold text-gray-900 mb-3">
                   {flight.origin_code} → {flight.destination_code}{date ? `, ${date}` : ''}
                 </div>
-
+ 
                 {(flight.legDetails || []).map((leg, i) => (
                   <div key={i} className="mb-4 pb-4 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
-                      <div className="flex items-start gap-3 col-span-2">
-                        <div className="w-6 h-6 bg-blue-900 text-white font-black flex items-center justify-center text-[10px] rounded mt-0.5">
-                          {leg.airline_code || 'FL'}
-                        </div>
+<div className="flex items-start gap-3 col-span-2">
+                        <AirlineLogo code={leg.airline_code} size={24} className="mt-0.5" />
                         <div>
                           <div className="font-bold text-gray-900">
                             {leg.airline_name}{' '}
@@ -834,7 +962,7 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
                     </div>
                   </div>
                 ))}
-
+ 
                 <div className="flex gap-2 mt-2">
                   <span className={`text-[11px] font-bold px-2 py-1 rounded ${flight.is_refundable ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
                     {flight.is_refundable ? 'Refundable' : 'Non-Refundable'}
@@ -842,7 +970,7 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
                 </div>
               </div>
             )}
-
+ 
             {activeDetailTab === 'fare' && (
               <div className="max-w-sm">
                 <div className="font-bold text-gray-900 mb-3">Fare Breakdown (per adult)</div>
@@ -856,7 +984,7 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle }) {
                     <span>Total</span><span>₹ {Number(flight.price).toLocaleString()}</span>
                   </div>
                 </div>
-
+ 
                 {flight.fareOptions?.length > 1 && (
                   <div className="mt-4">
                     <div className="font-bold text-gray-900 mb-2">Other Fare Options</div>

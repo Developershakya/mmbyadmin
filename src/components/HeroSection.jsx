@@ -159,7 +159,7 @@ export default function HeroSection() {
     indianCities.find((c) => c.code === "DEL")
   );
   const [to, setTo] = useState(
-    indianCities.find((c) => c.code === "IXL")
+    indianCities.find((c) => c.code === "BOM")
   );
 
   const [multiCityLegs, setMultiCityLegs] = useState([

@@ -1,6 +1,6 @@
 import { callSrdvApi } from '../../../lib/srdvApi';
 
-function parseFlightItem(item, legIndex) {
+function parseFlightItem(item, legIndex, traceId) {
   const legs = item.Segments?.[0] || [];
   if (legs.length === 0) return null;
 
@@ -11,7 +11,6 @@ function parseFlightItem(item, legIndex) {
   const fareSegments = fareData.FareSegments || [];
   const fareBreakdown = fareData.FareBreakdown?.[0] || {};
 
-  // Har leg (stop) ka apna baggage/seat/cabin — connecting flights ke liye
   const legDetails = legs.map((leg, i) => ({
     airline_name: leg.Airline.AirlineName,
     airline_code: leg.Airline.AirlineCode,
@@ -32,7 +31,6 @@ function parseFlightItem(item, legIndex) {
     seats_left: fareSegments[i]?.NoOfSeatAvailable,
   }));
 
-  // Same flight ke alag-alag fare options (Publish/SME/Flexi)
   const fareOptions = (item.FareDataMultiple || []).map((fd) => ({
     source: fd.Source,
     price: fd.OfferedFare,
@@ -40,8 +38,13 @@ function parseFlightItem(item, legIndex) {
     result_index: fd.ResultIndex,
   }));
 
+  // ⭐ NEW: ye 2 fields booking ke liye use honge
+  const resultIndex = fareData.ResultIndex;
+
   return {
-    id: `${fareData.ResultIndex || firstLeg.Airline.FlightNumber}-leg${legIndex}-${Math.random().toString(36).slice(2, 7)}`,
+    id: `${resultIndex}-leg${legIndex}`,   // ⭐ CHANGED: ab stable id, random hata diya
+    resultIndex,                            // ⭐ NEW
+    traceId,                                // ⭐ NEW
     legIndex,
     airline_code: firstLeg.Airline.AirlineCode,
     airline_name: firstLeg.Airline.AirlineName,
@@ -65,8 +68,8 @@ function parseFlightItem(item, legIndex) {
     cabin_baggage: fareSegments[0]?.CabinBaggage || 'N/A',
     cabin_class: fareSegments[0]?.CabinClassName || 'N/A',
     seats_left: fareSegments[0]?.NoOfSeatAvailable,
+is_lcc: !!fareData.IsLCC,   // ⭐ NEW
     legDetails,
-    fareOptions,
   };
 }
 
@@ -99,7 +102,7 @@ function extractResults(data, legIndex) {
   const results = [];
   data.Results.forEach((group) => {
     group.forEach((item) => {
-      const flight = parseFlightItem(item, legIndex);
+      const flight = parseFlightItem(item, legIndex, data.TraceId); // ⭐ CHANGED
       if (flight) results.push(flight);
     });
   });

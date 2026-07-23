@@ -20,5 +20,12 @@ export async function callSrdvApi(baseUrl, endpoint, extraPayload = {}) {
     body: JSON.stringify(payload)
   });
 
-  return response.json();
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error(`Non-JSON response from ${endpoint}:`, text.slice(0, 500));
+    throw new Error(`SRDV ${endpoint} returned invalid response (status ${response.status})`);
+  }
 }
