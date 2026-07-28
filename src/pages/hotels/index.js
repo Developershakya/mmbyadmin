@@ -308,7 +308,7 @@ export default function HotelsPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
 
-        <aside className="w-1/4 bg-white p-5 rounded-lg shadow-sm h-fit hidden md:block">
+        <aside className="w-1/4 bg-white p-5 rounded-lg shadow-sm h-fit hidden md:block sticky top-24 self-start">
           <h2 className="text-lg font-bold tracking-wide mb-6">FILTERS</h2>
 
           <div className="mb-6">

@@ -4,14 +4,11 @@ dotenv.config()
 const sequelize = new Sequelize(
     process.env.DB_NAME,
     process.env.DB_USER,
-    process.env.PASSWORD,
+    process.env.DB_PASSWORD,   // ⭐ PASSWORD → DB_PASSWORD kiya, .env se match karne ke liye
     {
-        host:process.env.DB_HOST,
-        port:3306,
-        dialect:"mysql",
-
+        host: process.env.DB_HOST,
+        port: 3306,
+        dialect: "mysql",
     }
 );
 export default sequelize;
-
-

@@ -1,12 +1,62 @@
 "use client"
 import React, { useState } from "react"
+import { useRouter } from "next/router"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 
 export function LoginForm({ className, ...props }) {
+  const router = useRouter()
+  const redirectTo = router.query.redirect || "/"
+
   const [isLogin, setIsLogin] = useState(true)
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" })
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  function switchMode(loginMode) {
+    setIsLogin(loginMode)
+    setError("")
+    setForm({ name: "", email: "", password: "", confirmPassword: "" })
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError("")
+
+    if (!isLogin && form.password !== form.confirmPassword) {
+      setError("Password match nahi ho raha")
+      return
+    }
+
+    setLoading(true)
+    try {
+      const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register"
+      const payload = isLogin
+        ? { email: form.email, password: form.password }
+        : { name: form.name, email: form.email, password: form.password }
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || (isLogin ? "Login fail ho gaya" : "Registration fail ho gaya"))
+        setLoading(false)
+        return
+      }
+
+      router.push(redirectTo)
+    } catch (err) {
+      setError("Kuch galat ho gaya, dobara try karo")
+      setLoading(false)
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -41,7 +91,7 @@ export function LoginForm({ className, ...props }) {
                   : "text-gray-600"
               )}
               type="button"
-              onClick={() => setIsLogin(true)}
+              onClick={() => switchMode(true)}
             >
               Login
             </button>
@@ -53,14 +103,14 @@ export function LoginForm({ className, ...props }) {
                   : "text-gray-600"
               )}
               type="button"
-              onClick={() => setIsLogin(false)}
+              onClick={() => switchMode(false)}
             >
               Sign Up
             </button>
           </div>
 
           {/* Form */}
-          <form className="space-y-5">
+          <form className="space-y-5" onSubmit={handleSubmit}>
             {!isLogin && (
               <div>
                 <Label
@@ -73,6 +123,8 @@ export function LoginForm({ className, ...props }) {
                   type="text"
                   placeholder="Enter your name"
                   className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
                   required
                 />
               </div>
@@ -83,13 +135,15 @@ export function LoginForm({ className, ...props }) {
                 htmlFor="email"
                 className="text-sm font-medium text-gray-700 mb-1 block"
               >
-                Email or Mobile Number
+                Email
               </Label>
               <input
                 id="email"
-                type="text"
-                placeholder="Enter email or mobile number"
+                type="email"
+                placeholder="Enter your email"
                 className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
                 required
               />
             </div>
@@ -106,6 +160,9 @@ export function LoginForm({ className, ...props }) {
                 type="password"
                 placeholder="Enter your password"
                 className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                minLength={6}
                 required
               />
             </div>
@@ -123,6 +180,8 @@ export function LoginForm({ className, ...props }) {
                   type="password"
                   placeholder="Re-enter your password"
                   className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  value={form.confirmPassword}
+                  onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
                   required
                 />
               </div>
@@ -135,8 +194,8 @@ export function LoginForm({ className, ...props }) {
                   <input type="checkbox" className="rounded text-orange-500" />
                   Remember me
                 </label>
-                <a
-                  href="#"
+       <a         
+  href="#"
                   className="text-sm text-orange-600 hover:text-orange-700 font-medium"
                 >
                   Forgot Password?
@@ -144,18 +203,23 @@ export function LoginForm({ className, ...props }) {
               </div>
             )}
 
+            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+
             {/* Button */}
-            <Button type="submit"
-              className="w-full h-12 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200">
-              {isLogin ? "Sign In" : "Sign Up"}
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full h-12 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              {loading ? "Please wait..." : isLogin ? "Sign In" : "Sign Up"}
             </Button>
           </form>
 
           {/* Terms */}
           <p className="text-center text-xs text-gray-500 mt-4">
             By continuing, you agree to our{" "}
-            <Link href="/termAndCondition" className="text-orange-600 hover:text-orange-700 font-medium"
-            >Terms & Conditions
+            <Link href="/termAndCondition" className="text-orange-600 hover:text-orange-700 font-medium">
+              Terms & Conditions
             </Link>{" "}
             and{" "}
             <a href="#" className="text-orange-600 hover:text-orange-700 font-medium">

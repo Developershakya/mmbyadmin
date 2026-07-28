@@ -1,9 +1,11 @@
 import { useRouter } from 'next/router';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import LocationSearchBox from '../../components/LocationSearchBox';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 import AirlineLogo from '../../components/booking/AirlineLogo';
+import Header from '../../components/Header';
+import Footer from '../../components/Footer';
  
 export default function FlightsPage() {
   const router = useRouter();
@@ -157,11 +159,15 @@ export default function FlightsPage() {
   }, [router.isReady, from, to, date, trip, adults, children, infants, returnDate]);
  
   // Derived: airline counts for filter sidebar
+ // Derived: airline counts for filter sidebar (naam + code dono store karo, logo ke liye)
   const airlineCounts = useMemo(() => {
     const counts = {};
     flights.forEach((f) => {
       const name = f.airline_name || 'Unknown';
-      counts[name] = (counts[name] || 0) + 1;
+      if (!counts[name]) {
+        counts[name] = { count: 0, code: f.airline_code };
+      }
+      counts[name].count += 1;
     });
     return counts;
   }, [flights]);
@@ -256,14 +262,31 @@ export default function FlightsPage() {
     );
   }
  
-  // Generate a 7-day date strip centered on selected date
+const dateStripRef = useRef(null);
+
+  function scrollDateStrip(direction) {
+    if (!dateStripRef.current) return;
+    const scrollAmount = 200; // ek click me kitna slide ho
+    dateStripRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
+  }
+
   const dateStrip = useMemo(() => {
     if (!date || date === 'undefined' || isNaN(new Date(date).getTime())) return [];
     const base = new Date(date);
+
+    let start = new Date(base);
+    start.setDate(base.getDate() - 3);
+    if (start < today) {
+      start = new Date(today);
+    }
+
     const days = [];
-    for (let i = -3; i <= 3; i++) {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
       days.push(d);
     }
     return days;
@@ -353,6 +376,8 @@ export default function FlightsPage() {
   }
  
   return (
+     <>
+      <Header />
     <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen pb-24">
  
       {/* Search Bar Header */}
@@ -408,11 +433,19 @@ export default function FlightsPage() {
                 citySearchApi="/api/cities/airports"
               />
             </div>
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-full pointer-events-none">
-              <div className="h-8 border-l border-gray-600/50 absolute"></div>
-              <div className="bg-[#1E2A38] border border-gray-600 rounded-full w-5 h-5 flex items-center justify-center z-10 text-gray-400">
+<div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-full">
+              <div className="h-8 border-l border-gray-600/50 absolute pointer-events-none"></div>
+              <button
+                type="button"
+                onClick={() => {
+                  const temp = headerFrom;
+                  setHeaderFrom(headerTo);
+                  setHeaderTo(temp);
+                }}
+                className="bg-[#1E2A38] border border-gray-600 rounded-full w-6 h-6 flex items-center justify-center z-10 text-gray-300 hover:text-orange-500 hover:border-orange-500 transition cursor-pointer"
+              >
                 <i className="fa-solid fa-arrows-left-right text-[9px]"></i>
-              </div>
+              </button>
             </div>
             <div className="flex-1 flex flex-col justify-center pl-8">
               <LocationSearchBox
@@ -618,12 +651,14 @@ export default function FlightsPage() {
               {Object.keys(airlineCounts).length === 0 && (
                 <p className="text-xs text-gray-400">Search karne ke baad airlines yahan dikhengi</p>
               )}
-              {Object.entries(airlineCounts).map(([name, count]) => (
+{Object.entries(airlineCounts).map(([name, data]) => (
                 <label key={name} className="flex items-center justify-between cursor-pointer">
                   <span className="flex items-center gap-2">
-                    <input type="checkbox" className="accent-orange-500" checked={selectedAirlines.includes(name)} onChange={() => toggleAirline(name)} /> {name}
+                    <input type="checkbox" className="accent-orange-500" checked={selectedAirlines.includes(name)} onChange={() => toggleAirline(name)} />
+                    <AirlineLogo code={data.code} size={20} />
+                    {name}
                   </span>
-                  <span className="text-gray-400">{count}</span>
+                  <span className="text-gray-400">{data.count}</span>
                 </label>
               ))}
             </div>
@@ -650,10 +685,22 @@ export default function FlightsPage() {
         <section className="w-full md:w-3/4 space-y-4">
  
           {/* Date strip - navigates by changing the date query param */}
-          {date && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 flex items-center gap-1 overflow-x-auto">
-              <div className="flex-1 grid grid-cols-7 gap-1 text-center min-w-[500px]">
-{dateStrip.map((d) => {
+{date && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => scrollDateStrip('left')}
+                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 hover:bg-orange-50 text-gray-500 hover:text-orange-600 transition"
+              >
+                <i className="fa-solid fa-chevron-left text-xs"></i>
+              </button>
+
+              <div
+                ref={dateStripRef}
+                className="flex-1 flex gap-1 text-center overflow-x-auto scroll-smooth"
+                style={{ scrollbarWidth: 'none' }}
+              >
+                {dateStrip.map((d) => {
                   const iso = toISODate(d);
                   const isActive = iso === date;
                   const priceForDate = dateStripPrices[iso];
@@ -661,7 +708,7 @@ export default function FlightsPage() {
                     <div
                       key={iso}
                       onClick={() => goToDate(iso)}
-                      className={`p-1.5 rounded cursor-pointer transition-colors ${
+                      className={`flex-shrink-0 w-[100px] p-1.5 rounded cursor-pointer transition-colors ${
                         isActive ? 'bg-orange-500 text-white shadow-sm' : 'hover:bg-gray-50'
                       }`}
                     >
@@ -679,6 +726,14 @@ export default function FlightsPage() {
                   );
                 })}
               </div>
+
+              <button
+                type="button"
+                onClick={() => scrollDateStrip('right')}
+                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 hover:bg-orange-50 text-gray-500 hover:text-orange-600 transition"
+              >
+                <i className="fa-solid fa-chevron-right text-xs"></i>
+              </button>
             </div>
           )}
 
@@ -817,6 +872,8 @@ export default function FlightsPage() {
         </div>
       )}
     </div>
+      <Footer />
+    </>
   );
 }
  

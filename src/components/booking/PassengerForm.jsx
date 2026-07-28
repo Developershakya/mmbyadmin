@@ -1,13 +1,46 @@
-export default function PassengerForm({ label, passenger, onChange, flight }) {
+"use client";
+import { useState } from "react";
+import SeatMapModal from "./SeatMapModal";
+import MealModal from "./MealModal";
+import BaggageModal from "./BaggageModal";
+
+export default function PassengerForm({ label, passenger, onChange, flight, index = 0 }) {
+  const [seatModalOpen, setSeatModalOpen] = useState(false);
+  const [mealModalOpen, setMealModalOpen] = useState(false);
+  const [baggageModalOpen, setBaggageModalOpen] = useState(false);
+
   function update(field, value) {
     onChange({ ...passenger, [field]: value });
   }
+
+  function handleSeatConfirm(seatNumber) {
+    update("selectedSeat", seatNumber);
+    setSeatModalOpen(false);
+  }
+
+  function handleMealConfirm(meals) {
+    // meals is an array of { Code, AirlineDescription, Price, Qty, ... }
+    update("selectedMeal", meals);
+    setMealModalOpen(false);
+  }
+
+  function handleBaggageConfirm(baggage) {
+    update("selectedBaggage", baggage);
+    setBaggageModalOpen(false);
+  }
+
+  const mealLabel = Array.isArray(passenger.selectedMeal) && passenger.selectedMeal.length > 0
+    ? `Meal: ${passenger.selectedMeal.length} selected`
+    : "Select Meal";
+
+  const baggageLabel = passenger.selectedBaggage
+    ? `Baggage: ${passenger.selectedBaggage.Weight ? passenger.selectedBaggage.Weight + "Kg" : passenger.selectedBaggage.Code}`
+    : "Select Baggage";
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 mb-4">
       <h3 className="text-sm font-bold text-blue-900 mb-4">{label}</h3>
 
-      {/* Basic Details */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
         <select
           value={passenger.title}
@@ -76,7 +109,6 @@ export default function PassengerForm({ label, passenger, onChange, flight }) {
         </div>
       </div>
 
-      {/* Passport Details — sirf international flights ke liye zaroori */}
       <div className="border-t border-gray-100 pt-4">
         <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">
           Passport Details <span className="text-gray-400 font-normal normal-case">(International ke liye)</span>
@@ -111,35 +143,74 @@ export default function PassengerForm({ label, passenger, onChange, flight }) {
         </div>
       </div>
 
-      {/* Additional Services — abhi Seat test-wired hai, Meal/Baggage baad me */}
       <div className="border-t border-gray-100 pt-4 mt-4">
         <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Additional Services</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <button
             type="button"
-            onClick={async () => {
-              const res = await fetch('/api/flights/seatmap', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ traceId: flight?.traceId, resultIndex: flight?.resultIndex }),
-              });
-              const data = await res.json();
-              console.log('SEATMAP RESULT:', data);
-            }}
-            className="border border-orange-400 text-orange-500 text-xs font-semibold rounded py-2.5 hover:bg-orange-50 transition"
+            onClick={() => setSeatModalOpen(true)}
+            className="border border-blue-400 text-blue-600 text-xs font-semibold rounded py-2.5 hover:bg-blue-50 transition"
           >
-            Select Seat
+            {passenger.selectedSeat ? `Seat: ${passenger.selectedSeat}` : "Select Seat"}
           </button>
 
-          <button type="button" className="border border-orange-400 text-orange-500 text-xs font-semibold rounded py-2.5 hover:bg-orange-50 transition">
-            Select Meal
+          <button
+            type="button"
+            onClick={() => setMealModalOpen(true)}
+            className="border border-blue-400 text-blue-600 text-xs font-semibold rounded py-2.5 hover:bg-blue-50 transition"
+          >
+            {mealLabel}
           </button>
 
-          <button type="button" className="border border-orange-400 text-orange-500 text-xs font-semibold rounded py-2.5 hover:bg-orange-50 transition">
-            Select Baggage
+          <button
+            type="button"
+            onClick={() => setBaggageModalOpen(true)}
+            className="border border-blue-400 text-blue-600 text-xs font-semibold rounded py-2.5 hover:bg-blue-50 transition"
+          >
+            {baggageLabel}
           </button>
         </div>
+
+        {Array.isArray(passenger.selectedMeal) && passenger.selectedMeal.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Selected Meals:</p>
+            <div className="space-y-1.5">
+              {passenger.selectedMeal.map((m, i) => (
+                <div key={m.Code || i} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm">
+                  <span className="text-gray-700">
+                    {m.AirlineDescription || m.Description || m.Code} (Qty: {m.Qty || 1})
+                  </span>
+                  <span className="font-semibold text-gray-800">₹{((m.Price || 0) * (m.Qty || 1)).toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      {seatModalOpen && (
+        <SeatMapModal
+          flight={flight}
+          onClose={() => setSeatModalOpen(false)}
+          onConfirm={handleSeatConfirm}
+        />
+      )}
+
+      {mealModalOpen && (
+        <MealModal
+          flight={flight}
+          onClose={() => setMealModalOpen(false)}
+          onConfirm={handleMealConfirm}
+        />
+      )}
+
+      {baggageModalOpen && (
+        <BaggageModal
+          flight={flight}
+          onClose={() => setBaggageModalOpen(false)}
+          onConfirm={handleBaggageConfirm}
+        />
+      )}
     </div>
   );
 }

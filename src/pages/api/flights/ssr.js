@@ -2,11 +2,13 @@ import { callSrdvApi } from '../../../lib/srdvApi';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
-  const { traceId, resultIndex } = req.body;
+  const { traceId, resultIndex, srdvType, srdvIndex } = req.body;
 
   try {
     const data = await callSrdvApi(process.env.FLIGHT_API_URL, 'SSR', {
       TraceId: traceId,
+      SrdvType: srdvType,
+      SrdvIndex: srdvIndex,
       ResultIndex: resultIndex,
     });
 

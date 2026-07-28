@@ -1,6 +1,6 @@
 import { callSrdvApi } from '../../../lib/srdvApi';
 
-function parseFlightItem(item, legIndex, traceId) {
+function parseFlightItem(item, legIndex, traceId, srdvType) {
   const legs = item.Segments?.[0] || [];
   if (legs.length === 0) return null;
 
@@ -36,15 +36,19 @@ function parseFlightItem(item, legIndex, traceId) {
     price: fd.OfferedFare,
     is_refundable: fd.IsRefundable,
     result_index: fd.ResultIndex,
+    srdv_index: fd.SrdvIndex, // ⭐ NEW
   }));
 
-  // ⭐ NEW: ye 2 fields booking ke liye use honge
+  // ⭐ NEW: SeatMap ke liye zaroori 2 fields
   const resultIndex = fareData.ResultIndex;
+  const srdvIndex = fareData.SrdvIndex;
 
   return {
-    id: `${resultIndex}-leg${legIndex}`,   // ⭐ CHANGED: ab stable id, random hata diya
-    resultIndex,                            // ⭐ NEW
-    traceId,                                // ⭐ NEW
+    id: `${resultIndex}-leg${legIndex}`,
+    resultIndex,
+    traceId,
+    srdvType,   // ⭐ NEW
+    srdvIndex,  // ⭐ NEW
     legIndex,
     airline_code: firstLeg.Airline.AirlineCode,
     airline_name: firstLeg.Airline.AirlineName,
@@ -68,7 +72,8 @@ function parseFlightItem(item, legIndex, traceId) {
     cabin_baggage: fareSegments[0]?.CabinBaggage || 'N/A',
     cabin_class: fareSegments[0]?.CabinClassName || 'N/A',
     seats_left: fareSegments[0]?.NoOfSeatAvailable,
-is_lcc: !!fareData.IsLCC,   // ⭐ NEW
+    is_lcc: !!fareData.IsLCC,
+    fareOptions,
     legDetails,
   };
 }
@@ -89,20 +94,20 @@ async function searchOneLeg(adultCount, childCount, infantCount, seg) {
     }],
   });
 
-  // TEMPORARY — sirf debug karne ke liye, sirf ek flight ka pura raw object dekhna hai
   if (data.Results?.[0]?.[0]) {
     console.log('RAW FLIGHT ITEM:', JSON.stringify(data.Results[0][0], null, 2));
   }
 
   return data;
 }
+
 /** SRDV data object se flat results array banata hai */
 function extractResults(data, legIndex) {
   if (!data.Results || data.Results.length === 0) return [];
   const results = [];
   data.Results.forEach((group) => {
     group.forEach((item) => {
-      const flight = parseFlightItem(item, legIndex, data.TraceId); // ⭐ CHANGED
+      const flight = parseFlightItem(item, legIndex, data.TraceId, data.SrdvType); // ⭐ CHANGED
       if (flight) results.push(flight);
     });
   });
@@ -118,14 +123,11 @@ export default async function handler(req, res) {
     let flatResults = [];
 
     if (journeyType === '1') {
-      // ONE WAY — single call
       const data = await searchOneLeg(adultCount, childCount, infantCount, segments[0]);
       console.log('OneWay SRDV Error:', data.Error?.ErrorCode, data.Error?.ErrorMessage);
       flatResults = extractResults(data, 0);
 
     } else {
-      // ROUND TRIP (journeyType='2') ya MULTI CITY (journeyType='3')
-      // Workaround: har leg ke liye alag OneWay call karo
       console.log(`${journeyType === '2' ? 'RoundTrip' : 'MultiCity'}: ${segments.length} legs ko alag-alag search kar rahe hain`);
 
       const legResults = await Promise.all(

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
+import UserMenu from "./UserMenu";
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -168,11 +169,8 @@ export default function Header() {
               </div>
             </div>
 
-            <Link href="/login">
-              <Button className="bg-orange-600 hover:bg-orange-700 text-white rounded-lg px-4 py-2 transition">
-                Login / Signup
-              </Button>
-            </Link>
+            {/* ⭐ CHANGED: hardcoded Login button ki jagah UserMenu (auth-aware) */}
+            <UserMenu />
           </div>
 
           {/* Mobile menu button */}
@@ -213,13 +211,9 @@ export default function Header() {
                 Contact Us
               </Link>
             </nav>
+            {/* ⭐ CHANGED: hardcoded Login button ki jagah UserMenu (auth-aware) */}
             <div className="flex flex-col space-y-2 mt-4">
-              <Link href="/login">
-                <Button className="justify-center font-semibold w-full">
-                  <User className="w-4 h-4 mr-2" />
-                  Login
-                </Button>
-              </Link>
+              <UserMenu />
             </div>
           </div>
         )}
