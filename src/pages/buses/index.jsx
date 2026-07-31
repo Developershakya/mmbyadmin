@@ -75,7 +75,7 @@ export default function BusesPage() {
         const data = await res.json();
 
         if (!data.success) {
-          setError(data.message || 'Buses fetch nahi ho paayi. Baad me try karo.');
+          setError(data.message || 'Failed to load buses. Please try again later.');
           setBuses([]);
           return;
         }
@@ -83,7 +83,7 @@ export default function BusesPage() {
         setBuses(data.results || []);
       } catch (err) {
         console.error('fetchBuses error:', err);
-        setError('Buses fetch nahi ho paayi. Baad me try karo.');
+        setError('Failed to load buses. Please try again later.');
       } finally {
         setLoading(false);
       }
@@ -126,120 +126,136 @@ export default function BusesPage() {
     setMaxPrice(5000);
   }
 
-  function handleSearch() {
-    if (!searchFrom || !searchTo || !selectedDate) {
-      alert('कृपया सभी विवरण भरें');
-      return;
-    }
-
-    const dateStr = selectedDate.toISOString().split('T')[0];
-    router.push(
-      `/buses?from=${encodeURIComponent(searchFrom)}&to=${encodeURIComponent(searchTo)}&date=${dateStr}`
-    );
+function handleSearch() {
+  if (!searchFrom || !searchTo || !selectedDate) {
+    alert("Please fill in all details");
+    return;
   }
 
-  // Show search form if no results
-  if (!from || !to || !date) {
-    return (
-      <>
-        <Header />
-        <div className="bg-gradient-to-r from-orange-50 to-orange-100 min-h-screen py-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-              <h1 className="text-4xl lg:text-5xl font-bold text-gray-800 mb-4">
-                बस खोजें
-              </h1>
-              <p className="text-lg text-gray-600">
-                भारत भर में सुरक्षित और आरामदायक बस यात्रा
-              </p>
-            </div>
+  const dateStr = selectedDate.toISOString().split("T")[0];
 
-            <div className="bg-white rounded-2xl shadow-xl p-8 max-w-4xl mx-auto">
-              <h2 className="text-2xl font-bold mb-6 text-gray-800">बस टिकट खोजें</h2>
+  router.push(
+    `/buses?from=${encodeURIComponent(searchFrom)}&to=${encodeURIComponent(searchTo)}&date=${dateStr}`
+  );
+}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
-                {/* From */}
-                <div>
-                  <label className="text-xs uppercase font-semibold text-gray-600 block mb-2">
-                    कहाँ से
-                  </label>
-                  <select
-                    value={searchFrom}
-                    onChange={(e) => setSearchFrom(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 text-gray-700 font-medium"
-                  >
-                    <option value="">शहर चुनें</option>
-                    {indianCities.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+// Show search form if no results
+if (!from || !to || !date) {
+  return (
+    <>
+      <Header />
 
-                {/* To */}
-                <div>
-                  <label className="text-xs uppercase font-semibold text-gray-600 block mb-2">
-                    कहाँ तक
-                  </label>
-                  <select
-                    value={searchTo}
-                    onChange={(e) => setSearchTo(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 text-gray-700 font-medium"
-                  >
-                    <option value="">शहर चुनें</option>
-                    {indianCities.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+      <div className="bg-gradient-to-r from-orange-50 to-orange-100 min-h-screen py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-                {/* Date */}
-                <div className="relative">
-                  <label className="text-xs uppercase font-semibold text-gray-600 block mb-2">
-                    यात्रा की तारीख
-                  </label>
-                  <div
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg cursor-pointer bg-white flex items-center justify-between"
-                    onClick={() => setOpenDate(!openDate)}
-                  >
-                    <span className="text-gray-700 font-medium">
-                      {selectedDate
-                        ? selectedDate.toLocaleDateString("hi-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })
-                        : "तारीख चुनें"}
-                    </span>
-                    <CalendarIcon className="w-5 h-5 text-orange-500" />
-                  </div>
+          <div className="text-center mb-12">
+            <h1 className="text-4xl lg:text-5xl font-bold text-gray-800 mb-4">
+              Search Buses
+            </h1>
 
-                  {openDate && (
-                    <div className="absolute mt-2 p-3 bg-white shadow-lg rounded-lg z-10 border-2 border-orange-200">
-                      <DayPicker
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={(date) => {
-                          setSelectedDate(date);
-                          setOpenDate(false);
-                        }}
-                        disabled={{ before: new Date() }}
-                      />
-                    </div>
-                  )}
-                </div>
+            <p className="text-lg text-gray-600">
+              Safe and comfortable bus travel across India
+            </p>
+          </div>
 
-                {/* Search Button */}
-                <div>
-                  <Button
-                    onClick={handleSearch}
-                    className="w-full px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-lg uppercase tracking-wide transition-colors"
-                  >
-                    बस खोजें
-                  </Button>
+          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-4xl mx-auto">
+
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">
+              Search Bus Tickets
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
+
+              {/* From */}
+              <div>
+                <label className="text-xs uppercase font-semibold text-gray-600 block mb-2">
+                  From
+                </label>
+
+                <select
+                  value={searchFrom}
+                  onChange={(e) => setSearchFrom(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 text-gray-700 font-medium"
+                >
+                  <option value="">Select City</option>
+
+                  {indianCities.map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+// To
+<div>
+  <label className="text-xs uppercase font-semibold text-gray-600 block mb-2">
+    To
+  </label>
+
+  <select
+    value={searchTo}
+    onChange={(e) => setSearchTo(e.target.value)}
+    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 text-gray-700 font-medium"
+  >
+    <option value="">Select City</option>
+
+    {indianCities.map((city) => (
+      <option key={city} value={city}>
+        {city}
+      </option>
+    ))}
+  </select>
+</div>
+
+
+// Date
+<div className="relative">
+  <label className="text-xs uppercase font-semibold text-gray-600 block mb-2">
+    Travel Date
+  </label>
+
+  <div
+    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg cursor-pointer bg-white flex items-center justify-between"
+    onClick={() => setOpenDate(!openDate)}
+  >
+    <span className="text-gray-700 font-medium">
+      {selectedDate
+        ? selectedDate.toLocaleDateString("en-US", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : "Select Date"}
+    </span>
+
+    <CalendarIcon className="w-5 h-5 text-orange-500" />
+  </div>
+
+  {openDate && (
+    <div className="absolute mt-2 p-3 bg-white shadow-lg rounded-lg z-10 border-2 border-orange-200">
+      <DayPicker
+        mode="single"
+        selected={selectedDate}
+        onSelect={(date) => {
+          setSelectedDate(date);
+          setOpenDate(false);
+        }}
+        disabled={{ before: new Date() }}
+      />
+    </div>
+  )}
+</div>
+
+
+// Search Button
+<div>
+  <Button
+    onClick={handleSearch}
+    className="w-full px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-lg uppercase tracking-wide transition-colors"
+  >
+    Search Buses
+  </Button>
+</div>
                 </div>
               </div>
             </div>
@@ -294,107 +310,123 @@ export default function BusesPage() {
 
         <main className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
 
-          <aside className="w-1/4 bg-white p-5 rounded-lg shadow-sm h-fit hidden md:block">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold tracking-wide">फिल्टर</h2>
-              <button onClick={resetFilters} className="text-xs font-semibold text-orange-500 uppercase">रीसेट</button>
-            </div>
+// Filter Sidebar
+<aside className="w-1/4 bg-white p-5 rounded-lg shadow-sm h-fit hidden md:block">
+  <div className="flex justify-between items-center mb-6">
+    <h2 className="text-lg font-bold tracking-wide">Filters</h2>
 
-            <div className="mb-6">
-              <h3 className="text-sm font-bold mb-3">बस का प्रकार</h3>
-              <div className="space-y-2 text-sm">
-                {Object.keys(busTypeCounts).length === 0 && (
-                  <p className="text-xs text-gray-400">खोज के बाद बस के प्रकार यहाँ दिखेंगे</p>
-                )}
-                {Object.entries(busTypeCounts).map(([type, count]) => (
-                  <label key={type} className="flex items-center justify-between cursor-pointer">
-                    <span className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="accent-orange-500"
-                        checked={selectedBusTypes.includes(type)}
-                        onChange={() => toggleBusType(type)}
-                      />
-                      {type}
-                    </span>
-                    <span className="text-gray-400">{count}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+    <button
+      onClick={resetFilters}
+      className="text-xs font-semibold text-orange-500 uppercase"
+    >
+      Reset
+    </button>
+  </div>
 
-            <hr className="my-4 border-gray-100" />
+  <div className="mb-6">
+    <h3 className="text-sm font-bold mb-3">Bus Type</h3>
 
-            <div>
-              <h3 className="text-sm font-bold mb-2">अधिकतम कीमत</h3>
-              <div className="text-xs text-gray-500 mb-2">₹ {maxPrice.toLocaleString()}</div>
-              <input
-                type="range"
-                className="w-full accent-orange-500"
-                min="200"
-                max="5000"
-                step="100"
-                value={maxPrice}
-                onChange={(e) => setMaxPrice(Number(e.target.value))}
-              />
-            </div>
-          </aside>
+    <div className="space-y-2 text-sm">
+      {Object.keys(busTypeCounts).length === 0 && (
+        <p className="text-xs text-gray-400">
+          Bus types will appear here after searching
+        </p>
+      )}
 
-          <section className="w-full md:w-3/4 space-y-4">
-            <div className="flex justify-between items-center text-sm pt-2">
-              <div>
-                <h1 className="text-base font-bold text-gray-900">
-                  {from} से {to} के लिए बस दिखा रहे हैं
-                </h1>
-                <p className="text-xs text-gray-500 mt-0.5">{date} • {visibleBuses.length} परिणाम</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">क्रम:</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="border border-gray-200 rounded p-1.5 bg-white text-xs font-semibold outline-none"
+      {Object.entries(busTypeCounts).map(([type, count]) => (
+        <label
+          key={type}
+          className="flex items-center justify-between cursor-pointer"
+        >
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="accent-orange-500"
+              checked={selectedBusTypes.includes(type)}
+              onChange={() => toggleBusType(type)}
+            />
+
+            {type}
+          </span>
+
+          <span className="text-gray-400">{count}</span>
+        </label>
+      ))}
+    </div>
+  </div>
+
+  <hr className="my-4 border-gray-100" />
+
+  <div>
+    <h3 className="text-sm font-bold mb-2">Maximum Price</h3>
+
+    <div className="text-xs text-gray-500 mb-2">
+      ₹ {maxPrice.toLocaleString()}
+    </div>
+
+    <input
+      type="range"
+      className="w-full accent-orange-500"
+      min="200"
+      max="5000"
+      step="100"
+      value={maxPrice}
+      onChange={(e) => setMaxPrice(Number(e.target.value))}
+    />
+  </div>
+</aside>
+
+
+<section className="w-full md:w-3/4 space-y-4">
+  <div className="flex justify-between items-center text-sm pt-2">
+    <div>
+      <h1 className="text-base font-bold text-gray-900">
+        Showing buses from {from} to {to}
+      </h1>
+
+      <p className="text-xs text-gray-500 mt-0.5">
+        {date} • {visibleBuses.length} results
+      </p>
+    </div>
+
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-gray-500">Sort:</span>
                 >
-                  <option value="recommended">सुझाया हुआ</option>
-                  <option value="price_low">कीमत: कम से अधिक</option>
-                  <option value="departure_early">प्रस्थान: जल्दी</option>
-                </select>
-              </div>
-            </div>
+<option value="recommended">Recommended</option>
+<option value="price_low">Price: Low to High</option>
+<option value="departure_early">Departure: Earliest</option>
+</select>
+</div>
+</div>
 
-            {loading && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
-                बसें लोड हो रही हैं...
-              </div>
-            )}
+{loading && (
+  <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
+    Loading buses...
+  </div>
+)}
 
-            {!loading && error && (
-              <div className="bg-white rounded-lg shadow-sm border border-red-100 p-10 text-center text-red-500">
-                {error}
-              </div>
-            )}
+{!loading && error && (
+  <div className="bg-white rounded-lg shadow-sm border border-red-100 p-10 text-center text-red-500">
+    {error}
+  </div>
+)}
 
-            {!loading && !error && visibleBuses.length === 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
-                इस मार्ग के लिए कोई बस नहीं मिली।
-              </div>
-            )}
+{!loading && !error && visibleBuses.length === 0 && (
+  <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
+    No buses found for this route.
+  </div>
+)}
 
-            {!loading && !error && visibleBuses.map((bus) => (
-              <BusCard
-                key={bus.id}
-                bus={bus}
-                isExpanded={expandedId === bus.id}
-                onToggle={() => setExpandedId(expandedId === bus.id ? null : bus.id)}
-              />
-            ))}
-          </section>
-        </main>
-      </div>
-      <Footer />
-    </>
-  );
-}
+{!loading && !error && visibleBuses.map((bus) => (
+  <BusCard
+    key={bus.id}
+    bus={bus}
+    isExpanded={expandedId === bus.id}
+    onToggle={() =>
+      setExpandedId(expandedId === bus.id ? null : bus.id)
+    }
+  />
+))}
 
 function BusCard({ bus, isExpanded, onToggle }) {
   return (
@@ -425,33 +457,55 @@ function BusCard({ bus, isExpanded, onToggle }) {
 
         <div className="text-right">
           <div className="text-lg font-bold text-gray-900">₹ {Number(bus.price).toLocaleString()}</div>
-          <div className="text-[10px] text-gray-400">प्रति सीट</div>
-        </div>
+<div className="text-[10px] text-gray-400">Per Seat</div>
+</div>
 
-        <div className="flex flex-col items-end gap-1">
-          <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-5 py-2 rounded uppercase tracking-wider transition-colors">
-            सीटें देखें
-          </button>
-          {bus.seats_available != null && (
-            <span className="text-[11px] text-orange-600 font-medium">{bus.seats_available} सीटें बाकी हैं</span>
-          )}
-          <button onClick={onToggle} className="text-[10px] text-orange-500 font-bold mt-1 flex items-center gap-0.5">
-            {isExpanded ? 'छिपाएं' : 'देखें'} विवरण
-          </button>
-        </div>
+<div className="flex flex-col items-end gap-1">
+  <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-5 py-2 rounded uppercase tracking-wider transition-colors">
+    View Seats
+  </button>
+
+  {bus.seats_available != null && (
+    <span className="text-[11px] text-orange-600 font-medium">
+      {bus.seats_available} seats left
+    </span>
+  )}
+
+  <button
+    onClick={onToggle}
+    className="text-[10px] text-orange-500 font-bold mt-1 flex items-center gap-0.5"
+  >
+    {isExpanded ? "Hide" : "View"} Details
+  </button>
+</div>
+</div>
+
+{isExpanded && (
+  <div className="p-5 bg-gray-50 text-xs text-gray-600 border-t border-gray-100">
+    <div className="font-bold text-gray-900 mb-3">
+      {bus.origin} → {bus.destination}
+    </div>
+
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div>
+        <span className="text-gray-400 block">Operator</span>
+        {bus.operator_name}
       </div>
 
-      {isExpanded && (
-        <div className="p-5 bg-gray-50 text-xs text-gray-600 border-t border-gray-100">
-          <div className="font-bold text-gray-900 mb-3">{bus.origin} → {bus.destination}</div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div><span className="text-gray-400 block">ऑपरेटर</span>{bus.operator_name}</div>
-            <div><span className="text-gray-400 block">बस का प्रकार</span>{bus.bus_type}</div>
-            <div><span className="text-gray-400 block">रेटिंग</span>{bus.rating || 'N/A'}</div>
-            <div><span className="text-gray-400 block">उपलब्ध सीटें</span>{bus.seats_available ?? 'N/A'}</div>
-          </div>
-        </div>
-      )}
+      <div>
+        <span className="text-gray-400 block">Bus Type</span>
+        {bus.bus_type}
+      </div>
+
+      <div>
+        <span className="text-gray-400 block">Rating</span>
+        {bus.rating || "N/A"}
+      </div>
+
+      <div>
+        <span className="text-gray-400 block">Available Seats</span>
+        {bus.seats_available ?? "N/A"}
+      </div>
     </div>
-  );
-}
+  </div>
+)}
