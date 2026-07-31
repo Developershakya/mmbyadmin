@@ -131,43 +131,43 @@ export default function CabsPage() {
     }
   }, [router.isReady, router.query]);
 
-  const cabs = [
-    {
-      city: "चेन्नई से कैब",
-      cabroutes: "वेल्लोर, पांडिचेरी, बेंगलुरु, तिरुपति, कोयम्बटूर",
-      image: "/flights/Coimbatore.png",
-    },
-    {
-      city: "मुंबई से कैब",
-      cabroutes: "पुणे, नासिक, शिरडी, लोनावला, महाबलेश्वर",
-      image: "/flights/marine drive.jpeg",
-    },
-    {
-      city: "चंडीगढ़ से कैब",
-      cabroutes: "नई दिल्ली, शिमला, मनाली, धर्मशाला, गुड़गांव, नोएडा",
-      image: "/hotels/manali.jpg",
-    },
-    {
-      city: "दिल्ली से कैब",
-      cabroutes: "आगरा, जयपुर, देहरादून, हरिद्वार, चंडीगढ़",
-      image: "/flights/delhi.jpg",
-    },
-    {
-      city: "पुणे से कैब",
-      cabroutes: "मुंबई, शिरडी, महाबलेश्वर, नासिक, औरंगाबाद",
-      image: "/flights/pune.jpeg",
-    },
-    {
-      city: "बेंगलुरु से कैब",
-      cabroutes: "ऊटी, मादिकेरी, कूर्ग, वेल्लोर, मैसूर",
-      image: "/flights/bangalore.jpeg",
-    },
-    {
-      city: "अहमदाबाद से कैब",
-      cabroutes: "मुंबई, राजकोट, सूरत, पुणे, इंदौर",
-      image: "/flights/ahmedabad.jpeg",
-    },
-  ];
+const cabs = [
+  {
+    city: "Cabs from Chennai",
+    cabroutes: "Vellore, Puducherry, Bengaluru, Tirupati, Coimbatore",
+    image: "/flights/Coimbatore.png",
+  },
+  {
+    city: "Cabs from Mumbai",
+    cabroutes: "Pune, Nashik, Shirdi, Lonavala, Mahabaleshwar",
+    image: "/flights/marine drive.jpeg",
+  },
+  {
+    city: "Cabs from Chandigarh",
+    cabroutes: "New Delhi, Shimla, Manali, Dharamshala, Gurugram, Noida",
+    image: "/hotels/manali.jpg",
+  },
+  {
+    city: "Cabs from Delhi",
+    cabroutes: "Agra, Jaipur, Dehradun, Haridwar, Chandigarh",
+    image: "/flights/delhi.jpg",
+  },
+  {
+    city: "Cabs from Pune",
+    cabroutes: "Mumbai, Shirdi, Mahabaleshwar, Nashik, Aurangabad",
+    image: "/flights/pune.jpeg",
+  },
+  {
+    city: "Cabs from Bengaluru",
+    cabroutes: "Ooty, Madikeri, Coorg, Vellore, Mysuru",
+    image: "/flights/bangalore.jpeg",
+  },
+  {
+    city: "Cabs from Ahmedabad",
+    cabroutes: "Mumbai, Rajkot, Surat, Pune, Indore",
+    image: "/flights/ahmedabad.jpeg",
+  },
+];
 
   function formatDDMMYYYY(date) {
     if (!date) return "";
@@ -179,7 +179,7 @@ export default function CabsPage() {
 
   async function handleSearchCabs() {
     if (!from || !to) {
-      setErrorMsg("कृपया पिकअप और ड्रॉप स्थान चुनें।");
+      setErrorMsg("Please select both pickup and drop-off locations.");
       return;
     }
     setLoading(true);
@@ -197,13 +197,13 @@ export default function CabsPage() {
       });
       const data = await res.json();
       if (!data.success) {
-        setErrorMsg(data.message || "कोई कैब नहीं मिली।");
+        setErrorMsg(data.message || "No cabs found for the selected route.");
         setResults(null);
       } else {
         setResults(data);
       }
     } catch (err) {
-      setErrorMsg("कुछ गलत हुआ। दोबारा कोशिश करें।");
+      setErrorMsg("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -230,56 +230,57 @@ export default function CabsPage() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h1 className="text-4xl lg:text-6xl font-bold text-white mb-4">
-              भारत यात्रा कैब बुकिंग
+              India Travel Cab Booking
             </h1>
-            <p className="text-lg text-white font-semibold">
-              उड़ानें • होटल • छुट्टी पैकेज • बसें • कैब
-            </p>
+          <p className="text-lg text-white font-semibold">
+  Flights • Hotels • Holiday Packages • Buses • Cabs
+</p>
           </div>
 
-          {/* Search Form */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-5xl mx-auto">
-            <h2 className="text-2xl font-bold mb-6 text-gray-800">कैब बुक करें</h2>
+{/* Search Form */}
+<div className="bg-white rounded-2xl shadow-xl p-8 max-w-5xl mx-auto">
+  <h2 className="text-2xl font-bold mb-6 text-gray-800">Book a Cab</h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-              {/* From */}
-              <div className="lg:col-span-2">
-                <CitySearchBox
-                  label="कहाँ से"
-                  value={from}
-                  placeholder="शहर चुनें"
-                  onSelect={setFrom}
-                />
-              </div>
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    {/* From */}
+    <div className="lg:col-span-2">
+      <CitySearchBox
+        label="From"
+        value={from}
+        placeholder="Select a city"
+        onSelect={setFrom}
+      />
+    </div>
 
-              {/* To */}
-              <div className="lg:col-span-2">
-                <CitySearchBox
-                  label="कहाँ तक"
-                  value={to}
-                  placeholder="शहर चुनें"
-                  onSelect={setTo}
-                />
-              </div>
+    {/* To */}
+    <div className="lg:col-span-2">
+      <CitySearchBox
+        label="To"
+        value={to}
+        placeholder="Select a city"
+        onSelect={setTo}
+      />
+    </div>
 
-              {/* Date */}
-              <div className="relative">
-                <label className="text-xs uppercase font-medium text-slate-500 block mb-2">
-                  तारीख
-                </label>
-                <div
-                  onClick={() => setOpen(!open)}
-                  className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer flex items-center justify-between"
-                >
-                  <span>
-                    {selected.toLocaleDateString("hi-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </span>
-                  <CalendarIcon className="w-4 h-4" />
-                </div>
+    {/* Date */}
+    <div className="relative">
+      <label className="text-xs uppercase font-medium text-slate-500 block mb-2">
+        Date
+      </label>
+
+      <div
+        onClick={() => setOpen(!open)}
+        className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer flex items-center justify-between"
+      >
+        <span>
+          {selected.toLocaleDateString("en-US", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })}
+        </span>
+        <CalendarIcon className="w-4 h-4" />
+      </div>
 
                 {open && (
                   <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-10 border-2 border-orange-200">
@@ -300,7 +301,7 @@ export default function CabsPage() {
             {/* Time */}
             <div className="mb-6">
               <label className="text-xs uppercase font-medium text-slate-500 block mb-2">
-                पिकअप समय
+              Pickup Time
               </label>
               <input
                 type="time"
@@ -321,41 +322,56 @@ export default function CabsPage() {
               disabled={loading}
               className="w-full px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-lg uppercase tracking-wide transition-colors disabled:opacity-50"
             >
-              {loading ? "खोज रहे हैं..." : "कैब खोजें"}
-            </Button>
-          </div>
-        </div>
-      </section>
+{loading ? "Searching..." : "Search Cabs"}
+</Button>
+</div>
+</div>
+</section>
 
-      {/* Results */}
-      {results && (
-        <section className="py-10 px-4">
-          <div className="max-w-7xl mx-auto rounded-2xl shadow-md p-6 bg-white">
-            <h2 className="text-2xl font-bold mb-6">उपलब्ध कैब</h2>
-            {results.results && results.results.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {results.results.map((cab, idx) => (
-                  <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition">
-                    <h3 className="font-semibold text-lg mb-2">{cab.cab_type}</h3>
-                    <p className="text-sm text-gray-600 mb-2">₹ {cab.price}</p>
-                    <p className="text-xs text-gray-500 mb-4">{cab.description || "आरामदायक यात्रा"}</p>
-                    <Button className="w-full bg-orange-600 hover:bg-orange-700 text-white rounded-lg">
-                      बुक करें
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-center text-gray-500">कोई कैब उपलब्ध नहीं है।</p>
-            )}
-          </div>
-        </section>
+{/* Results */}
+{results && (
+  <section className="py-10 px-4">
+    <div className="max-w-7xl mx-auto rounded-2xl shadow-md p-6 bg-white">
+      <h2 className="text-2xl font-bold mb-6">Available Cabs</h2>
+
+      {results.results && results.results.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {results.results.map((cab, idx) => (
+            <div
+              key={idx}
+              className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition"
+            >
+              <h3 className="font-semibold text-lg mb-2">
+                {cab.cab_type}
+              </h3>
+
+              <p className="text-sm text-gray-600 mb-2">
+                ₹ {cab.price}
+              </p>
+
+              <p className="text-xs text-gray-500 mb-4">
+                {cab.description || "Comfortable journey"}
+              </p>
+
+              <Button className="w-full bg-orange-600 hover:bg-orange-700 text-white rounded-lg">
+                Book Now
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-center text-gray-500">
+          No cabs available.
+        </p>
       )}
+    </div>
+  </section>
+)}
 
       {/* Popular Routes */}
       <section className="py-10 px-4 bg-gray-50">
         <div className="max-w-7xl mx-auto rounded-2xl shadow-md p-6 bg-white">
-          <h2 className="text-2xl font-bold mb-6">लोकप्रिय कैब रूट</h2>
+          <h2 className="text-2xl font-bold mb-6">Popular Cab Routes</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {cabs.map((cab) => (
               <div key={cab.city} className="flex items-center space-x-4">

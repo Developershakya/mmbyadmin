@@ -410,7 +410,7 @@ export default function HotelsPage() {
 
     const nightsDiff = Math.ceil((headerCheckOut - headerCheckIn) / (1000 * 60 * 60 * 24));
     if (nightsDiff <= 0) {
-      alert('चेक-आउट तारीख चेक-इन से बाद की होनी चाहिए');
+      alert('Check-out date must be after the check-in date.');
       return;
     }
 
@@ -644,7 +644,7 @@ export default function HotelsPage() {
               <h3 className="text-sm font-bold mb-3">Amenities</h3>
               <div className="space-y-2 text-sm max-h-48 overflow-y-auto pr-1">
                 {amenityCounts.length === 0 && (
-                  <p className="text-xs text-gray-400">Search karne ke baad yahan dikhega</p>
+                  <p className="text-xs text-gray-400">Results will appear here after you search.</p>
                 )}
                 {amenityCounts.map(({ type, count }) => (
                   <label key={type} className="flex items-center justify-between cursor-pointer">
@@ -684,7 +684,7 @@ export default function HotelsPage() {
 
             {loading && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
-                Hotels load ho rahe hain...
+               Loading hotels...
               </div>
             )}
 
@@ -696,7 +696,7 @@ export default function HotelsPage() {
 
             {!loading && !error && visibleHotels.length === 0 && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
-                Is city ke liye koi hotel nahi mila.
+               No hotels found for this city.
               </div>
             )}
 

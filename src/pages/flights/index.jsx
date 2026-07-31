@@ -669,7 +669,7 @@ export default function FlightsPage() {
             <h3 className="text-sm font-bold mb-3">Airlines</h3>
             <div className="space-y-2 text-sm">
               {Object.keys(airlineCounts).length === 0 && (
-                <p className="text-xs text-gray-400">Search karne ke baad airlines yahan dikhengi</p>
+                <p className="text-xs text-gray-400">Airlines will appear here after you search.</p>
               )}
 {Object.entries(airlineCounts).map(([name, data]) => (
                 <label key={name} className="flex items-center justify-between cursor-pointer">
@@ -790,7 +790,7 @@ export default function FlightsPage() {
  
           {loading && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
-              Flights load ho rahe hain...
+              Loading flights
             </div>
           )}
  
@@ -1027,7 +1027,7 @@ async function loadFareRules() {
     <div className="font-bold text-gray-900 mb-3">Fare Rules</div>
 
     {fareRuleLoading && (
-      <p className="text-xs text-gray-400">Fare rules load ho rahi hain...</p>
+      <p className="text-xs text-gray-400">Loading fare rules...</p>
     )}
 
     {!fareRuleLoading && fareRuleError && (
