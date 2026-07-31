@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
+import { Eye, EyeOff } from "lucide-react"
 
 export function LoginForm({ className, ...props }) {
   const router = useRouter()
@@ -14,6 +15,8 @@ export function LoginForm({ className, ...props }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" })
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   function switchMode(loginMode) {
     setIsLogin(loginMode)
@@ -148,43 +151,63 @@ export function LoginForm({ className, ...props }) {
               />
             </div>
 
-            <div>
-              <Label
-                htmlFor="password"
-                className="text-sm font-medium text-gray-700 mb-1 block"
-              >
-                Password
-              </Label>
-              <input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                minLength={6}
-                required
-              />
-            </div>
+<div>
+  <Label
+    htmlFor="password"
+    className="text-sm font-medium text-gray-700 mb-1 block"
+  >
+    Password
+  </Label>
+  <div className="relative">
+    <input
+      id="password"
+      type={showPassword ? "text" : "password"}
+      placeholder="Enter your password"
+      className="w-full h-12 px-4 pr-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+      value={form.password}
+      onChange={(e) => setForm({ ...form, password: e.target.value })}
+      minLength={6}
+      required
+    />
+    <button
+      type="button"
+      onClick={() => setShowPassword(!showPassword)}
+      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+      tabIndex={-1}
+    >
+      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+    </button>
+  </div>
+</div>
 
             {!isLogin && (
-              <div>
-                <Label
-                  htmlFor="confirm-password"
-                  className="text-sm font-medium text-gray-700 mb-1 block"
-                >
-                  Confirm Password
-                </Label>
-                <input
-                  id="confirm-password"
-                  type="password"
-                  placeholder="Re-enter your password"
-                  className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-                  value={form.confirmPassword}
-                  onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-                  required
-                />
-              </div>
+<div>
+  <Label
+    htmlFor="confirm-password"
+    className="text-sm font-medium text-gray-700 mb-1 block"
+  >
+    Confirm Password
+  </Label>
+  <div className="relative">
+    <input
+      id="confirm-password"
+      type={showConfirmPassword ? "text" : "password"}
+      placeholder="Re-enter your password"
+      className="w-full h-12 px-4 pr-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+      value={form.confirmPassword}
+      onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+      required
+    />
+    <button
+      type="button"
+      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+      tabIndex={-1}
+    >
+      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+    </button>
+  </div>
+</div>
             )}
 
             {/* Remember / Forgot */}

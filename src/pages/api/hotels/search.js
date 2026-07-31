@@ -6,24 +6,30 @@ export default async function handler(req, res) {
   const { checkInDate, noOfNights, cityId, guestNationality, noOfRooms, roomGuests } = req.body;
 
   try {
-    const data = await callSrdvApi(process.env.HOTEL_API_URL, 'Search', {
+    const formattedRoomGuests = Array.isArray(roomGuests)
+      ? roomGuests.map(g => ({
+          NoOfAdults: String(g.adults || 1),
+          NoOfChild: String(g.children || 0),
+          ChildAge: g.childAge || []
+        }))
+      : [];
+
+    const payload = {
       BookingMode: "5",
-      CheckInDate: checkInDate,     // format: YYYY-MM-DD
-      NoOfNights: String(noOfNights),
-      CityId: cityId,
+      CheckInDate: checkInDate,
+      NoOfNights: String(noOfNights || 1),
+      CityId: String(cityId || ''),
       CountryCode: "",
       GuestNationality: guestNationality || "IN",
       PreferredCurrency: "INR",
-      NoOfRooms: String(noOfRooms),
-      RoomGuests: roomGuests.map(g => ({
-        NoOfAdults: String(g.adults),
-        NoOfChild: String(g.children),
-        ChildAge: g.childAge || []
-      })),
+      NoOfRooms: String(noOfRooms || 1),
+      RoomGuests: formattedRoomGuests,
       MinRating: "0",
       MaxRating: "5",
       IsNearBySearchAllowed: false
-    });
+    };
+
+    const data = await callSrdvApi(process.env.HOTEL_API_URL, 'Search', payload);
 
     if (data.Error && data.Error.ErrorCode !== 0) {
       return res.status(200).json({ success: false, message: data.Error.ErrorMessage });
@@ -36,6 +42,7 @@ export default async function handler(req, res) {
         results: data.Results
       });
     }
+
     return res.status(200).json({ success: false, message: 'No hotels found' });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

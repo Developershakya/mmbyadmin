@@ -1,3 +1,5 @@
+import AirlineLogo from './AirlineLogo';
+
 export default function FlightSegmentSummary({ flight, legLabel }) {
   if (!flight) return null;
 
@@ -18,9 +20,7 @@ export default function FlightSegmentSummary({ flight, legLabel }) {
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-[140px]">
-          <div className="w-9 h-9 bg-blue-900 text-white font-black flex items-center justify-center text-xs rounded">
-            {flight.airline_code || 'FL'}
-          </div>
+          <AirlineLogo code={flight.airline_code} size={32} />
           <div>
             <div className="font-bold text-blue-900 text-sm">{flight.airline_name}</div>
             <div className="text-xs text-gray-400">{flight.flight_number}</div>
@@ -30,6 +30,11 @@ export default function FlightSegmentSummary({ flight, legLabel }) {
         <div className="text-center">
           <div className="text-base font-bold">{flight.departure_time}</div>
           <div className="text-xs font-semibold text-gray-500">{flight.origin_code}</div>
+          {flight.origin_airport && (
+            <div className="text-[10px] font-bold text-gray-600 max-w-[130px] leading-tight mt-0.5">
+              {flight.origin_airport}
+            </div>
+          )}
         </div>
 
         <div className="text-center min-w-[90px]">
@@ -46,6 +51,11 @@ export default function FlightSegmentSummary({ flight, legLabel }) {
         <div className="text-center">
           <div className="text-base font-bold">{flight.arrival_time}</div>
           <div className="text-xs font-semibold text-gray-500">{flight.destination_code}</div>
+          {flight.destination_airport && (
+            <div className="text-[10px] font-bold text-gray-600 max-w-[130px] leading-tight mt-0.5">
+              {flight.destination_airport}
+            </div>
+          )}
         </div>
 
         <div className="text-right">

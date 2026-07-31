@@ -262,35 +262,55 @@ export default function FlightsPage() {
     );
   }
  
-const dateStripRef = useRef(null);
+  const dateStripRef = useRef(null);
 
-  function scrollDateStrip(direction) {
-    if (!dateStripRef.current) return;
-    const scrollAmount = 200; // ek click me kitna slide ho
-    dateStripRef.current.scrollBy({
-      left: direction === 'left' ? -scrollAmount : scrollAmount,
-      behavior: 'smooth',
-    });
-  }
+  // ⭐ FIXED: ab offset ki jagah seedha "strip start date" track karte hain
+  const [stripStart, setStripStart] = useState(null);
 
-  const dateStrip = useMemo(() => {
-    if (!date || date === 'undefined' || isNaN(new Date(date).getTime())) return [];
+  // Jab bhi URL ka date change ho, strip ko us date ke -3 din se start karo (aaj se pehle kabhi nahi)
+  useEffect(() => {
+    if (!date || isNaN(new Date(date).getTime())) {
+      setStripStart(null);
+      return;
+    }
     const base = new Date(date);
-
     let start = new Date(base);
     start.setDate(base.getDate() - 3);
     if (start < today) {
       start = new Date(today);
     }
+    setStripStart(start);
+  }, [date]);
 
+  function scrollDateStrip(direction) {
+    if (!stripStart) return;
+
+    setStripStart((prev) => {
+      let next = new Date(prev);
+      next.setDate(prev.getDate() + (direction === 'left' ? -7 : 7));
+
+      // ⭐ Yahi asli fix hai: left jaate waqt hamesha "today" se clamp karo,
+      // isse chahe kitni baar right-left karo, aaj ka date hamesha reachable rahega
+      if (next < today) {
+        next = new Date(today);
+      }
+      return next;
+    });
+  }
+
+  const dateStrip = useMemo(() => {
+    if (!stripStart) return [];
     const days = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
+    for (let i = 0; i < 8; i++) {
+      const d = new Date(stripStart);
+      d.setDate(stripStart.getDate() + i);
       days.push(d);
     }
     return days;
-  }, [date]);
+  }, [stripStart]);
+
+  // strip ka pehla date "today" hai to left arrow disable kar do
+  const isAtStart = dateStrip.length > 0 && toISODate(dateStrip[0]) === toISODate(today);
 
   // ⭐ NEW: date-strip ke har date ka cheapest price fetch karo
   useEffect(() => {
@@ -689,8 +709,13 @@ const dateStripRef = useRef(null);
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => scrollDateStrip('left')}
-                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 hover:bg-orange-50 text-gray-500 hover:text-orange-600 transition"
+                onClick={() => !isAtStart && scrollDateStrip('left')}
+                disabled={isAtStart}
+                className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full transition ${
+                  isAtStart
+                    ? 'bg-gray-50 text-gray-300 cursor-not-allowed opacity-50 pointer-events-none'
+                    : 'bg-gray-50 hover:bg-orange-50 text-gray-500 hover:text-orange-600'
+                }`}
               >
                 <i className="fa-solid fa-chevron-left text-xs"></i>
               </button>
@@ -880,7 +905,37 @@ const dateStripRef = useRef(null);
 /** Reusable flight card component */
 function FlightCard({ flight, from, to, date, isExpanded, onToggle, isSelected, onSelect }) {
   const [activeDetailTab, setActiveDetailTab] = useState('details');
- 
+  const [fareRuleText, setFareRuleText] = useState(null);
+const [fareRuleLoading, setFareRuleLoading] = useState(false);
+const [fareRuleError, setFareRuleError] = useState('');
+
+async function loadFareRules() {
+  if (fareRuleText || fareRuleLoading) return; // dobara fetch mat karo
+  setFareRuleLoading(true);
+  setFareRuleError('');
+  try {
+    const res = await fetch('/api/flights/farerule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        traceId: flight.traceId,
+        resultIndex: flight.resultIndex,
+        srdvType: flight.srdvType,
+        srdvIndex: flight.srdvIndex,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setFareRuleText(data.fareRuleText);
+    } else {
+      setFareRuleError(data.message || 'Fare rules load nahi ho paayi.');
+    }
+  } catch (err) {
+    setFareRuleError('Fare rules fetch karte waqt error aaya.');
+  } finally {
+    setFareRuleLoading(false);
+  }
+} 
   return (
     <div className={`bg-white rounded-lg shadow-sm border overflow-hidden mb-3 ${isSelected ? 'border-orange-400 ring-1 ring-orange-300' : 'border-gray-100'}`}>
       <div className="p-5 flex flex-wrap items-center justify-between gap-4">
@@ -891,7 +946,7 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle, isSelected, 
             <div className="text-xs text-gray-400">{flight.flight_number}</div>
           </div>
         </div>
- 
+
         <div className="text-center">
           <div className="text-lg font-bold">{flight.departure_time}</div>
           <div className="text-xs font-semibold text-gray-500">{flight.origin_code}</div>
@@ -943,25 +998,50 @@ function FlightCard({ flight, from, to, date, isExpanded, onToggle, isSelected, 
  
       {isExpanded && (
         <div className="bg-gray-50 border-t border-gray-100">
-          <div className="flex gap-1 px-5 pt-3">
-            {[
-              { id: 'details', label: 'Flight Details' },
-              { id: 'fare', label: 'Fare Summary' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveDetailTab(tab.id)}
-                className={`px-4 py-2 text-xs font-bold uppercase tracking-wide rounded-t ${
-                  activeDetailTab === tab.id
-                    ? 'bg-orange-500 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
- 
+          
+<div className="flex gap-2 px-5 pt-3 border-b border-gray-200">
+  {[
+    { id: 'details', label: 'Flight Details' },
+    { id: 'fare', label: 'Fare Summary' },
+    { id: 'policy', label: 'Fare Rules' },
+  ].map((tab) => (
+    <button
+      key={tab.id}
+      type="button"
+      onClick={() => {
+        setActiveDetailTab(tab.id);
+        if (tab.id === 'policy') loadFareRules();
+      }}
+      className={`px-4 py-2 text-xs font-bold uppercase tracking-wide rounded-t transition-colors ${
+        activeDetailTab === tab.id
+          ? 'bg-orange-500 text-white'
+          : 'text-gray-600 hover:bg-gray-100'
+      }`}
+    >
+      {tab.label}
+    </button>
+  ))}
+</div>
+ {activeDetailTab === 'policy' && (
+  <div>
+    <div className="font-bold text-gray-900 mb-3">Fare Rules</div>
+
+    {fareRuleLoading && (
+      <p className="text-xs text-gray-400">Fare rules load ho rahi hain...</p>
+    )}
+
+    {!fareRuleLoading && fareRuleError && (
+      <p className="text-xs text-red-500">{fareRuleError}</p>
+    )}
+
+    {!fareRuleLoading && !fareRuleError && fareRuleText && (
+      <div
+        className="text-xs text-gray-600 leading-relaxed whitespace-normal break-words max-w-full [&_table]:w-full [&_table]:my-2 [&_table]:border-collapse [&_td]:px-3 [&_td]:py-2 [&_td]:border [&_td]:border-gray-200 [&_td]:align-top [&_td]:break-words [&_th]:px-3 [&_th]:py-2 [&_th]:bg-gray-100 [&_th]:text-left [&_th]:border [&_th]:border-gray-200"
+        dangerouslySetInnerHTML={{ __html: fareRuleText }}
+      />
+    )}
+  </div>
+)}
           <div className="p-5 text-xs text-gray-600">
             {activeDetailTab === 'details' && (
               <div>
