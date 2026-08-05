@@ -144,8 +144,11 @@ export default function HeroSection() {
   const [openDeparture, setOpenDeparture] = useState(false);
   const [openReturn, setOpenReturn] = useState(false);
 
-  const [checkIn, setCheckIn] = useState(new Date());
-  const [checkOut, setCheckOut] = useState(new Date());
+const tomorrow = new Date(today);
+tomorrow.setDate(tomorrow.getDate() + 1);
+
+const [checkIn, setCheckIn] = useState(today);
+const [checkOut, setCheckOut] = useState(tomorrow);
   const [openCheckIn, setOpenCheckIn] = useState(false);
   const [openCheckOut, setOpenCheckOut] = useState(false);
   const [openPrice, setOpenPrice] = useState(false);
@@ -166,7 +169,10 @@ export default function HeroSection() {
     { from: from, to: to, date: new Date() },
     { from: to, to: null, date: new Date(Date.now() + 86400000) },
   ]);
-  const [hotelDestination, setHotelDestination] = useState(null);
+ const [hotelDestination, setHotelDestination] = useState({
+  code: "699356",
+  name: "GOA",
+});
   const [roomsGuests, setRoomsGuests] = useState({
     rooms: 1,
     adults: 2,
@@ -729,16 +735,24 @@ else if (activeTab === "holidays") {
                           : ""}
                       </span>
                     </div>
-                    {openCheckIn && (
-                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
-                        <DayPicker
-                          mode="single"
-                          selected={checkIn}
-                          onSelect={(date) => { setCheckIn(date); setOpenCheckIn(false); }}
-                          disabled={{ before: today }}
-                        />
-                      </div>
-                    )}
+{openCheckIn && (
+  <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
+    <DayPicker
+      mode="single"
+      selected={checkIn}
+      onSelect={(date) => {
+        if (!date) { setOpenCheckIn(false); return; }
+        setCheckIn(date);
+        const nextDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+        if (!checkOut || checkOut <= date) {
+          setCheckOut(nextDay);
+        }
+        setOpenCheckIn(false);
+      }}
+      disabled={{ before: today }}
+    />
+  </div>
+)}
                   </div>
 
                   <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative">
@@ -770,12 +784,12 @@ else if (activeTab === "holidays") {
                     </div>
                     {openCheckOut && (
                       <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
-                        <DayPicker
-                          mode="single"
-                          selected={checkOut}
-                          onSelect={(date) => { setCheckOut(date); setOpenCheckOut(false); }}
-                          disabled={{ before: checkIn || today }}
-                        />
+<DayPicker
+  mode="single"
+  selected={checkOut}
+  onSelect={(date) => { if (!date) { setOpenCheckOut(false); return; } setCheckOut(date); setOpenCheckOut(false); }}
+  disabled={{ before: checkIn ? new Date(checkIn.getFullYear(), checkIn.getMonth(), checkIn.getDate() + 1) : tomorrow }}
+/>
                       </div>
                     )}
                   </div>
@@ -867,16 +881,16 @@ else if (activeTab === "holidays") {
                           : ""}
                       </span>
                     </div>
-                    {openTravelDate && (
-                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
-                        <DayPicker
-                          mode="single"
-                          selected={travelDate}
-                          onSelect={(date) => { setTravelDate(date); setOpenTravelDate(false); }}
-                          disabled={{ before: today }}
-                        />
-                      </div>
-                    )}
+{openTravelDate && (
+  <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
+    <DayPicker
+      mode="single"
+      selected={travelDate}
+      onSelect={(date) => { if (!date) { setOpenTravelDate(false); return; } setTravelDate(date); setOpenTravelDate(false); }}
+      disabled={{ before: today }}
+    />
+  </div>
+)}
                   </div>
                 </div>
               </div>

@@ -6,7 +6,7 @@ import { MapPin, Star, Phone, CheckCircle2, ChevronLeft, ChevronRight } from 'lu
 
 export default function HotelDetails() {
   const router = useRouter();
-  const { traceId, resultIndex, hotelCode } = router.query;
+  const { traceId, resultIndex, hotelCode, srdvType, srdvIndex } = router.query;
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
@@ -16,13 +16,34 @@ export default function HotelDetails() {
     if (!router.isReady || !traceId || !hotelCode) return;
 
     async function fetchHotelDetails() {
+      async function fetchHotelDetails() {
+  try {
+    setLoading(true);
+    console.log('Calling /api/hotels/info with:', { traceId, resultIndex, hotelCode });
+const res = await fetch('/api/hotels/info', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ traceId, resultIndex, hotelCode, srdvType, srdvIndex }),
+});
+    console.log('Response status:', res.status);
+    const result = await res.json();
+    console.log('Response body:', result);
+    if (result.success) {
+      setData(result.hotelDetails);
+    }
+  } catch (err) {
+    console.error('Error fetching hotel details:', err);
+  } finally {
+    setLoading(false);
+  }
+}
       try {
         setLoading(true);
-        const res = await fetch('/api/hotels/info', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ traceId, resultIndex, hotelCode }),
-        });
+const res = await fetch('/api/hotels/info', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ traceId, resultIndex, hotelCode, srdvType, srdvIndex }),
+});
         const result = await res.json();
         if (result.success) {
           setData(result.hotelDetails);
@@ -35,7 +56,7 @@ export default function HotelDetails() {
     }
 
     fetchHotelDetails();
-  }, [router.isReady, traceId, resultIndex, hotelCode]);
+ }, [router.isReady, traceId, resultIndex, hotelCode, srdvType, srdvIndex]);
 
   if (loading) {
     return (
@@ -65,7 +86,7 @@ export default function HotelDetails() {
   const hotelName = data.HotelName || 'Smyle Inn';
   const rating = Number(data.StarRating || 2);
   const address = data.Address || '916, Gali Chandi Wali';
-  const cityName = data.CityName || 'New Delhi, Delhi N.C.R';
+  const cityName = data.City || 'New Delhi, Delhi N.C.R';
   const pinCode = data.PinCode || '110055';
   const contact = data.HotelContactNo || 'Not Available';
 
@@ -84,12 +105,15 @@ export default function HotelDetails() {
   ];
 
   // Facilities list
-  const facilities = data.HotelFacilities || [
-    "Dry cleaning/laundry service", "Distance from property (meters) - 500",
-    "Train station pickup (surcharge)", "Banquet hall", "Vending machine",
-    "Free wired internet", "Television in common areas", "Free WiFi",
-    "Designated smoking areas", "Tours/ticket assistance", "24-hour front desk"
-  ];
+// Facilities list — SRDV real response mein ye {Name, FontAwesome, IcoFont} objects ka array hota hai
+const facilities = data.HotelFacilities?.length
+  ? data.HotelFacilities.map((f) => (typeof f === 'string' ? f : f.Name)).filter(Boolean)
+  : [
+      "Dry cleaning/laundry service", "Distance from property (meters) - 500",
+      "Train station pickup (surcharge)", "Banquet hall", "Vending machine",
+      "Free wired internet", "Television in common areas", "Free WiFi",
+      "Designated smoking areas", "Tours/ticket assistance", "24-hour front desk"
+    ];
 
   return (
     <div className="bg-[#f0f2f5] min-h-screen font-sans text-gray-800">

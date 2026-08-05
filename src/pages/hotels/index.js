@@ -70,7 +70,7 @@ const indianCities = [
 ];
 
 // UPDATED: Added traceId to HotelCard props
-function HotelCard({ hotel, isExpanded, onToggle, traceId }) {
+function HotelCard({ hotel, isExpanded, onToggle, traceId, srdvType }) {
   const router = useRouter();
 
   const name = hotel.HotelName || hotel.Name || 'Hotel Name Unavailable';
@@ -92,6 +92,8 @@ function HotelCard({ hotel, isExpanded, onToggle, traceId }) {
         traceId: traceId || hotel.TraceId || '',
         resultIndex: hotel.ResultIndex || hotel.Index || '1',
         hotelCode: hotel.HotelCode || hotel.Code || '',
+        srdvType: srdvType || '',
+        srdvIndex: hotel.SrdvIndex || '',
       },
     });
   };
@@ -215,7 +217,8 @@ export default function HotelsPage() {
   const { cityId, cityName, checkin, nights, rooms, adults, children } = router.query;
 
   const [hotels, setHotels] = useState([]);
-  const [traceId, setTraceId] = useState(''); // UPDATED: State to store TraceId
+  const [traceId, setTraceId] = useState('');
+  const [srdvType, setSrdvType] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState(null);
@@ -329,7 +332,8 @@ export default function HotelsPage() {
         }
 
         setHotels(data.results || []);
-        if (data.traceId) setTraceId(data.traceId); // UPDATED: Store traceId
+        if (data.traceId) setTraceId(data.traceId);
+        if (data.srdvType) setSrdvType(data.srdvType); // UPDATED: Store srdvType
       } catch (err) {
         console.error('fetchHotels error:', err);
         setError('Hotels fetch nahi ho paaye. Baad me try karo.');
@@ -706,6 +710,7 @@ export default function HotelsPage() {
                 key={hotel.HotelCode || idx}
                 hotel={hotel}
                 traceId={traceId}
+                srdvType={srdvType}
                 isExpanded={expandedId === (hotel.HotelCode || idx)}
                 onToggle={() => setExpandedId(expandedId === (hotel.HotelCode || idx) ? null : (hotel.HotelCode || idx))}
               />

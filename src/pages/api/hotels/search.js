@@ -35,13 +35,14 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: false, message: data.Error.ErrorMessage });
     }
 
-    if (data.Results && data.Results.length > 0) {
-      return res.status(200).json({
-        success: true,
-        traceId: data.TraceId,
-        results: data.Results
-      });
-    }
+if (data.Results && data.Results.length > 0) {
+  return res.status(200).json({
+    success: true,
+    traceId: data.TraceId,
+    srdvType: data.SrdvType,
+    results: data.Results
+  });
+}
 
     return res.status(200).json({ success: false, message: 'No hotels found' });
   } catch (error) {
