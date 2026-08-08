@@ -623,7 +623,7 @@ export default function HotelsPage() {
               <h3 className="text-sm font-bold mb-3">Property Type</h3>
               <div className="space-y-2 text-sm max-h-40 overflow-y-auto pr-1">
                 {propertyTypeCounts.length === 0 && (
-                  <p className="text-xs text-gray-400">Search karne ke baad yahan dikhega</p>
+                  <p className="text-xs text-gray-400">It will appear here after you search</p>
                 )}
                 {propertyTypeCounts.map(({ type, count }) => (
                   <label key={type} className="flex items-center justify-between cursor-pointer">

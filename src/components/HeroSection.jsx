@@ -179,8 +179,8 @@ const [checkOut, setCheckOut] = useState(tomorrow);
     children: 0,
   });
 
-  const [holidaysFrom, setHolidaysFrom] = useState(null);
-  const [holidaysTo, setHolidaysTo] = useState(null);
+const [holidaysFrom, setHolidaysFrom] = useState({ code: "DEL", name: "New Delhi" });
+const [holidaysTo, setHolidaysTo] = useState({ code: "GOA", name: "Goa" });
   const [holidaysDepartureDate, setHolidaysDepartureDate] = useState("");
   const [holidaysRooms, setHolidaysRooms] = useState({
     rooms: 1,
@@ -813,7 +813,7 @@ else if (activeTab === "holidays") {
                     <LocationSearchBox
                       label="From City"
                       value={holidaysFrom}
-                      placeholder="New Delhi"
+                      placeholder="Noida"
                       onSelect={setHolidaysFrom}
                       showAllSections={false}
                       citySearchApi="/api/cities/airports"

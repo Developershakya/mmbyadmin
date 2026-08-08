@@ -125,7 +125,7 @@ function handleHeaderSearch() {
       <LocationSearchBox
         label="From City"
         value={headerFrom}
-        placeholder="New Delhi"
+        placeholder="Noida"
         onSelect={setHeaderFrom}
         showAllSections={false}
         citySearchApi="/api/cities/airports"

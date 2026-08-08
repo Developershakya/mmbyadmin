@@ -12,51 +12,99 @@ export default function HotelDetails() {
   const [data, setData] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
 
+  const [roomCategories, setRoomCategories] = useState([]);
+  const [roomsLoading, setRoomsLoading] = useState(true);
+  const [roomsError, setRoomsError] = useState('');
+  const [freshIds, setFreshIds] = useState({ traceId: '', srdvType: '', srdvIndex: '', resultIndex: '' });
+
+useEffect(() => {
+  if (!router.isReady || !traceId || !hotelCode) return;
+
+  async function fetchHotelDetailsThenRooms() {
+    // Step 1: Pehle Hotel Info complete hone do
+    try {
+      setLoading(true);
+      const res = await fetch('/api/hotels/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ traceId, resultIndex, hotelCode, srdvType, srdvIndex }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        setData(result.hotelDetails);
+      }
+    } catch (err) {
+      console.error('Error fetching hotel details:', err);
+    } finally {
+      setLoading(false);
+    }
+
+    // Step 2: Ab Hotel Info complete ho chuka hai, tabhi Rooms maango
+    try {
+      setRoomsLoading(true);
+      setRoomsError('');
+      const roomRes = await fetch('/api/hotels/room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ traceId, resultIndex, hotelCode, srdvType, srdvIndex }),
+      });
+      const roomResult = await roomRes.json();
+      if (roomResult.success) {
+        setRoomCategories(roomResult.roomCategories || []);
+        setFreshIds({
+          traceId: roomResult.traceId,
+          srdvType: roomResult.srdvType,
+          srdvIndex: roomResult.srdvIndex,
+          resultIndex: roomResult.resultIndex,
+        });
+      } else {
+        setRoomsError(roomResult.message || 'Rooms fetch nahi ho paayi.');
+      }
+    } catch (err) {
+      console.error('Error fetching rooms:', err);
+      setRoomsError('Rooms fetch karte waqt error aaya.');
+    } finally {
+      setRoomsLoading(false);
+    }
+  }
+
+  fetchHotelDetailsThenRooms();
+}, [router.isReady, traceId, resultIndex, hotelCode, srdvType, srdvIndex]);
+
   useEffect(() => {
     if (!router.isReady || !traceId || !hotelCode) return;
 
-    async function fetchHotelDetails() {
-      async function fetchHotelDetails() {
-  try {
-    setLoading(true);
-    console.log('Calling /api/hotels/info with:', { traceId, resultIndex, hotelCode });
-const res = await fetch('/api/hotels/info', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ traceId, resultIndex, hotelCode, srdvType, srdvIndex }),
-});
-    console.log('Response status:', res.status);
-    const result = await res.json();
-    console.log('Response body:', result);
-    if (result.success) {
-      setData(result.hotelDetails);
-    }
-  } catch (err) {
-    console.error('Error fetching hotel details:', err);
-  } finally {
-    setLoading(false);
-  }
-}
+    async function fetchRooms() {
       try {
-        setLoading(true);
-const res = await fetch('/api/hotels/info', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ traceId, resultIndex, hotelCode, srdvType, srdvIndex }),
-});
+        setRoomsLoading(true);
+        setRoomsError('');
+        const res = await fetch('/api/hotels/room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ traceId, resultIndex, hotelCode, srdvType, srdvIndex }),
+        });
         const result = await res.json();
         if (result.success) {
-          setData(result.hotelDetails);
+          setRoomCategories(result.roomCategories || []);
+          setFreshIds({
+            traceId: result.traceId,
+            srdvType: result.srdvType,
+            srdvIndex: result.srdvIndex,
+            resultIndex: result.resultIndex,
+          });
+        } else {
+          setRoomsError(result.message || 'Rooms fetch nahi ho paayi.');
         }
       } catch (err) {
-        console.error('Error fetching hotel details:', err);
+        console.error('Error fetching rooms:', err);
+        setRoomsError('Rooms fetch karte waqt error aaya.');
       } finally {
-        setLoading(false);
+        setRoomsLoading(false);
       }
     }
 
-    fetchHotelDetails();
- }, [router.isReady, traceId, resultIndex, hotelCode, srdvType, srdvIndex]);
+    fetchRooms();
+  }, [router.isReady, traceId, resultIndex, hotelCode, srdvType, srdvIndex]);
 
   if (loading) {
     return (
@@ -82,7 +130,6 @@ const res = await fetch('/api/hotels/info', {
     );
   }
 
-  // Extract details
   const hotelName = data.HotelName || 'Smyle Inn';
   const rating = Number(data.StarRating || 2);
   const address = data.Address || '916, Gali Chandi Wali';
@@ -90,30 +137,42 @@ const res = await fetch('/api/hotels/info', {
   const pinCode = data.PinCode || '110055';
   const contact = data.HotelContactNo || 'Not Available';
 
-  // Images
   const images = data.Images || data.ImageUrls || [
     "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",
     "https://images.unsplash.com/photo-1582719508461-905c673771fd?w=800",
     "https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800",
   ];
 
-  // Rooms list
-  const rooms = data.RoomCombinations || data.Rooms || [
-    { Name: 'Classic Room', Price: 1440.78, Inclusions: ['Security', 'Clean Washroom', 'Public Transport'] },
-    { Name: 'Room STANDARD', Price: 1581.75, Inclusions: ['Security', 'Clean Washroom'] },
-    { Name: 'Classic Room (1 Double Bed)', Price: 1931.00, Inclusions: ['Package Rate'] }
-  ];
+  const facilities = data.HotelFacilities?.length
+    ? data.HotelFacilities.map((f) => (typeof f === 'string' ? f : f.Name)).filter(Boolean)
+    : [
+        "Dry cleaning/laundry service", "Distance from property (meters) - 500",
+        "Train station pickup (surcharge)", "Banquet hall", "Vending machine",
+        "Free wired internet", "Television in common areas", "Free WiFi",
+        "Designated smoking areas", "Tours/ticket assistance", "24-hour front desk"
+      ];
 
-  // Facilities list
-// Facilities list — SRDV real response mein ye {Name, FontAwesome, IcoFont} objects ka array hota hai
-const facilities = data.HotelFacilities?.length
-  ? data.HotelFacilities.map((f) => (typeof f === 'string' ? f : f.Name)).filter(Boolean)
-  : [
-      "Dry cleaning/laundry service", "Distance from property (meters) - 500",
-      "Train station pickup (surcharge)", "Banquet hall", "Vending machine",
-      "Free wired internet", "Television in common areas", "Free WiFi",
-      "Designated smoking areas", "Tours/ticket assistance", "24-hour front desk"
-    ];
+  function handleSelectRoom(room) {
+    const payload = {
+      traceId: freshIds.traceId || traceId,
+      srdvType: freshIds.srdvType || srdvType,
+      srdvIndex: freshIds.srdvIndex || srdvIndex,
+      resultIndex: freshIds.resultIndex || resultIndex,
+      hotelCode,
+      hotelName,
+      address,
+      cityName,
+      pinCode,
+      contact,
+      rating,
+      image: images[0],
+      guestNationality: 'IN',
+      noOfRooms: 1,
+      room,
+    };
+    sessionStorage.setItem('selectedHotelRoom', JSON.stringify(payload));
+    router.push('/hotels/booking');
+  }
 
   return (
     <div className="bg-[#f0f2f5] min-h-screen font-sans text-gray-800">
@@ -121,7 +180,6 @@ const facilities = data.HotelFacilities?.length
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
 
-        {/* 1. Header Card */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
           <h1 className="text-2xl font-bold text-[#1a2b49] mb-4">{hotelName}</h1>
           <div className="flex flex-wrap gap-4">
@@ -151,10 +209,7 @@ const facilities = data.HotelFacilities?.length
           </div>
         </div>
 
-        {/* 2. Gallery & Info Section */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* Main Gallery */}
           <div className="md:col-span-2 bg-white rounded-xl p-4 shadow-sm border border-gray-200 space-y-3">
             <div className="relative h-80 rounded-lg overflow-hidden group">
               <img src={images[selectedImage]} alt="Hotel" className="w-full h-full object-cover" />
@@ -172,7 +227,6 @@ const facilities = data.HotelFacilities?.length
               </button>
             </div>
 
-            {/* Thumbnails */}
             <div className="flex gap-2 overflow-x-auto pb-2">
               {images.map((img, idx) => (
                 <img
@@ -188,7 +242,6 @@ const facilities = data.HotelFacilities?.length
             </div>
           </div>
 
-          {/* Hotel Information Sidebar */}
           <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200 h-fit space-y-4">
             <h3 className="text-base font-bold text-blue-900 border-b pb-2">Hotel Information</h3>
             
@@ -211,44 +264,78 @@ const facilities = data.HotelFacilities?.length
           </div>
         </div>
 
-        {/* 3. Rooms & Rates List */}
-        <div className="space-y-4">
-          {rooms.map((room, idx) => (
-            <div key={idx} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex gap-4 items-center w-full md:w-auto">
-                <img src={images[0]} alt="room" className="w-28 h-20 object-cover rounded-lg border" />
-                <div className="space-y-1">
-                  <h4 className="font-bold text-sm text-gray-900">{room.Name || room.RoomTypeName}</h4>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {(room.Inclusions || ['Security', 'Clean Room']).map((inc, i) => (
-                      <span key={i} className="bg-gray-100 text-[10px] text-gray-600 px-2 py-0.5 rounded font-medium">
-                        {inc}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
+        <div className="space-y-6">
+          {roomsLoading && (
+            <div className="bg-white rounded-xl p-8 text-center text-gray-500 shadow-sm border border-gray-200">
+              Rooms load ho rahi hain...
+            </div>
+          )}
 
-              <div className="flex items-center justify-between md:justify-end gap-6 w-full md:w-auto border-t md:border-t-0 pt-3 md:pt-0">
-                <div className="text-right">
-                  <span className="text-xs text-gray-400 block font-medium">INR</span>
-                  <span className="text-lg font-bold text-blue-600">₹{Number(room.Price || room.TotalFare || 1500).toLocaleString()}</span>
-                </div>
-                <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition-all shadow-sm cursor-pointer">
-                  Select Room
-                </button>
+          {!roomsLoading && roomsError && (
+            <div className="bg-white rounded-xl p-8 text-center text-red-500 shadow-sm border border-gray-200">
+              {roomsError}
+            </div>
+          )}
+
+          {!roomsLoading && !roomsError && roomCategories.length === 0 && (
+            <div className="bg-white rounded-xl p-8 text-center text-gray-500 shadow-sm border border-gray-200">
+              Is hotel ke liye koi room available nahi hai.
+            </div>
+          )}
+
+          {!roomsLoading && !roomsError && roomCategories.map((category, catIdx) => (
+            <div key={catIdx}>
+              <h3 className="text-sm font-bold text-blue-900 mb-3">{category.CategoryName}</h3>
+              <div className="space-y-4">
+                {(category.Rooms || []).map((room, roomIdx) => (
+                  <div key={roomIdx} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex gap-4 items-center w-full md:w-auto">
+                      <img
+                        src={room.RoomImages?.[0]?.Image || images[0]}
+                        alt="room"
+                        className="w-28 h-20 object-cover rounded-lg border"
+                      />
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-sm text-gray-900">{room.RoomTypeName}</h4>
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {(room.Amenities || []).slice(0, 4).map((a, i) => (
+                            <span key={i} className="bg-gray-100 text-[10px] text-gray-600 px-2 py-0.5 rounded font-medium">
+                              {a.Name}
+                            </span>
+                          ))}
+                        </div>
+                        {room.HotelSupplements && (
+                          <p className="text-[10px] text-blue-600 font-semibold uppercase">{room.HotelSupplements}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between md:justify-end gap-6 w-full md:w-auto border-t md:border-t-0 pt-3 md:pt-0">
+                      <div className="text-right">
+                        <span className="text-xs text-gray-400 block font-medium">INR</span>
+                        <span className="text-lg font-bold text-blue-600">
+                          ₹{Number(room.Price?.OfferedPrice || room.OfferedPrice || 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleSelectRoom(room)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition-all shadow-sm cursor-pointer"
+                      >
+                        Select Room
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}
         </div>
 
-        {/* 4. More About This Hotel Section */}
         <div className="text-center pt-4">
           <h2 className="text-xl font-bold text-blue-900">More About This Hotel</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* About & Description */}
           <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200 space-y-4 text-xs">
             <h3 className="text-sm font-bold text-blue-900 border-b pb-2">About the Hotel</h3>
             
@@ -275,7 +362,6 @@ const facilities = data.HotelFacilities?.length
             </div>
           </div>
 
-          {/* Hotel Facilities Grid */}
           <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200 space-y-4">
             <h3 className="text-sm font-bold text-blue-900 border-b pb-2">Hotel Facilities</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
