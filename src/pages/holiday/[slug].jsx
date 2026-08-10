@@ -384,7 +384,7 @@ function ItineraryContent({ itinerary, imageBase }) {
   if (!itinerary || itinerary.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow p-8 text-sm text-gray-500">
-        Is package ke liye itinerary abhi available nahi hai.
+      The itinerary for this package is not available yet.
       </div>
     );
   }
