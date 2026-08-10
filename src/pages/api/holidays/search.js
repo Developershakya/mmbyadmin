@@ -5,24 +5,34 @@ export default async function handler(req, res) {
 
   const { destination, limit } = req.body;
 
-  if (!destination) {
-    return res.status(400).json({ success: false, message: 'Destination is required' });
-  }
-
   const safeLimit = Math.min(Number(limit) || 50, 100);
 
   let connection;
   try {
     connection = await getConnection();
-    const [rows] = await connection.execute(
+
+    // Pehle destination se try karo
+    let [rows] = await connection.execute(
       `SELECT id, package_name, slug, duration, ragular_price, offer_price, photo,
               short_description, location
        FROM package
        WHERE status = 1 AND location LIKE ?
        ORDER BY id DESC
        LIMIT ${safeLimit}`,
-      [`%${destination}%`]
+      [`%${destination || ''}%`]
     );
+
+    // Agar match na mile (ya destination diya hi nahi), to SAARE active packages dikhao
+    if (rows.length === 0) {
+      [rows] = await connection.execute(
+        `SELECT id, package_name, slug, duration, ragular_price, offer_price, photo,
+                short_description, location
+         FROM package
+         WHERE status = 1
+         ORDER BY id DESC
+         LIMIT ${safeLimit}`
+      );
+    }
 
     return res.status(200).json({
       success: true,

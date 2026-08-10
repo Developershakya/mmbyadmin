@@ -11,6 +11,21 @@ import Gallery from "../../components/Gallery";
 
 const IMAGE_BASE = "https://makemybharatyatra.com/uploads/packages/";
 
+function decodeHtmlEntities(html) {
+  if (!html) return '';
+  let decoded = html;
+  // Double-encoded content ke liye 2 baar decode pass karo
+  for (let i = 0; i < 2; i++) {
+    decoded = decoded
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+  }
+  return decoded;
+}
+
 export default function HolidayPage() {
   const [isLarge, setIsLarge] = useState(false);
   const [selectedTab, setSelectedTab] = useState("itinerary");
@@ -73,6 +88,17 @@ export default function HolidayPage() {
     }
   };
 
+  const handleBookNow = () => {
+    sessionStorage.setItem('selectedHolidayPackage', JSON.stringify({
+      packageName: pkg.package_name,
+      slug,
+      photo: pkg.photo,
+      price: pkg.offer_price,
+      duration: pkg.duration,
+      location: pkg.location,
+    }));
+    router.push('/holiday/booking');
+  };
   const toggleDropdown = (tab) => {
     if (tab === "itinerary") setitineraryOpen(!itineraryOpen);
     if (tab === "policies") setPoliciesOpen(!policiesOpen);
@@ -159,9 +185,9 @@ export default function HolidayPage() {
               <p className="text-2xl font-extrabold text-orange-400 mb-4">
                 ₹{Number(pkg.offer_price).toLocaleString('en-IN')} / Person
               </p>
-              <button className="bg-gradient-to-r from-orange-400 to-pink-500 text-white px-6 py-2 rounded-xl shadow-lg hover:scale-105 transition">
+              {/* <button className="bg-gradient-to-r from-orange-400 to-pink-500 text-white px-6 py-2 rounded-xl shadow-lg hover:scale-105 transition">
                 Book Now
-              </button>
+              </button> */}
             </div>
           </div>
 
@@ -242,12 +268,6 @@ export default function HolidayPage() {
                   ))}
                 </div>
 
-                <button
-                  onClick={handleShare}
-                  className="flex items-center cursor-pointer gap-2 text-gray-600 px-4 py-2"
-                >
-                  <RiShareForwardFill size={20} /> Share
-                </button>
               </div>
             ) : (
               <div className="max-w-7xl mx-auto">
@@ -283,12 +303,12 @@ export default function HolidayPage() {
                         )}
                         {tab === "policies" && (
                           <div className="bg-white shadow p-8 text-sm text-gray-700 leading-relaxed">
-                            <div dangerouslySetInnerHTML={{ __html: pkg.policy || pkg.terms || 'Policy details available soon.' }} />
+                            <div dangerouslySetInnerHTML={{ __html: decodeHtmlEntities(pkg.policy || pkg.terms || 'Policy details available soon.') }} />
                           </div>
                         )}
                         {tab === "summary" && (
                           <div className="bg-white shadow p-8 text-sm text-gray-700 leading-relaxed">
-                            <div dangerouslySetInnerHTML={{ __html: pkg.description || pkg.short_description || '' }} />
+                            <div dangerouslySetInnerHTML={{ __html: decodeHtmlEntities(pkg.description || pkg.short_description || '') }} />
                           </div>
                         )}
                       </div>
@@ -308,14 +328,14 @@ export default function HolidayPage() {
                   {selectedTab === "policies" && (
                     <div className="text-sm text-gray-700 leading-relaxed">
                       <h2 className="text-2xl font-semibold mb-4">Cancellation & Policies</h2>
-                      <div dangerouslySetInnerHTML={{ __html: pkg.policy || pkg.terms || 'Policy details available soon.' }} />
+                      <div dangerouslySetInnerHTML={{ __html: decodeHtmlEntities(pkg.policy || pkg.terms || 'Policy details available soon.') }} />
                     </div>
                   )}
 
                   {selectedTab === "summary" && (
                     <div className="text-sm text-gray-700 leading-relaxed">
                       <h2 className="text-2xl font-semibold mb-4">Package Summary</h2>
-                      <div dangerouslySetInnerHTML={{ __html: pkg.description || pkg.short_description || '' }} />
+                      <div dangerouslySetInnerHTML={{ __html: decodeHtmlEntities(pkg.description || pkg.short_description || '') }} />
                     </div>
                   )}
                 </div>
@@ -330,9 +350,9 @@ export default function HolidayPage() {
                     <p className="text-4xl font-bold text-green-600">
                       ₹{Number(pkg.offer_price).toLocaleString('en-IN')} <span className="text-base">/ Adult</span>
                     </p>
-                    <button className="w-full mt-4 bg-gradient-to-r from-orange-400 to-pink-500 text-white py-3 rounded-lg font-semibold hover:opacity-90">
-                      Proceed to Payment
-                    </button>
+<button onClick={handleBookNow} className="w-full mt-4 bg-gradient-to-r from-orange-400 to-pink-500 text-white py-3 rounded-lg font-semibold hover:opacity-90">
+  Proceed to Payment
+</button>
                   </div>
                 </aside>
               </div>
@@ -349,9 +369,9 @@ export default function HolidayPage() {
               <p className="text-3xl font-bold text-white">₹{Number(pkg.offer_price).toLocaleString('en-IN')}</p>
               <span className="text-gray-300">Per Person</span>
             </div>
-            <button className="bg-gradient-to-r from-orange-400 to-pink-500 text-white px-6 py-3 text-1xl font-bold rounded-xl shadow-lg hover:scale-105 transition">
+            {/* <button className="bg-gradient-to-r from-orange-400 to-pink-500 text-white px-6 py-3 text-1xl font-bold rounded-xl shadow-lg hover:scale-105 transition">
               BOOK NOW
-            </button>
+            </button> */}
           </div>
         </div>
       </div>
@@ -380,7 +400,7 @@ function ItineraryContent({ itinerary, imageBase }) {
           </h3>
           <div
             className="text-sm text-gray-700 mt-2 leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: day.description }}
+            dangerouslySetInnerHTML={{ __html: decodeHtmlEntities(day.description) }}
           />
           {day.image && (
             <img

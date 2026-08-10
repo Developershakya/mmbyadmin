@@ -12,6 +12,15 @@ function toISODate(d) {
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+function decodeHtmlEntities(html) {
+  if (!html) return '';
+  return html
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
 
 export default function HolidaySearchPage() {
   const router = useRouter();
@@ -244,7 +253,7 @@ function handleHeaderSearch() {
 
                         <div
                           className="text-sm text-gray-700 line-clamp-2"
-                          dangerouslySetInnerHTML={{ __html: holiday.short_description }}
+                          dangerouslySetInnerHTML={{ __html: decodeHtmlEntities(holiday.short_description) }}
                         />
                       </div>
 

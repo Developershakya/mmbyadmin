@@ -227,7 +227,7 @@ export default function BookingPage() {
 
     setSubmitting(true);
     try {
-      const orderRes = await fetch('/api/payment/create-order', {
+const orderRes = await fetch('/api/holidays/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: totalPrice }),
