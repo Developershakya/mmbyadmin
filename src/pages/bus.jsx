@@ -48,6 +48,7 @@ useEffect(() => {
 body: JSON.stringify({
   sourceCity: from,
   destinationCity: to,
+  journeyDate: date,
 }),
         });
 
