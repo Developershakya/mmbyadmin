@@ -2,23 +2,23 @@ import { callSrdvApi } from '../../../lib/srdvApi';
 
 function parseBusItem(item, traceId) {
   return {
-    id: item.ServiceId || item.ResultIndex,
+    id: item.ResultIndex,
     resultIndex: item.ResultIndex,
     traceId,
     operator_name: item.TravelName,
-    bus_type: item.BusType || item.BusTypeName,
-    origin: item.BoardingPointsDetails?.[0]?.CityPointLocation || item.Origin,
-    destination: item.DroppingPointsDetails?.[0]?.CityPointLocation || item.Destination,
-    departure_time: item.DepartureTime?.split('T')[1]?.slice(0, 5) || item.DepartureTime,
-    arrival_time: item.ArrivalTime?.split('T')[1]?.slice(0, 5) || item.ArrivalTime,
-    duration: item.Duration || null,
-    price: item.Fare || item.OfferedPrice,
+    bus_type: item.BusType,
+    origin: item.BoardingPoints?.[0]?.CityPointLocation || '',
+    destination: item.DroppingPoints?.[0]?.CityPointLocation || '',
+    departure_time: item.DepartureTime,
+    arrival_time: item.ArrivalTime,
+    price: item.Price?.OfferedPrice,
     seats_available: item.AvailableSeats,
-    rating: item.Rating || null,
-    boarding_points: item.BoardingPointsDetails || [],
-    dropping_points: item.DroppingPointsDetails || [],
-    is_ac: item.IsAC,
-    is_sleeper: item.IsSleeper,
+    max_seats_per_ticket: item.MaxSeatsPerTicket,
+    id_proof_required: item.IdProofRequired,
+    live_tracking: item.LiveTrackingAvailable,
+    boarding_points: item.BoardingPoints || [],
+    dropping_points: item.DroppingPoints || [],
+    cancellation_policies: item.CancellationPolicies || [],
   };
 }
 
@@ -26,11 +26,12 @@ async function resolveCityId(cityName) {
   const data = await callSrdvApi(process.env.BUS_API_URL, 'GetBusCityList', {});
   const list = data.Result?.CityList || [];
   const cleanName = cityName.trim().toLowerCase();
+
   let match = list.find((c) => c.CityName.trim().toLowerCase() === cleanName);
   if (!match) {
     match = list.find((c) => c.CityName.trim().toLowerCase().includes(cleanName));
   }
-  return match ? String(match.CityId) : null;
+  return match ? match.CityId : null;
 }
 
 export default async function handler(req, res) {
@@ -49,8 +50,6 @@ export default async function handler(req, res) {
     const sourceId = await resolveCityId(sourceCity);
     const destinationId = await resolveCityId(destinationCity);
 
-    console.log('RESOLVED IDS:', { sourceCity, sourceId, destinationCity, destinationId });
-
     if (!sourceId || !destinationId) {
       return res.status(200).json({
         success: false,
@@ -58,55 +57,28 @@ export default async function handler(req, res) {
       });
     }
 
-    const idFieldCombos = [
-      { source: 'SourceId', dest: 'DestinationId' },
-      { source: 'OriginId', dest: 'DestinationId' },
-      { source: 'SourceCityId', dest: 'DestinationCityId' },
-      { source: 'FromCityId', dest: 'ToCityId' },
-    ];
+    const searchPayload = {
+      source_city: sourceCity,
+      source_code: String(sourceId),
+      destination_city: destinationCity,
+      destination_code: String(destinationId),
+      depart_date: journeyDate,
+    };
 
-    let data = null;
-    let workingCombo = null;
+    const data = await callSrdvApi(process.env.BUS_API_URL, 'Search', searchPayload);
 
-    for (const combo of idFieldCombos) {
-      const payload = {
-        [combo.source]: sourceId,
-        [combo.dest]: destinationId,
-        DateOfJourney: journeyDate,
-      };
-
-      const attempt = await callSrdvApi(process.env.BUS_API_URL, 'Search', payload);
-      console.log(`TRY combo "${combo.source}/${combo.dest}":`, JSON.stringify(attempt).slice(0, 300));
-
-      if (!attempt.Error || (attempt.Error.ErrorCode !== '251' && attempt.Error.ErrorCode !== 251)) {
-        data = attempt;
-        workingCombo = combo;
-        break;
-      }
-    }
-
-    console.log('WORKING COMBO:', workingCombo);
-    console.log('FINAL RESPONSE:', JSON.stringify(data, null, 2));
-
-    if (!data) {
-      return res.status(200).json({
-        success: false,
-        message: 'Koi bhi ID field combo kaam nahi kiya. Terminal check karo.',
-      });
-    }
-
-    if (data.Error && data.Error.ErrorCode !== 0 && data.Error.ErrorCode !== 1) {
+    if (data.Error && Number(data.Error.ErrorCode) !== 0) {
       return res.status(200).json({ success: false, message: data.Error.ErrorMessage });
     }
 
-    const rawResults = data.Result?.BusRouteList || data.GetBusRouteResult || data.Results || [];
+    const rawResults = Array.isArray(data.Result) ? data.Result : [];
 
     if (rawResults.length > 0) {
       const results = rawResults.map((item) => parseBusItem(item, data.TraceId));
       return res.status(200).json({ success: true, traceId: data.TraceId, results });
     }
 
-    return res.status(200).json({ success: false, message: 'Is route ke liye koi bus nahi mili.' });
+    return res.status(200).json({ success: false, message: 'No bus was available for this route.' });
   } catch (error) {
     console.error('Bus search error:', error.message);
     return res.status(500).json({ success: false, message: error.message });
