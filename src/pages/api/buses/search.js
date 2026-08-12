@@ -39,6 +39,8 @@ export default async function handler(req, res) {
 
   const { sourceCity, destinationCity, journeyDate } = req.body;
 
+  console.log('BUS SEARCH REQUEST BODY:', req.body);
+
   if (!sourceCity || !destinationCity || !journeyDate) {
     return res.status(400).json({
       success: false,
@@ -49,6 +51,8 @@ export default async function handler(req, res) {
   try {
     const sourceId = await resolveCityId(sourceCity);
     const destinationId = await resolveCityId(destinationCity);
+
+    console.log('RESOLVED IDS:', { sourceCity, sourceId, destinationCity, destinationId });
 
     if (!sourceId || !destinationId) {
       return res.status(200).json({
@@ -65,7 +69,11 @@ export default async function handler(req, res) {
       depart_date: journeyDate,
     };
 
+    console.log('SEARCH PAYLOAD SENDING:', JSON.stringify(searchPayload, null, 2));
+
     const data = await callSrdvApi(process.env.BUS_API_URL, 'Search', searchPayload);
+
+    console.log('RAW BUS SEARCH RESPONSE:', JSON.stringify(data, null, 2));
 
     if (data.Error && Number(data.Error.ErrorCode) !== 0) {
       return res.status(200).json({ success: false, message: data.Error.ErrorMessage });

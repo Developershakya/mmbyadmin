@@ -188,8 +188,12 @@ const [holidaysTo, setHolidaysTo] = useState({ code: "GOA", name: "Goa" });
     children: 0,
   });
 
-  const [busFrom, setBusFrom] = useState(null);
-  const [busTo, setBusTo] = useState(null);
+const [busFrom, setBusFrom] = useState(
+  indianCities.find((c) => c.code === "NOI") || { code: "NOI", name: "Noida" }
+);
+const [busTo, setBusTo] = useState(
+  indianCities.find((c) => c.code === "MTH" || c.name === "Mathura") || { code: "MTH", name: "Mathura" }
+);
 
   const [cabTripType, setCabTripType] = useState("oneway");
   const [cabFrom, setCabFrom] = useState(null);
@@ -310,14 +314,15 @@ else if (activeTab === "holidays") {
   router.push(`/holiday/search?${query.toString()}`);
 }
 
-     else if (activeTab === "buses") {
-      if (!busFrom || !busTo) {
-        alert("Please select From and To cities.");
-        return;
-      }
-      router.push(
-        `/bus?from=${busFrom.code}&to=${busTo.code}&date=${formatLocalDate(travelDate)}`
-      );
+else if (activeTab === "buses") {
+  // Safe Fallback: Agar kisi case me states empty bhi hon to default cities pass kar do
+  const fromCode = busFrom?.code || "NOI";
+  const toCode = busTo?.code || "MAN";
+  const dateStr = formatLocalDate(travelDate || new Date());
+
+  router.push(
+    `/buses?from=${encodeURIComponent(fromCode)}&to=${encodeURIComponent(toCode)}&date=${dateStr}`
+  );
 } else if (activeTab === "cabs") {
   if (!cabFrom || !cabTo) {
     alert("Please select pickup and drop locations.");
@@ -854,7 +859,7 @@ else if (activeTab === "holidays") {
                     <LocationSearchBox
                       label="To City"
                       value={busTo}
-                      placeholder="Manali"
+                      placeholder="Mathura"
                       onSelect={setBusTo}
                       showAllSections={false}
                       citySearchApi="/api/cities/bus"
