@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import {
@@ -22,7 +22,17 @@ import UserMenu from "./UserMenu";
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Hydration error se bachne ke liye client mount hone tak wait karein
+  if (!isMounted) {
+    return null;
+  }
 
   return (
     <header className="bg-white shadow-sm border-b sticky top-0 z-50">
@@ -127,9 +137,9 @@ export default function Header() {
               </div>
             </div>
 
-            <Link href="#" className="hover:text-orange-600 transition">
+            <a href="#" className="hover:text-orange-600 transition">
               Adventures
-            </Link>
+            </a>
             <Link href="/blog" className="hover:text-orange-600 transition">
               Blog
             </Link>
@@ -169,7 +179,6 @@ export default function Header() {
               </div>
             </div>
 
-            {/* ⭐ CHANGED: hardcoded Login button ki jagah UserMenu (auth-aware) */}
             <UserMenu />
           </div>
 
@@ -192,15 +201,15 @@ export default function Header() {
               <Link href="/" className="text-gray-700 hover:text-orange-500 font-medium">
                 Home
               </Link>
-              <Link href="#" className="text-gray-700 hover:text-orange-500 font-medium">
+              <a href="#" className="text-gray-700 hover:text-orange-500 font-medium">
                 Destination
-              </Link>
-              <Link href="#" className="text-gray-700 hover:text-orange-500 font-medium">
+              </a>
+              <a href="#" className="text-gray-700 hover:text-orange-500 font-medium">
                 Journey
-              </Link>
-              <Link href="#" className="text-gray-700 hover:text-orange-500 font-medium">
+              </a>
+              <a href="#" className="text-gray-700 hover:text-orange-500 font-medium">
                 Adventures
-              </Link>
+              </a>
               <Link href="/blog" className="text-gray-700 hover:text-orange-500 font-medium">
                 Blog
               </Link>
@@ -211,7 +220,6 @@ export default function Header() {
                 Contact Us
               </Link>
             </nav>
-            {/* ⭐ CHANGED: hardcoded Login button ki jagah UserMenu (auth-aware) */}
             <div className="flex flex-col space-y-2 mt-4">
               <UserMenu />
             </div>
