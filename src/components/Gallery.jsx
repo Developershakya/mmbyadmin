@@ -6,7 +6,7 @@ import { FiArrowLeft } from "react-icons/fi";
 const breakpointColumnsObj = {
   default: 4,  // desktop
   1024: 3,     // tablet
-  768: 2,      // small tablet
+  768: 2,      // small tablet 
   500: 1       // mobile
 };
 
@@ -106,10 +106,5 @@ export default function Gallery({ images, onClose }) {
     </div>
   )}
 </div>
-
-
-
-
-
-  );
+ );
 }

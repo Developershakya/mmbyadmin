@@ -189,10 +189,10 @@ const [holidaysTo, setHolidaysTo] = useState({ code: "GOA", name: "Goa" });
   });
 
 const [busFrom, setBusFrom] = useState(
-  indianCities.find((c) => c.code === "NOI") || { code: "NOI", name: "Noida" }
+  { code: "Noida", name: "Noida" }
 );
 const [busTo, setBusTo] = useState(
-  indianCities.find((c) => c.code === "MTH" || c.name === "Mathura") || { code: "MTH", name: "Mathura" }
+  { code: "Mathura", name: "Mathura" }
 );
 
   const [cabTripType, setCabTripType] = useState("oneway");
@@ -316,8 +316,8 @@ else if (activeTab === "holidays") {
 
 else if (activeTab === "buses") {
   // Safe Fallback: Agar kisi case me states empty bhi hon to default cities pass kar do
-  const fromCode = busFrom?.code || "NOI";
-  const toCode = busTo?.code || "MAN";
+  const fromCode = busFrom?.code || "Noida";
+  const toCode = busTo?.code || "Mathura";
   const dateStr = formatLocalDate(travelDate || new Date());
 
   router.push(

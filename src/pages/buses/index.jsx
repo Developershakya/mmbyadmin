@@ -8,87 +8,148 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
 // BusCard Component
-function BusCard({ bus, isExpanded, onToggle }) {
+function BusCard({ bus, isExpanded, onToggle, onViewSeats }) {
+  const [openPickupDrop, setOpenPickupDrop] = useState(false);
+  const [openPolicies, setOpenPolicies] = useState(false);
+
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mb-3">
-      <div className="p-5 flex flex-wrap items-center justify-between gap-4">
-        <div className="min-w-[140px]">
-          <div className="font-bold text-blue-900 text-base">{bus.operator_name}</div>
-          <div className="text-xs text-gray-400">{bus.bus_type}</div>
-        </div>
-
-        <div className="text-center">
-          <div className="text-lg font-bold">{bus.departure_time}</div>
-          <div className="text-xs font-semibold text-gray-500">{bus.origin}</div>
-        </div>
-
-        <div className="text-center min-w-[100px]">
-          <div className="text-xs text-gray-400">{bus.duration}</div>
-          <div className="relative my-1 flex items-center justify-center">
-            <div className="w-full border-t border-dashed border-gray-300 absolute"></div>
-            <span className="relative bg-white px-2 z-10 text-emerald-500 text-xs font-bold">🚌</span>
-          </div>
-        </div>
-
-        <div className="text-center">
-          <div className="text-lg font-bold">{bus.arrival_time}</div>
-          <div className="text-xs font-semibold text-gray-500">{bus.destination}</div>
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mb-4 p-5">
+      {/* Top Header & Core Bus Details */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-50">
+        <div>
+          <h3 className="font-bold text-blue-900 text-lg">{bus.operator_name}</h3>
+          <span className="inline-block bg-blue-600 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded mt-1">
+            {bus.bus_type}
+          </span>
         </div>
 
         <div className="text-right">
-          <div className="text-lg font-bold text-gray-900">₹ {Number(bus.price).toLocaleString()}</div>
-          <div className="text-[10px] text-gray-400">Per Seat</div>
-        </div>
-
-        <div className="flex flex-col items-end gap-1">
-          <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-5 py-2 rounded uppercase tracking-wider transition-colors">
-            View Seats
-          </button>
-
-          {bus.seats_available != null && (
-            <span className="text-[11px] text-orange-600 font-medium">
-              {bus.seats_available} seats left
-            </span>
-          )}
-
-          <button
-            onClick={onToggle}
-            className="text-[10px] text-orange-500 font-bold mt-1 flex items-center gap-0.5"
-          >
-            {isExpanded ? "Hide" : "View"} Details
-          </button>
+          <div className="text-xl font-black text-gray-900">₹ {Number(bus.price).toLocaleString()}</div>
+          <div className="text-[11px] text-gray-400">Per Seat</div>
         </div>
       </div>
 
-      {isExpanded && (
-        <div className="p-5 bg-gray-50 text-xs text-gray-600 border-t border-gray-100">
-          <div className="font-bold text-gray-900 mb-3">
-            {bus.origin} → {bus.destination}
+      {/* Timing & Seats Left Row */}
+      <div className="flex flex-wrap items-center justify-between gap-4 py-3 text-xs text-gray-600">
+        <div>
+          <span className="font-semibold text-gray-800">Departure: </span>
+          {bus.departure_time}
+        </div>
+        <div>
+          <span className="font-semibold text-gray-800">Arrival: </span>
+          {bus.arrival_time}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+        <div>
+          <span className="font-semibold">Available Seats: </span>
+          {bus.seats_available ?? "N/A"}
+        </div>
+        <div>
+          <span className="font-semibold">Max Seats per Ticket: </span>6
+        </div>
+      </div>
+
+      {/* Action Toggle Links (Pick-Up & Drop / Policies) */}
+      <div className="flex items-center gap-6 py-2">
+        <button
+          onClick={() => {
+            setOpenPickupDrop(!openPickupDrop);
+            if (!openPickupDrop) setOpenPolicies(false);
+          }}
+          className="text-xs font-bold text-gray-700 hover:text-blue-600 flex items-center gap-1 transition-colors"
+        >
+          🗺️ Pick-Up &amp; Drop {openPickupDrop ? "▲" : "▼"}
+        </button>
+
+        <button
+          onClick={() => {
+            setOpenPolicies(!openPolicies);
+            if (!openPolicies) setOpenPickupDrop(false);
+          }}
+          className="text-xs font-bold text-gray-700 hover:text-blue-600 flex items-center gap-1 transition-colors"
+        >
+          📜 Policies {openPolicies ? "▲" : "▼"}
+        </button>
+      </div>
+
+      {/* Expandable Box 1: Pick-Up & Drop (Inline Side-by-Side Design) */}
+      {openPickupDrop && (
+        <div className="mt-3 p-4 bg-gray-50/80 rounded-lg border border-gray-100 text-xs grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <p className="font-bold text-gray-800 mb-2">Boarding Points:</p>
+            <div className="space-y-1.5 text-gray-600 max-h-40 overflow-y-auto pr-1">
+              {bus.boarding_points?.length > 0 ? (
+                bus.boarding_points.map((p, i) => (
+                  <div key={i}>
+                    {p.CityPointLocation || p.CityPointName} -{" "}
+                    <span className="text-gray-500">
+                      {p.CityPointTime?.includes("T")
+                        ? p.CityPointTime.split("T")[1]?.slice(0, 5)
+                        : p.CityPointTime}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-400">No boarding points available.</p>
+              )}
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <span className="text-gray-400 block">Operator</span>
-              {bus.operator_name}
-            </div>
-
-            <div>
-              <span className="text-gray-400 block">Bus Type</span>
-              {bus.bus_type}
-            </div>
-
-            <div>
-              <span className="text-gray-400 block">Rating</span>
-              {bus.rating || "N/A"}
-            </div>
-
-            <div>
-              <span className="text-gray-400 block">Available Seats</span>
-              {bus.seats_available ?? "N/A"}
+          <div>
+            <p className="font-bold text-gray-800 mb-2">Dropping Points:</p>
+            <div className="space-y-1.5 text-gray-600 max-h-40 overflow-y-auto pr-1">
+              {bus.dropping_points?.length > 0 ? (
+                bus.dropping_points.map((p, i) => (
+                  <div key={i}>
+                    {p.CityPointLocation || p.CityPointName} -{" "}
+                    <span className="text-gray-500">
+                      {p.CityPointTime?.includes("T")
+                        ? p.CityPointTime.split("T")[1]?.slice(0, 5)
+                        : p.CityPointTime}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-400">No dropping points available.</p>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {/* Expandable Box 2: Cancellation Policies (Inline List Design) */}
+      {openPolicies && (
+        <div className="mt-3 p-4 bg-gray-50/80 rounded-lg border border-gray-100 text-xs space-y-3">
+          {bus.cancellation_policies?.length > 0 ? (
+            bus.cancellation_policies.flat().map((p, i) => (
+              <div key={i} className="pb-2 border-b border-gray-200/60 last:border-0 last:pb-0">
+                <div className="text-gray-700">
+                  <span className="font-semibold text-gray-900">Time: </span>
+                  {p.PolicyString || "Standard Policy"}
+                </div>
+                <div className="text-gray-700 mt-0.5">
+                  <span className="font-semibold text-gray-900">Cancellation Charge: </span>
+                  ₹{p.CancellationCharge ?? "N/A"}
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-400">Cancellation policy details not available.</p>
+          )}
+        </div>
+      )}
+
+      {/* Bottom Select Seats Button */}
+      <div className="flex justify-end mt-4 pt-2">
+        <button
+          onClick={() => onViewSeats(bus)}
+          className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-6 py-2.5 rounded transition-colors"
+        >
+          Select Seats
+        </button>
+      </div>
     </div>
   );
 }
@@ -133,49 +194,49 @@ export default function BusesPage() {
     }
   }, [router.isReady, from, to, date]);
 
-useEffect(() => {
-  if (!from || !to || !date) return;
+  useEffect(() => {
+    if (!from || !to || !date) return;
 
-  async function fetchBuses() {
-    try {
-      setLoading(true);
-      setError('');
+    async function fetchBuses() {
+      try {
+        setLoading(true);
+        setError('');
 
-      const res = await fetch('/api/buses/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceCity: from,
-          destinationCity: to,
-          journeyDate: date, // <-- Yahan journeyDate add kar diya hai
-        }),
-      });
+        const res = await fetch('/api/buses/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sourceCity: from,
+            destinationCity: to,
+            journeyDate: date,
+          }),
+        });
 
-      if (!res.ok) {
-        const body = await res.text();
-        console.error('Bus API status:', res.status, 'body:', body);
-        throw new Error('Failed to fetch');
+        if (!res.ok) {
+          const body = await res.text();
+          console.error('Bus API status:', res.status, 'body:', body);
+          throw new Error('Failed to fetch');
+        }
+
+        const data = await res.json();
+
+        if (!data.success) {
+          setError(data.message || 'Failed to load buses. Please try again later.');
+          setBuses([]);
+          return;
+        }
+
+        setBuses(data.results || []);
+      } catch (err) {
+        console.error('fetchBuses error:', err);
+        setError('Failed to load buses. Please try again later.');
+      } finally {
+        setLoading(false);
       }
-
-      const data = await res.json();
-
-      if (!data.success) {
-        setError(data.message || 'Failed to load buses. Please try again later.');
-        setBuses([]);
-        return;
-      }
-
-      setBuses(data.results || []);
-    } catch (err) {
-      console.error('fetchBuses error:', err);
-      setError('Failed to load buses. Please try again later.');
-    } finally {
-      setLoading(false);
     }
-  }
 
-  fetchBuses();
-}, [from, to, date]);
+    fetchBuses();
+  }, [from, to, date]);
 
   const busTypeCounts = useMemo(() => {
     const counts = {};
@@ -209,6 +270,27 @@ useEffect(() => {
   function resetFilters() {
     setSelectedBusTypes([]);
     setMaxPrice(5000);
+  }
+
+  async function handleViewSeats(bus) {
+    try {
+      const res = await fetch('/api/buses/seat-layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ traceId: bus.traceId, resultIndex: bus.resultIndex }),
+      });
+      const data = await res.json();
+      console.log('SEAT LAYOUT RESULT:', data);
+
+      if (data.success) {
+        alert(`Seat layout endpoint mil gaya: "${data.endpoint}". Terminal check karo, poora response wahan print hoga.`);
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('handleViewSeats error:', err);
+      alert('Kuch galat ho gaya, terminal check karo.');
+    }
   }
 
   function handleSearch() {
@@ -384,7 +466,7 @@ useEffect(() => {
 
         <main className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
           {/* Filter Sidebar */}
-          <aside className="w-1/4 bg-white p-5 rounded-lg shadow-sm h-fit hidden md:block">
+          <aside className="w-1/4 bg-white p-5 rounded-lg shadow-sm hidden md:block sticky top-24 max-h-[calc(100vh-100px)] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-bold tracking-wide">Filters</h2>
               <button
@@ -492,6 +574,7 @@ useEffect(() => {
                 bus={bus}
                 isExpanded={expandedId === bus.id}
                 onToggle={() => setExpandedId(expandedId === bus.id ? null : bus.id)}
+                onViewSeats={handleViewSeats}
               />
             ))}
           </section>
