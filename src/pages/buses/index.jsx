@@ -154,6 +154,126 @@ function BusCard({ bus, isExpanded, onToggle, onViewSeats }) {
   );
 }
 
+function SeatMapModal({ bus, onClose }) {
+  const [seats, setSeats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedSeats, setSelectedSeats] = useState([]);
+
+  useEffect(() => {
+    async function fetchSeats() {
+      try {
+        setLoading(true);
+        setError('');
+        const res = await fetch('/api/buses/seat-layout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ traceId: bus.traceId, resultIndex: bus.resultIndex }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          setError(data.message || 'Seats load nahi ho paaye.');
+          return;
+        }
+        setSeats(data.seats || []);
+      } catch (err) {
+        console.error('fetchSeats error:', err);
+        setError('Seats load nahi ho paaye.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSeats();
+  }, [bus]);
+
+  function toggleSeat(seat) {
+    if (!seat.isAvailable) return;
+    setSelectedSeats((prev) =>
+      prev.find((s) => s.seatIndex === seat.seatIndex)
+        ? prev.filter((s) => s.seatIndex !== seat.seatIndex)
+        : [...prev, seat]
+    );
+  }
+
+  const rowNumbers = [...new Set(seats.map((s) => s.rowNo))].sort((a, b) => a - b);
+  const totalPrice = selectedSeats.reduce((sum, s) => sum + Number(s.price || 0), 0);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 relative">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold"
+        >
+          ✕
+        </button>
+        <h2 className="text-lg font-bold text-center mb-1">{bus.operator_name}</h2>
+        <p className="text-xs text-gray-500 text-center mb-5">{bus.bus_type} — Select Seats</p>
+
+        {loading && <div className="text-center text-gray-500 py-10">Seats load ho rahe hain...</div>}
+        {!loading && error && <div className="text-center text-red-500 py-10">{error}</div>}
+
+        {!loading && !error && (
+          <>
+            <div className="flex justify-center gap-4 mb-4 text-[10px] text-gray-500">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-100 border border-green-400 inline-block rounded"></span> Available</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-gray-300 inline-block rounded"></span> Booked</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-orange-500 inline-block rounded"></span> Selected</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-pink-100 border border-pink-400 inline-block rounded"></span> Ladies</span>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4 max-w-sm mx-auto">
+              {rowNumbers.map((rowNo) => {
+                const rowSeats = seats
+                  .filter((s) => s.rowNo === rowNo)
+                  .sort((a, b) => a.columnNo - b.columnNo);
+                return (
+                  <div key={rowNo} className="flex gap-2 justify-center mb-2">
+                    {rowSeats.map((seat) => {
+                      const isSelected = selectedSeats.find((s) => s.seatIndex === seat.seatIndex);
+                      let bg = 'bg-green-100 border-green-400 text-green-700 cursor-pointer';
+                      if (!seat.isAvailable) bg = 'bg-gray-300 border-gray-300 text-gray-400 cursor-not-allowed';
+                      else if (isSelected) bg = 'bg-orange-500 border-orange-500 text-white cursor-pointer';
+                      else if (seat.isLadies) bg = 'bg-pink-100 border-pink-400 text-pink-700 cursor-pointer';
+
+                      return (
+                        <button
+                          key={seat.seatIndex}
+                          onClick={() => toggleSeat(seat)}
+                          disabled={!seat.isAvailable}
+                          title={`₹${seat.price}`}
+                          className={`w-9 h-9 text-[10px] font-bold border rounded flex items-center justify-center ${bg}`}
+                        >
+                          {seat.seatName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 flex items-center justify-between border-t border-gray-100 pt-4">
+              <div className="text-sm">
+                <div className="text-gray-500">
+                  {selectedSeats.length} seat{selectedSeats.length !== 1 ? 's' : ''} selected
+                  {selectedSeats.length > 0 && ` (${selectedSeats.map((s) => s.seatName).join(', ')})`}
+                </div>
+                <div className="text-xl font-bold text-green-600">₹{totalPrice.toLocaleString()}</div>
+              </div>
+              <button
+                disabled={selectedSeats.length === 0}
+                className="bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm px-6 py-3 rounded-lg"
+              >
+                Continue
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 export default function BusesPage() {
   const router = useRouter();
   const { from, to, date } = router.query;
@@ -162,6 +282,7 @@ export default function BusesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState(null);
+  const [selectedBusForSeats, setSelectedBusForSeats] = useState(null);
 
   // Search form states
   const [searchFrom, setSearchFrom] = useState('Noida');
@@ -272,26 +393,10 @@ export default function BusesPage() {
     setMaxPrice(5000);
   }
 
-  async function handleViewSeats(bus) {
-    try {
-      const res = await fetch('/api/buses/seat-layout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ traceId: bus.traceId, resultIndex: bus.resultIndex }),
-      });
-      const data = await res.json();
-      console.log('SEAT LAYOUT RESULT:', data);
-
-      if (data.success) {
-        alert(`Seat layout endpoint mil gaya: "${data.endpoint}". Terminal check karo, poora response wahan print hoga.`);
-      } else {
-        alert(data.message);
-      }
-    } catch (err) {
-      console.error('handleViewSeats error:', err);
-      alert('Kuch galat ho gaya, terminal check karo.');
-    }
-  }
+// ✅ FIXED CODE (Direct Modal target bus set karega)
+function handleViewSeats(bus) {
+  setSelectedBusForSeats(bus);
+}
 
   function handleSearch() {
     if (!searchFrom || !searchTo || !selectedDate) {
@@ -568,19 +673,24 @@ export default function BusesPage() {
               </div>
             )}
 
-            {!loading && !error && visibleBuses.map((bus) => (
-              <BusCard
-                key={bus.id}
-                bus={bus}
-                isExpanded={expandedId === bus.id}
-                onToggle={() => setExpandedId(expandedId === bus.id ? null : bus.id)}
-                onViewSeats={handleViewSeats}
-              />
-            ))}
+{!loading && !error && visibleBuses.map((bus) => (
+  <BusCard
+    key={bus.id || bus.resultIndex}
+    bus={bus}
+    isExpanded={expandedId === (bus.id || bus.resultIndex)}
+    onToggle={() =>
+      setExpandedId(expandedId === (bus.id || bus.resultIndex) ? null : (bus.id || bus.resultIndex))
+    }
+    onViewSeats={handleViewSeats}
+  />
+))}
           </section>
         </main>
       </div>
       <Footer />
+      {selectedBusForSeats && (
+  <SeatMapModal bus={selectedBusForSeats} onClose={() => setSelectedBusForSeats(null)} />
+)}
     </>
   );
 }
