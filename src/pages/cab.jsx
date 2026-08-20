@@ -294,15 +294,50 @@ async function handleSearchCabs() {
           </div>
         )}
 
-        {!loading && !errorMsg && results?.cars?.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {results.cars.map((car, i) => (
-              <div key={i} className="bg-white border rounded-xl p-4 shadow-sm">
-                <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(car, null, 2)}</pre>
-              </div>
-            ))}
-          </div>
+{!loading && !errorMsg && results?.cars?.length > 0 && (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {results.cars.map((car) => (
+      <div key={car.SrdvIndex} className="bg-white border rounded-xl p-4 shadow-sm flex gap-4">
+        {car.Image && (
+          <img src={car.Image} alt={car.Category} className="w-24 h-24 object-contain flex-shrink-0" />
         )}
+        <div className="flex-1">
+          <h3 className="font-semibold text-base mb-1">
+            {car.Category?.replaceAll("_", " ")}
+          </h3>
+          <p className="text-xs text-gray-500 mb-2">
+            {car.SeatingCapacity} Seats • {car.AirConditioner ? "AC" : "Non-AC"}
+          </p>
+          <p className="text-lg font-bold text-orange-600">₹{car.Fare?.TotalAmount?.toFixed(0)}</p>
+          <p className="text-xs text-gray-500 mb-3">Advance: ₹{car.Fare?.AdvanceAmount?.toFixed(0)}</p>
+
+          <Button
+            onClick={() =>
+              router.push({
+                pathname: "/cab/book",
+                query: {
+                  srdvIndex: car.SrdvIndex,
+                  traceId: results.traceId,
+                  category: car.Category,
+                  totalAmount: car.Fare?.TotalAmount,
+                  advanceAmount: car.Fare?.AdvanceAmount,
+                  seating: car.SeatingCapacity,
+                  fromName: from?.Destination,
+                  toName: to?.Destination,
+                  pickupDate: formatDDMMYYYY(selected),
+                  pickupTime,
+                },
+              })
+            }
+            className="w-full"
+          >
+            Book Now
+          </Button>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
 
         {!loading && !errorMsg && (!results?.cars || results.cars.length === 0) && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">

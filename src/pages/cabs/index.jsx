@@ -108,9 +108,16 @@ function CitySearchBox({ label, value, placeholder, onSelect }) {
   );
 }
 
+// TripType codes as per SRDV docs — confirm exact numbers from your API docs
+const TRIP_TYPES = [
+  { label: "One-Way", value: "0" },
+  { label: "Round Trip", value: "1" },
+  { label: "Local (8hr/80km)", value: "2" },
+];
+
 export default function CabsPage() {
   const router = useRouter();
-  const [tripType, setTripType] = useState("airport");
+  const [tripType, setTripType] = useState("0");
   const [selected, setSelected] = useState(new Date());
   const [open, setOpen] = useState(false);
   const [from, setFrom] = useState(null);
@@ -131,43 +138,43 @@ export default function CabsPage() {
     }
   }, [router.isReady, router.query]);
 
-const cabs = [
-  {
-    city: "Cabs from Chennai",
-    cabroutes: "Vellore, Puducherry, Bengaluru, Tirupati, Coimbatore",
-    image: "/flights/Coimbatore.png",
-  },
-  {
-    city: "Cabs from Mumbai",
-    cabroutes: "Pune, Nashik, Shirdi, Lonavala, Mahabaleshwar",
-    image: "/flights/marine drive.jpeg",
-  },
-  {
-    city: "Cabs from Chandigarh",
-    cabroutes: "New Delhi, Shimla, Manali, Dharamshala, Gurugram, Noida",
-    image: "/hotels/manali.jpg",
-  },
-  {
-    city: "Cabs from Delhi",
-    cabroutes: "Agra, Jaipur, Dehradun, Haridwar, Chandigarh",
-    image: "/flights/delhi.jpg",
-  },
-  {
-    city: "Cabs from Pune",
-    cabroutes: "Mumbai, Shirdi, Mahabaleshwar, Nashik, Aurangabad",
-    image: "/flights/pune.jpeg",
-  },
-  {
-    city: "Cabs from Bengaluru",
-    cabroutes: "Ooty, Madikeri, Coorg, Vellore, Mysuru",
-    image: "/flights/bangalore.jpeg",
-  },
-  {
-    city: "Cabs from Ahmedabad",
-    cabroutes: "Mumbai, Rajkot, Surat, Pune, Indore",
-    image: "/flights/ahmedabad.jpeg",
-  },
-];
+  const cabs = [
+    {
+      city: "Cabs from Chennai",
+      cabroutes: "Vellore, Puducherry, Bengaluru, Tirupati, Coimbatore",
+      image: "/flights/Coimbatore.png",
+    },
+    {
+      city: "Cabs from Mumbai",
+      cabroutes: "Pune, Nashik, Shirdi, Lonavala, Mahabaleshwar",
+      image: "/flights/marine drive.jpeg",
+    },
+    {
+      city: "Cabs from Chandigarh",
+      cabroutes: "New Delhi, Shimla, Manali, Dharamshala, Gurugram, Noida",
+      image: "/hotels/manali.jpg",
+    },
+    {
+      city: "Cabs from Delhi",
+      cabroutes: "Agra, Jaipur, Dehradun, Haridwar, Chandigarh",
+      image: "/flights/delhi.jpg",
+    },
+    {
+      city: "Cabs from Pune",
+      cabroutes: "Mumbai, Shirdi, Mahabaleshwar, Nashik, Aurangabad",
+      image: "/flights/pune.jpeg",
+    },
+    {
+      city: "Cabs from Bengaluru",
+      cabroutes: "Ooty, Madikeri, Coorg, Vellore, Mysuru",
+      image: "/flights/bangalore.jpeg",
+    },
+    {
+      city: "Cabs from Ahmedabad",
+      cabroutes: "Mumbai, Rajkot, Surat, Pune, Indore",
+      image: "/flights/ahmedabad.jpeg",
+    },
+  ];
 
   function formatDDMMYYYY(date) {
     if (!date) return "";
@@ -184,6 +191,7 @@ const cabs = [
     }
     setLoading(true);
     setErrorMsg("");
+    setResults(null);
     try {
       const res = await fetch("/api/cabs/search", {
         method: "POST",
@@ -192,7 +200,8 @@ const cabs = [
           pickupLocationCode: from.cityid,
           dropoffLocationCode: to.cityid,
           pickupDate: formatDDMMYYYY(selected),
-          tripType: "0",
+          pickupTime,
+          tripType,
         }),
       });
       const data = await res.json();
@@ -207,6 +216,22 @@ const cabs = [
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleBookNow(cab, traceId) {
+    router.push({
+      pathname: "/cabs/book",
+      query: {
+        pricingId: cab.Fare?.PricingId,
+        srdvIndex: cab.SrdvIndex,
+        traceId,
+        from: from?.cityid,
+        to: to?.cityid,
+        pickupDate: formatDDMMYYYY(selected),
+        pickupTime,
+        tripType,
+      },
+    });
   }
 
   return (
@@ -232,55 +257,73 @@ const cabs = [
             <h1 className="text-4xl lg:text-6xl font-bold text-white mb-4">
               India Travel Cab Booking
             </h1>
-          <p className="text-lg text-white font-semibold">
-  Flights • Hotels • Holiday Packages • Buses • Cabs
-</p>
+            <p className="text-lg text-white font-semibold">
+              Flights • Hotels • Holiday Packages • Buses • Cabs
+            </p>
           </div>
 
-{/* Search Form */}
-<div className="bg-white rounded-2xl shadow-xl p-8 max-w-5xl mx-auto">
-  <h2 className="text-2xl font-bold mb-6 text-gray-800">Book a Cab</h2>
+          {/* Search Form */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-5xl mx-auto">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">Book a Cab</h2>
 
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-    {/* From */}
-    <div className="lg:col-span-2">
-      <CitySearchBox
-        label="From"
-        value={from}
-        placeholder="Select a city"
-        onSelect={setFrom}
-      />
-    </div>
+            {/* Trip Type */}
+            <div className="mb-6 flex gap-2">
+              {TRIP_TYPES.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => setTripType(t.value)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold border transition ${
+                    tripType === t.value
+                      ? "bg-orange-600 text-white border-orange-600"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-orange-400"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
 
-    {/* To */}
-    <div className="lg:col-span-2">
-      <CitySearchBox
-        label="To"
-        value={to}
-        placeholder="Select a city"
-        onSelect={setTo}
-      />
-    </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+              {/* From */}
+              <div className="lg:col-span-2">
+                <CitySearchBox
+                  label="From"
+                  value={from}
+                  placeholder="Select a city"
+                  onSelect={setFrom}
+                />
+              </div>
 
-    {/* Date */}
-    <div className="relative">
-      <label className="text-xs uppercase font-medium text-slate-500 block mb-2">
-        Date
-      </label>
+              {/* To */}
+              <div className="lg:col-span-2">
+                <CitySearchBox
+                  label="To"
+                  value={to}
+                  placeholder="Select a city"
+                  onSelect={setTo}
+                />
+              </div>
 
-      <div
-        onClick={() => setOpen(!open)}
-        className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer flex items-center justify-between"
-      >
-        <span>
-          {selected.toLocaleDateString("en-US", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })}
-        </span>
-        <CalendarIcon className="w-4 h-4" />
-      </div>
+              {/* Date */}
+              <div className="relative">
+                <label className="text-xs uppercase font-medium text-slate-500 block mb-2">
+                  Date
+                </label>
+
+                <div
+                  onClick={() => setOpen(!open)}
+                  className="w-full font-bold text-orange-500 text-sm border rounded-xl px-3 py-4 bg-white shadow-sm cursor-pointer flex items-center justify-between"
+                >
+                  <span>
+                    {selected.toLocaleDateString("en-US", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                  <CalendarIcon className="w-4 h-4" />
+                </div>
 
                 {open && (
                   <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-10 border-2 border-orange-200">
@@ -301,7 +344,7 @@ const cabs = [
             {/* Time */}
             <div className="mb-6">
               <label className="text-xs uppercase font-medium text-slate-500 block mb-2">
-              Pickup Time
+                Pickup Time
               </label>
               <input
                 type="time"
@@ -322,51 +365,64 @@ const cabs = [
               disabled={loading}
               className="w-full px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-lg uppercase tracking-wide transition-colors disabled:opacity-50"
             >
-{loading ? "Searching..." : "Search Cabs"}
-</Button>
-</div>
-</div>
-</section>
-
-{/* Results */}
-{results && (
-  <section className="py-10 px-4">
-    <div className="max-w-7xl mx-auto rounded-2xl shadow-md p-6 bg-white">
-      <h2 className="text-2xl font-bold mb-6">Available Cabs</h2>
-
-      {results.results && results.results.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {results.results.map((cab, idx) => (
-            <div
-              key={idx}
-              className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition"
-            >
-              <h3 className="font-semibold text-lg mb-2">
-                {cab.cab_type}
-              </h3>
-
-              <p className="text-sm text-gray-600 mb-2">
-                ₹ {cab.price}
-              </p>
-
-              <p className="text-xs text-gray-500 mb-4">
-                {cab.description || "Comfortable journey"}
-              </p>
-
-              <Button className="w-full bg-orange-600 hover:bg-orange-700 text-white rounded-lg">
-                Book Now
-              </Button>
-            </div>
-          ))}
+              {loading ? "Searching..." : "Search Cabs"}
+            </Button>
+          </div>
         </div>
-      ) : (
-        <p className="text-center text-gray-500">
-          No cabs available.
-        </p>
+      </section>
+
+      {/* Results */}
+      {results && (
+        <section className="py-10 px-4">
+          <div className="max-w-7xl mx-auto rounded-2xl shadow-md p-6 bg-white">
+            <h2 className="text-2xl font-bold mb-6">Available Cabs</h2>
+
+            {results.cars && results.cars.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {results.cars.map((cab) => (
+                  <div
+                    key={cab.SrdvIndex}
+                    className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition"
+                  >
+                    {cab.Image && (
+                      <img
+                        src={cab.Image}
+                        alt={cab.Category}
+                        className="w-full h-32 object-contain mb-3"
+                      />
+                    )}
+
+                    <h3 className="font-semibold text-lg mb-2">
+                      {cab.Category?.replaceAll("_", " ")}
+                    </h3>
+
+                    <p className="text-sm text-gray-600 mb-1">
+                      Seats: {cab.SeatingCapacity} • {cab.AirConditioner ? "AC" : "Non-AC"}
+                    </p>
+
+                    <p className="text-lg font-bold text-orange-600 mb-1">
+                      ₹{cab.Fare?.TotalAmount?.toFixed(0)}
+                    </p>
+
+                    <p className="text-xs text-gray-500 mb-4">
+                      Advance: ₹{cab.Fare?.AdvanceAmount?.toFixed(0)}
+                    </p>
+
+                    <Button
+                      onClick={() => handleBookNow(cab, results.traceId)}
+                      className="w-full bg-orange-600 hover:bg-orange-700 text-white rounded-lg"
+                    >
+                      Book Now
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-gray-500">No cabs available.</p>
+            )}
+          </div>
+        </section>
       )}
-    </div>
-  </section>
-)}
 
       {/* Popular Routes */}
       <section className="py-10 px-4 bg-gray-50">
