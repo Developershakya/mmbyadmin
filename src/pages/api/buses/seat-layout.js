@@ -11,23 +11,39 @@ export default async function handler(req, res) {
   }
 
   try {
-    const data = await callSrdvApi(process.env.BUS_API_URL, 'GetSeatLayout', {
-      TraceId: traceId,
-      ResultIndex: resultIndex,
-    });
+const data = await callSrdvApi(process.env.BUS_API_URL, 'GetSeatLayout', {
+  TraceId: traceId,
+  ResultIndex: resultIndex,
+});
+
+console.log('RAW SEAT LAYOUT RESPONSE:', JSON.stringify(data, null, 2));   
 
     if (data?.Error && Number(data.Error.ErrorCode) !== 0) {
       return res.status(200).json({ success: false, message: data.Error.ErrorMessage });
     }
-
-    // SRDV response se exact seats array nikalna
-    const seatData = data?.GetSeatLayoutResult?.SeatLayout || data?.SeatLayout || data;
-    const rawSeats = seatData?.SeatDetails || seatData?.Seats || [];
-    const seatList = Array.isArray(rawSeats) ? rawSeats.flat() : [];
-
-    if (seatList.length === 0) {
-      return res.status(200).json({ success: false, message: 'Seat data available nahi hai.' });
+// SRDV response se seats dhoondo (chahe kisi bhi key/nesting ke andar ho)
+function findSeatArray(obj) {
+  if (Array.isArray(obj)) {
+    const flat = obj.flat(Infinity);
+    if (flat.length && flat[0] && typeof flat[0] === 'object' &&
+        (flat[0].SeatName || flat[0].SeatIndex)) {
+      return flat;
     }
+  }
+  if (obj && typeof obj === 'object') {
+    for (const key of Object.keys(obj)) {
+      const found = findSeatArray(obj[key]);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+const seatList = findSeatArray(data) || [];
+
+if (seatList.length === 0) {
+  return res.status(200).json({ success: false, message: 'Seat data available nahi hai.' });
+}
 
     // Clean formatting for React UI
     const seats = seatList.map((seat) => ({

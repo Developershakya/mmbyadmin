@@ -8,9 +8,10 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
 // BusCard Component
-function BusCard({ bus, isExpanded, onToggle, onViewSeats }) {
-  const [openPickupDrop, setOpenPickupDrop] = useState(false);
-  const [openPolicies, setOpenPolicies] = useState(false);
+// BusCard Component
+function BusCard({ bus, onViewSeats }) {
+  const [showDetails, setShowDetails] = useState(false);
+  const [activeTab, setActiveTab] = useState('boarding'); // 'boarding' | 'policy'
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden mb-4 p-5">
@@ -41,7 +42,7 @@ function BusCard({ bus, isExpanded, onToggle, onViewSeats }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+      <div className="flex items-center justify-between text-xs text-gray-500 mb-4">
         <div>
           <span className="font-semibold">Available Seats: </span>
           {bus.seats_available ?? "N/A"}
@@ -51,98 +52,15 @@ function BusCard({ bus, isExpanded, onToggle, onViewSeats }) {
         </div>
       </div>
 
-      {/* Action Toggle Links (Pick-Up & Drop / Policies) */}
-      <div className="flex items-center gap-6 py-2">
+      {/* Bottom Row: View Details (left) + Select Seats (right) — flight jaisa layout */}
+      <div className="flex items-center justify-between pt-3 border-t border-gray-50">
         <button
-          onClick={() => {
-            setOpenPickupDrop(!openPickupDrop);
-            if (!openPickupDrop) setOpenPolicies(false);
-          }}
-          className="text-xs font-bold text-gray-700 hover:text-blue-600 flex items-center gap-1 transition-colors"
+          onClick={() => setShowDetails(!showDetails)}
+          className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 transition-colors"
         >
-          🗺️ Pick-Up &amp; Drop {openPickupDrop ? "▲" : "▼"}
+          {showDetails ? 'Hide Bus Details' : 'View Details'} {showDetails ? '▲' : '▼'}
         </button>
 
-        <button
-          onClick={() => {
-            setOpenPolicies(!openPolicies);
-            if (!openPolicies) setOpenPickupDrop(false);
-          }}
-          className="text-xs font-bold text-gray-700 hover:text-blue-600 flex items-center gap-1 transition-colors"
-        >
-          📜 Policies {openPolicies ? "▲" : "▼"}
-        </button>
-      </div>
-
-      {/* Expandable Box 1: Pick-Up & Drop (Inline Side-by-Side Design) */}
-      {openPickupDrop && (
-        <div className="mt-3 p-4 bg-gray-50/80 rounded-lg border border-gray-100 text-xs grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <p className="font-bold text-gray-800 mb-2">Boarding Points:</p>
-            <div className="space-y-1.5 text-gray-600 max-h-40 overflow-y-auto pr-1">
-              {bus.boarding_points?.length > 0 ? (
-                bus.boarding_points.map((p, i) => (
-                  <div key={i}>
-                    {p.CityPointLocation || p.CityPointName} -{" "}
-                    <span className="text-gray-500">
-                      {p.CityPointTime?.includes("T")
-                        ? p.CityPointTime.split("T")[1]?.slice(0, 5)
-                        : p.CityPointTime}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-400">No boarding points available.</p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <p className="font-bold text-gray-800 mb-2">Dropping Points:</p>
-            <div className="space-y-1.5 text-gray-600 max-h-40 overflow-y-auto pr-1">
-              {bus.dropping_points?.length > 0 ? (
-                bus.dropping_points.map((p, i) => (
-                  <div key={i}>
-                    {p.CityPointLocation || p.CityPointName} -{" "}
-                    <span className="text-gray-500">
-                      {p.CityPointTime?.includes("T")
-                        ? p.CityPointTime.split("T")[1]?.slice(0, 5)
-                        : p.CityPointTime}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-400">No dropping points available.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Expandable Box 2: Cancellation Policies (Inline List Design) */}
-      {openPolicies && (
-        <div className="mt-3 p-4 bg-gray-50/80 rounded-lg border border-gray-100 text-xs space-y-3">
-          {bus.cancellation_policies?.length > 0 ? (
-            bus.cancellation_policies.flat().map((p, i) => (
-              <div key={i} className="pb-2 border-b border-gray-200/60 last:border-0 last:pb-0">
-                <div className="text-gray-700">
-                  <span className="font-semibold text-gray-900">Time: </span>
-                  {p.PolicyString || "Standard Policy"}
-                </div>
-                <div className="text-gray-700 mt-0.5">
-                  <span className="font-semibold text-gray-900">Cancellation Charge: </span>
-                  ₹{p.CancellationCharge ?? "N/A"}
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-gray-400">Cancellation policy details not available.</p>
-          )}
-        </div>
-      )}
-
-      {/* Bottom Select Seats Button */}
-      <div className="flex justify-end mt-4 pt-2">
         <button
           onClick={() => onViewSeats(bus)}
           className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-6 py-2.5 rounded transition-colors"
@@ -150,11 +68,107 @@ function BusCard({ bus, isExpanded, onToggle, onViewSeats }) {
           Select Seats
         </button>
       </div>
+
+      {/* Expandable Details Section — flight ke FLIGHT DETAILS / FARE SUMMARY jaisi tabs */}
+      {showDetails && (
+        <div className="mt-4">
+          <div className="flex gap-6 border-b border-gray-100">
+            <button
+              onClick={() => setActiveTab('boarding')}
+              className={`text-xs font-bold uppercase tracking-wide pb-2 px-1 border-b-2 transition-colors ${
+                activeTab === 'boarding'
+                  ? 'text-orange-600 border-orange-500'
+                  : 'text-gray-400 border-transparent hover:text-gray-600'
+              }`}
+            >
+              Boarding &amp; Dropping
+            </button>
+            <button
+              onClick={() => setActiveTab('policy')}
+              className={`text-xs font-bold uppercase tracking-wide pb-2 px-1 border-b-2 transition-colors ${
+                activeTab === 'policy'
+                  ? 'text-orange-600 border-orange-500'
+                  : 'text-gray-400 border-transparent hover:text-gray-600'
+              }`}
+            >
+              Cancellation Policy
+            </button>
+          </div>
+
+          {/* Tab Content: Boarding & Dropping */}
+          {activeTab === 'boarding' && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+              <div>
+                <p className="font-bold text-gray-800 mb-2">Boarding Points:</p>
+                <div className="space-y-1.5 text-gray-600 max-h-40 overflow-y-auto pr-1">
+                  {bus.boarding_points?.length > 0 ? (
+                    bus.boarding_points.map((p, i) => (
+                      <div key={i}>
+                        {p.CityPointLocation || p.CityPointName} -{" "}
+                        <span className="text-gray-500">
+                          {p.CityPointTime?.includes("T")
+                            ? p.CityPointTime.split("T")[1]?.slice(0, 5)
+                            : p.CityPointTime}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-400">No boarding points available.</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <p className="font-bold text-gray-800 mb-2">Dropping Points:</p>
+                <div className="space-y-1.5 text-gray-600 max-h-40 overflow-y-auto pr-1">
+                  {bus.dropping_points?.length > 0 ? (
+                    bus.dropping_points.map((p, i) => (
+                      <div key={i}>
+                        {p.CityPointLocation || p.CityPointName} -{" "}
+                        <span className="text-gray-500">
+                          {p.CityPointTime?.includes("T")
+                            ? p.CityPointTime.split("T")[1]?.slice(0, 5)
+                            : p.CityPointTime}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-400">No dropping points available.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab Content: Cancellation Policy */}
+          {activeTab === 'policy' && (
+            <div className="mt-4 text-xs space-y-3">
+              {bus.cancellation_policies?.length > 0 ? (
+                bus.cancellation_policies.flat().map((p, i) => (
+                  <div key={i} className="pb-2 border-b border-gray-100 last:border-0 last:pb-0">
+                    <div className="text-gray-700">
+                      <span className="font-semibold text-gray-900">Time: </span>
+                      {p.PolicyString || "Standard Policy"}
+                    </div>
+                    <div className="text-gray-700 mt-0.5">
+                      <span className="font-semibold text-gray-900">Cancellation Charge: </span>
+                      ₹{p.CancellationCharge ?? "N/A"}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-400">Cancellation policy details not available.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 function SeatMapModal({ bus, onClose }) {
+  const router = useRouter();
   const [seats, setSeats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -261,12 +275,27 @@ function SeatMapModal({ bus, onClose }) {
                 </div>
                 <div className="text-xl font-bold text-green-600">₹{totalPrice.toLocaleString()}</div>
               </div>
-              <button
-                disabled={selectedSeats.length === 0}
-                className="bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm px-6 py-3 rounded-lg"
-              >
-                Continue
-              </button>
+<button
+  disabled={selectedSeats.length === 0}
+  onClick={() => {
+    sessionStorage.setItem(
+      'selectedBusBooking',
+      JSON.stringify({
+        bus,
+        selectedSeats,
+        totalPrice,
+      })
+    );
+    router.push('/buses/booking');
+  }}
+  className={`font-bold text-sm px-6 py-3 rounded-lg transition-colors ${
+    selectedSeats.length === 0
+      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+      : 'bg-green-600 hover:bg-green-700 text-white'
+  }`}
+>
+  {selectedSeats.length === 0 ? 'Select Seats to Continue' : '✓ Proceed to Book'}
+</button>
             </div>
           </>
         )}
@@ -289,6 +318,8 @@ export default function BusesPage() {
   const [searchTo, setSearchTo] = useState('Mathura');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [openDate, setOpenDate] = useState(false);
+  const [openFromList, setOpenFromList] = useState(false);  
+const [openToList, setOpenToList] = useState(false);       
 
   // Filter states
   const [selectedBusTypes, setSelectedBusTypes] = useState([]);
@@ -528,46 +559,140 @@ function handleViewSeats(bus) {
     <>
       <Header />
       <div className="bg-[#F4F6F9] font-sans antialiased text-gray-800 min-h-screen">
-        <header className="bg-[#0B1523] text-white p-3 sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
-            <div className="flex-[2.5] min-w-[320px] bg-[#1E2A38] rounded h-[54px] flex items-center relative px-4">
-              <div className="flex-1 flex flex-col justify-center pr-4">
-                <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">From</label>
-                <div className="text-xs font-black mt-0.5 whitespace-nowrap text-white">{from || '--'}</div>
-              </div>
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-full">
-                <div className="h-8 border-l border-gray-600/50 absolute"></div>
-                <div className="bg-[#1E2A38] border border-gray-600 rounded-full w-5 h-5 flex items-center justify-center z-10 text-gray-400">
-                  ↔
-                </div>
-              </div>
-              <div className="flex-1 flex flex-col justify-center pl-8">
-                <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">To</label>
-                <div className="text-xs font-black mt-0.5 whitespace-nowrap text-white">{to || '--'}</div>
-              </div>
-            </div>
+<header className="bg-[#0B1523] text-white p-3 sticky top-0 z-50">
+  <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
+<div className="flex-[2.5] min-w-[320px] bg-[#1E2A38] rounded h-[54px] flex items-center px-4 gap-2">
 
-            <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] flex flex-col justify-center">
-              <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Travel Date</label>
-              <div className="text-xs font-black mt-0.5 flex justify-between items-center whitespace-nowrap">
-                <span>{date || '--'}</span>
-                <CalendarIcon className="w-4 h-4 text-gray-400 ml-1" />
-              </div>
-            </div>
+  {/* FROM */}
+  <div className="flex-1 relative">
+    <button
+      type="button"
+      onClick={() => {
+        setOpenFromList(!openFromList);
+        setOpenToList(false);
+        setOpenDate(false);
+      }}
+      className="flex flex-col justify-center text-left w-full"
+    >
+      <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">From</label>
+      <div className="text-xs font-black mt-0.5 whitespace-nowrap text-white">{searchFrom || from || '--'}</div>
+    </button>
 
-            <button
-              onClick={() => {
-                const dateStr = selectedDate ? selectedDate.toISOString().split("T")[0] : (date || new Date().toISOString().split("T")[0]);
-                const currentFrom = searchFrom || from || 'Delhi';
-                const currentTo = searchTo || to || 'Mathura';
-                router.push(`/buses?from=${encodeURIComponent(currentFrom)}&to=${encodeURIComponent(currentTo)}&date=${dateStr}`);
-              }}
-              className="bg-gradient-to-r from-[#0B1523] to-orange-500 text-white text-base rounded px-6 h-[54px] ml-1.5 font-bold uppercase tracking-wider hover:opacity-95 transition-all"
-            >
-              Search
-            </button>
-          </div>
-        </header>
+    {openFromList && (
+      <div className="absolute left-0 top-full mt-2 bg-white text-gray-800 rounded shadow-lg w-56 max-h-64 overflow-y-auto z-50">
+        {indianCities.map((city) => (
+          <button
+            key={city}
+            type="button"
+            onClick={() => {
+              setSearchFrom(city);
+              setOpenFromList(false);
+            }}
+            className="block w-full text-left px-4 py-2 text-xs hover:bg-orange-50"
+          >
+            {city}
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+
+  {/* REVERSE BUTTON — ab flex ka normal item hai, kisi ke upar overlap nahi karega */}
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      setSearchFrom(searchTo);
+      setSearchTo(searchFrom);
+      setOpenFromList(false);
+      setOpenToList(false);
+    }}
+    className="shrink-0 bg-[#1E2A38] border border-gray-600 rounded-full w-7 h-7 flex items-center justify-center text-gray-400 hover:text-orange-500 hover:border-orange-500 transition-colors cursor-pointer"
+  >
+    ↔
+  </button>
+
+  {/* TO */}
+  <div className="flex-1 relative">
+    <button
+      type="button"
+      onClick={() => {
+        setOpenToList(!openToList);
+        setOpenFromList(false);
+        setOpenDate(false);
+      }}
+      className="flex flex-col justify-center text-left w-full"
+    >
+      <label className="block text-[9px] uppercase text-orange-500 tracking-wider font-bold">To</label>
+      <div className="text-xs font-black mt-0.5 whitespace-nowrap text-white">{searchTo || to || '--'}</div>
+    </button>
+
+    {openToList && (
+      <div className="absolute left-0 top-full mt-2 bg-white text-gray-800 rounded shadow-lg w-56 max-h-64 overflow-y-auto z-50">
+        {indianCities.map((city) => (
+          <button
+            key={city}
+            type="button"
+            onClick={() => {
+              setSearchTo(city);
+              setOpenToList(false);
+            }}
+            className="block w-full text-left px-4 py-2 text-xs hover:bg-orange-50"
+          >
+            {city}
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+</div>
+
+    {/* TRAVEL DATE */}
+    <div className="flex-1 min-w-[140px] bg-[#1E2A38] px-3 py-1.5 rounded h-[54px] relative">
+      <button
+        type="button"
+        onClick={() => {
+          setOpenDate(!openDate);
+          setOpenFromList(false);
+          setOpenToList(false);
+        }}
+        className="flex flex-col justify-center w-full h-full text-left"
+      >
+        <label className="block text-[9px] uppercase text-gray-400 tracking-wider font-medium">Travel Date</label>
+        <div className="text-xs font-black mt-0.5 flex justify-between items-center whitespace-nowrap">
+          <span>{selectedDate ? selectedDate.toISOString().split('T')[0] : date || '--'}</span>
+          <CalendarIcon className="w-4 h-4 text-gray-400 ml-1" />
+        </div>
+      </button>
+
+      {openDate && (
+        <div className="absolute right-0 top-full mt-2 p-3 bg-white shadow-lg rounded-lg z-50 border-2 border-orange-200">
+          <DayPicker
+            mode="single"
+            selected={selectedDate}
+            onSelect={(d) => {
+              if (d) setSelectedDate(d);
+              setOpenDate(false);
+            }}
+            disabled={{ before: new Date() }}
+          />
+        </div>
+      )}
+    </div>
+
+    <button
+      onClick={() => {
+        const dateStr = selectedDate ? selectedDate.toISOString().split("T")[0] : (date || new Date().toISOString().split("T")[0]);
+        const currentFrom = searchFrom || from || 'Delhi';
+        const currentTo = searchTo || to || 'Mathura';
+        router.push(`/buses?from=${encodeURIComponent(currentFrom)}&to=${encodeURIComponent(currentTo)}&date=${dateStr}`);
+      }}
+      className="bg-gradient-to-r from-[#0B1523] to-orange-500 text-white text-base rounded px-6 h-[54px] ml-1.5 font-bold uppercase tracking-wider hover:opacity-95 transition-all"
+    >
+      Search
+    </button>
+  </div>
+</header>
 
         <main className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
           {/* Filter Sidebar */}
@@ -677,10 +802,6 @@ function handleViewSeats(bus) {
   <BusCard
     key={bus.id || bus.resultIndex}
     bus={bus}
-    isExpanded={expandedId === (bus.id || bus.resultIndex)}
-    onToggle={() =>
-      setExpandedId(expandedId === (bus.id || bus.resultIndex) ? null : (bus.id || bus.resultIndex))
-    }
     onViewSeats={handleViewSeats}
   />
 ))}
