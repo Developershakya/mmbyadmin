@@ -375,17 +375,19 @@ export default function FlightsPage() {
     return d.toLocaleDateString('en-US', { weekday: 'short' });
   }
  
-  // ⭐ NEW: how many legs need to be picked for this trip type
   const totalLegsNeeded =
     trip === 'multicity' ? (legs || '').split(',').length : trip === 'roundtrip' ? 2 : 1;
- 
-  const allLegsSelected = Object.keys(selectedLegs).length === totalLegsNeeded;
- 
-  // ⭐ NEW: called when user clicks "Select" on a FlightCard
+
+  const allLegsSelected = useMemo(() => {
+    for (let i = 0; i < totalLegsNeeded; i++) {
+      if (!selectedLegs[i]) return false;
+    }
+    return totalLegsNeeded > 0;
+  }, [selectedLegs, totalLegsNeeded]);
+
   function selectFlight(legIndex, flight) {
     setSelectedLegs((prev) => ({ ...prev, [legIndex]: flight }));
   }
- 
   // ⭐ NEW: goes to the booking page once every leg is picked
   function proceedToBooking() {
     if (!allLegsSelected) return;
@@ -425,6 +427,7 @@ export default function FlightsPage() {
                 {[
                   { id: 'oneway', label: 'One Way' },
                   { id: 'roundtrip', label: 'Round Trip' },
+                  { id: 'multicity', label: 'Multi City' },
                 ].map((opt) => (
                   <button
                     key={opt.id}
@@ -822,80 +825,99 @@ export default function FlightsPage() {
           ))}
  
           {/* ROUND TRIP / MULTI CITY: show each leg in its own section */}
-          {!loading && !error && (trip === 'roundtrip' || trip === 'multicity') && (() => {
-            const legMap = {};
-            visibleFlights.forEach(f => {
-              if (!legMap[f.legIndex]) legMap[f.legIndex] = [];
-              legMap[f.legIndex].push(f);
-            });
-            const legCount = trip === 'roundtrip' ? 2 : (legs || '').split(',').length;
-            const legLabels = trip === 'roundtrip'
-              ? [`Onward: ${from} → ${to} (${date})`, `Return: ${to} → ${from} (${returnDate || ''})`]
-              : (legs || '').split(',').map((l, i) => {
-                  const p = l.split('-');
-                  return `Leg ${i + 1}: ${p[0]} → ${p[1]} (${p.slice(2).join('-')})`;
-                });
- 
-            return Array.from({ length: legCount }, (_, idx) => {
-              const legFlights = legMap[idx] || [];
-              return (
-                <div key={idx} className="mb-6">
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="inline-flex items-center gap-1.5 bg-blue-900 text-white text-xs font-bold px-3 py-1.5 rounded-full">
-                      <i className="fa-solid fa-plane text-[10px]"></i>
-                      {legLabels[idx] || `Leg ${idx + 1}`}
-                    </span>
-                    <span className="text-xs text-gray-400">{legFlights.length} results</span>
-                    {selectedLegs[idx] && (
-                      <span className="text-xs text-emerald-600 font-bold">✓ Selected: {selectedLegs[idx].airline_name} ₹{Number(selectedLegs[idx].price).toLocaleString()}</span>
-                    )}
-                  </div>
-                  {legFlights.length === 0 ? (
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 text-center text-gray-500">
-                      Is leg ke liye koi flight nahi mili.
-                    </div>
-                  ) : (
-                    legFlights.map(flight => (
-                      <FlightCard
-                        key={flight.id}
-                        flight={flight}
-                        from={flight.origin_code}
-                        to={flight.destination_code}
-                        date={date}
-                        isExpanded={expandedId === flight.id}
-                        onToggle={() => setExpandedId(expandedId === flight.id ? null : flight.id)}
-                        isSelected={selectedLegs[idx]?.id === flight.id}
-                        onSelect={() => selectFlight(idx, flight)}
-                      />
-                    ))
-                  )}
-                </div>
-              );
-            });
-          })()}
+{!loading && !error && (trip === 'roundtrip' || trip === 'multicity') && (() => {
+  const legMap = {};
+  visibleFlights.forEach(f => {
+    if (!legMap[f.legIndex]) legMap[f.legIndex] = [];
+    legMap[f.legIndex].push(f);
+  });
+  const legCount = trip === 'roundtrip' ? 2 : (legs || '').split(',').length;
+  const legLabels = trip === 'roundtrip'
+    ? [`Onward: ${from} → ${to} (${date})`, `Return: ${to} → ${from} (${returnDate || ''})`]
+    : (legs || '').split(',').map((l, i) => {
+        const p = l.split('-');
+        return `Leg ${i + 1}: ${p[0]} → ${p[1]} (${p.slice(2).join('-')})`;
+      });
+
+  return Array.from({ length: legCount }, (_, idx) => {
+    const legFlights = legMap[idx] || [];
+    const isCollapsed = !!selectedLegs[idx];   // ⭐ NEW
+
+    return (
+      <div key={idx} className="mb-6">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="inline-flex items-center gap-1.5 bg-blue-900 text-white text-xs font-bold px-3 py-1.5 rounded-full">
+            <i className="fa-solid fa-plane text-[10px]"></i>
+            {legLabels[idx] || `Leg ${idx + 1}`}
+          </span>
+          <span className="text-xs text-gray-400">{legFlights.length} results</span>
+          {selectedLegs[idx] && (
+            <>
+              <span className="text-xs text-emerald-600 font-bold">
+                ✓ Selected: {selectedLegs[idx].airline_name} ₹{Number(selectedLegs[idx].price).toLocaleString()}
+              </span>
+              <button
+                onClick={() => setSelectedLegs(prev => { const n = { ...prev }; delete n[idx]; return n; })}
+                className="text-xs text-orange-500 font-bold underline"
+              >
+                Change
+              </button>
+            </>
+          )}
+        </div>
+
+        {legFlights.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 text-center text-gray-500">
+            Is leg ke liye koi flight nahi mili.
+          </div>
+        ) : (
+          (isCollapsed ? legFlights.filter(f => f.id === selectedLegs[idx].id) : legFlights).map(flight => (
+            <FlightCard
+              key={flight.id}
+              flight={flight}
+              from={flight.origin_code}
+              to={flight.destination_code}
+              date={date}
+              isExpanded={expandedId === flight.id}
+              onToggle={() => setExpandedId(expandedId === flight.id ? null : flight.id)}
+              isSelected={selectedLegs[idx]?.id === flight.id}
+              onSelect={() => selectFlight(idx, flight)}
+            />
+          ))
+        )}
+      </div>
+    );
+  });
+})()}
         </section>
       </main>
- 
-      {/* ⭐ NEW: Proceed to Book bar — sticks to bottom once every leg has a selection */}
-      {allLegsSelected && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] p-4 z-40">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              {Object.keys(selectedLegs).length} leg(s) selected •{' '}
-              <span className="font-bold text-gray-900">
-                ₹ {Object.values(selectedLegs).reduce((sum, f) => sum + Number(f.price), 0).toLocaleString()}
-              </span>{' '}
-              per passenger
-            </div>
-            <button
-              onClick={proceedToBooking}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm uppercase tracking-wide px-8 py-3 rounded-full transition"
-            >
-              Proceed to Book
-            </button>
-          </div>
+
+      {/* ⭐ NEW: progress indicator jab tak saare legs select nahi hote */}
+      {(trip === 'roundtrip' || trip === 'multicity') && !allLegsSelected && Object.keys(selectedLegs).length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-3 z-40 text-center text-xs text-gray-500">
+          {Object.keys(selectedLegs).length} of {totalLegsNeeded} legs selected — select a flight for every leg to continue
         </div>
       )}
+
+{allLegsSelected && (
+  <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] p-4 z-40">
+    <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className="text-sm text-gray-600">
+        {Object.keys(selectedLegs).length} leg(s) selected •{' '}
+        <span className="font-bold text-gray-900">
+          ₹ {Object.values(selectedLegs).reduce((sum, f) => sum + Number(f.price), 0).toLocaleString()}
+        </span>{' '}
+        per passenger
+      </div>
+      <button
+        onClick={proceedToBooking}
+        className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm uppercase tracking-wide px-8 py-3 rounded-full transition"
+      >
+        Proceed to Book
+      </button>
+    </div>
+  </div>
+)}
     </div>
       <Footer />
     </>
@@ -1141,5 +1163,5 @@ async function loadFareRules() {
         </div>
       )}
     </div>
-  );
+  )
 }
