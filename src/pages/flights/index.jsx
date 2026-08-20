@@ -324,18 +324,9 @@ export default function FlightsPage() {
       setDateStripPrices((prev) => ({ ...prev, [iso]: prev[iso] === undefined ? null : prev[iso] }));
 
       try {
-        let segments;
-        let journeyType = '1';
-
-        if (trip === 'roundtrip') {
-          journeyType = '2';
-          segments = [
-            { origin: from, destination: to, date: iso },
-            { origin: to, destination: from, date: returnDate },
-          ];
-        } else {
-          segments = [{ origin: from, destination: to, date: iso }];
-        }
+        // ⭐ FIXED: date-strip ko sirf onward leg ka price chahiye, isliye hamesha one-way search karo
+        const journeyType = '1';
+        const segments = [{ origin: from, destination: to, date: iso }];
 
         const res = await fetch('/api/flights/search', {
           method: 'POST',

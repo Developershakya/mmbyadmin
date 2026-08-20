@@ -128,21 +128,19 @@ export default async function handler(req, res) {
       flatResults = extractResults(data, 0);
 
     } else {
-      console.log(`${journeyType === '2' ? 'RoundTrip' : 'MultiCity'}: ${segments.length} legs ko alag-alag search kar rahe hain`);
+      console.log(`${journeyType === '2' ? 'RoundTrip' : 'MultiCity'}: ${segments.length} legs ko ek-ek karke search kar rahe hain`);
 
-      const legResults = await Promise.all(
-        segments.map((seg, idx) =>
-          searchOneLeg(adultCount, childCount, infantCount, seg)
-            .then((data) => {
-              console.log(`Leg ${idx} (${seg.origin}->${seg.destination}): Error=${data.Error?.ErrorCode}, Results=${data.Results?.length > 0 ? data.Results[0]?.length : 0}`);
-              return extractResults(data, idx);
-            })
-            .catch((err) => {
-              console.error(`Leg ${idx} error:`, err.message);
-              return [];
-            })
-        )
-      );
+      const legResults = [];
+      for (let idx = 0; idx < segments.length; idx++) {
+        try {
+          const data = await searchOneLeg(adultCount, childCount, infantCount, segments[idx]);
+          console.log(`Leg ${idx} (${segments[idx].origin}->${segments[idx].destination}): Error=${data.Error?.ErrorCode}, Results=${data.Results?.length > 0 ? data.Results[0]?.length : 0}`);
+          legResults.push(extractResults(data, idx));
+        } catch (err) {
+          console.error(`Leg ${idx} error:`, err.message);
+          legResults.push([]);
+        }
+      }
 
       flatResults = legResults.flat();
     }
