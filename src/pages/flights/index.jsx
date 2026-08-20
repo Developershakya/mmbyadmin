@@ -313,15 +313,18 @@ export default function FlightsPage() {
   const isAtStart = dateStrip.length > 0 && toISODate(dateStrip[0]) === toISODate(today);
 
   // ⭐ NEW: date-strip ke har date ka cheapest price fetch karo
-  useEffect(() => {
-    if (!router.isReady || trip === 'multicity' || dateStrip.length === 0) return;
+useEffect(() => {
+  if (!router.isReady || trip === 'multicity' || dateStrip.length === 0) return;
 
-    let cancelled = false;
+  let cancelled = false;
 
-    dateStrip.forEach(async (d) => {
-      const iso = toISODate(d);
+  dateStrip.forEach(async (d) => {
+    const iso = toISODate(d);
 
-      setDateStripPrices((prev) => ({ ...prev, [iso]: prev[iso] === undefined ? null : prev[iso] }));
+    // ⭐ NEW: agar already fetch ho chuka hai (ya fetch ho raha hai), dobara call mat karo
+    if (dateStripPrices[iso] !== undefined) return;
+
+    setDateStripPrices((prev) => ({ ...prev, [iso]: null }));
 
       try {
         // ⭐ FIXED: date-strip ko sirf onward leg ka price chahiye, isliye hamesha one-way search karo
