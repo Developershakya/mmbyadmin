@@ -84,8 +84,9 @@ export default function SeatMapModal({ flight, onClose, onConfirm }) {
           {!loading && error && (
             <div className="text-center py-10">
               <p className="text-gray-500 mb-2">{error}</p>
-              <p className="text-sm text-gray-400 mb-4">
-                Is flight ke liye seat selection available nahi hai. Aap bina seat select kiye aage badh sakte hain.
+              <p className="text-sm text-gray-400 mb-4">Seat selection is not available for this flight. You can proceed without selecting a seat.
+
+                
               </p>
               <button onClick={onClose} className="bg-orange-500 text-white px-6 py-2.5 rounded-lg font-semibold">
                 Close
