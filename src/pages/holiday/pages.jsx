@@ -5,8 +5,6 @@ import { useRouter } from "next/router";
 import Link from "next/link";
 import { Menu, X, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Image from "next/image";
-import mobileSidebar from "../../components/mobileSidebar"
 export default function Home({ isMobile }) {
   const [device, setDevice] = useState(isMobile ? "mobile" : "desktop");
 

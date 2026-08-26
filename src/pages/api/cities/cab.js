@@ -8,7 +8,7 @@ export default async function handler(req, res) {
       `SELECT 
          caoncitlst_mti_code AS cityid, 
          caoncitlst_city_name AS Destination, 
-         caoncitlst_city_name AS country
+         caoncitlst_state AS country
        FROM car_on_city_list 
        WHERE caoncitlst_city_name LIKE ? AND caoncitlst_status = 'Active' LIMIT 10`,
       [`%${query}%`]
