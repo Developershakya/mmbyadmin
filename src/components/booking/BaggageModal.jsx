@@ -70,7 +70,7 @@ export default function BaggageModal({ flight, onClose, onConfirm }) {
             <div className="text-center py-10">
               <p className="text-gray-500 mb-2">{error}</p>
               <p className="text-sm text-gray-400 mb-4">
-                Is flight ke liye extra baggage available nahi hai. Aap bina baggage select kiye aage badh sakte hain.
+                    Extra baggage is not available for this flight. You can proceed without selecting extra baggage.
               </p>
               <button onClick={onClose} className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-semibold">
                 Close
@@ -138,7 +138,7 @@ export default function BaggageModal({ flight, onClose, onConfirm }) {
 
           {!loading && !error && options.length === 0 && (
             <div className="text-center py-10">
-              <p className="text-gray-500 mb-4">Is flight ke liye koi extra baggage options available nahi hain.</p>
+              <p className="text-gray-500 mb-4">No extra baggage options are available for this flight.</p>
               <button onClick={onClose} className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-semibold">
                 Close
               </button>
