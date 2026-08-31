@@ -6,37 +6,37 @@ import Image from "next/image";
 const destinations = [
   {
     name: "Goa",
-    image: "/images/goa-img.png",
-    code: "GOI",
+    image: "/images/goa2.jpeg",
+    code: "GOI", 
     price: "From ₹2,499",
   },
   {
     name: "Uttarakhand",
-    image: "/images/uttarakhand-img.png",
+    image: "/images/uttarakhand.jpeg",
     code: "DED",
     price: "From ₹3,999",
   },
   {
     name: "Delhi",
-    image: "/images/delhi-img.png",
+    image: "/images/delhi.jpeg",
     code: "DEL",
     price: "From ₹2,199",
   },
   {
     name: "Himachal Pradesh",
-    image: "/images/manali-img.png",
+    image: "/images/himachal.jpeg",
     code: "KUU",
     price: "From ₹4,299",
   },
   {
     name: "Rajasthan",
-    image: "/images/jaipur-img.png",
+    image: "/images/rajasthan.jpeg",
     code: "JAI",
     price: "From ₹2,799",
   },
   {
     name: "Kerala",
-    image: "/images/kerala-img.png",
+    image: "/images/kerala.jpeg",
     code: "COK",
     price: "From ₹3,599",
   },
@@ -141,7 +141,7 @@ export default function PopularDestinations() {
       {/* Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-5">
   {destinations.map((item, index) => (
-    <Link key={index} href="/holiday-packages" className="relative h-62 rounded-2xl overflow-hidden cursor-pointer group shadow-md">
+    <Link key={index} href="/holiday-packages" className="relative h-62 w-full rounded-2xl overflow-hidden cursor-pointer group shadow-md">
       <div className="relative h-62 rounded-2xl overflow-hidden cursor-pointer group shadow-md">
         <Image
           src={item.image}

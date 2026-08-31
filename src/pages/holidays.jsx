@@ -45,7 +45,3 @@ export default function HolidaysRedirect() {
     </div>
   );
 }
-      Redirecting to holiday search...
-    </div>
-  );
-}
