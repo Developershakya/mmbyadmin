@@ -1,4 +1,4 @@
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import useAuth from '../lib/useAuth';
 
@@ -8,7 +8,7 @@ export default function UserMenu() {
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
-    router.reload();
+    router.refresh();
   }
 
   if (user === undefined) {

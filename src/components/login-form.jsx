@@ -1,6 +1,6 @@
 "use client"
 import React, { useState } from "react"
-import { useRouter } from "next/router"
+import { useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -9,7 +9,8 @@ import { Eye, EyeOff } from "lucide-react"
 
 export function LoginForm({ className, ...props }) {
   const router = useRouter()
-  const redirectTo = router.query.redirect || "/"
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get("redirect") || "/"
 
   const [isLogin, setIsLogin] = useState(true)
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" })

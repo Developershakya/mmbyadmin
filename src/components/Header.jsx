@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Menu,
@@ -41,7 +41,7 @@ export default function Header() {
           {/* Logo */}
           <Link href="/" className="flex items-center">
             <Image
-              src="/img/make-my-bharat-yatra-logo.png"
+              src="/image/logo/make-my-bharat-yatra-logo.png"
               alt="Make My Bharat Yatra Logo"
               width={300}
               height={48}

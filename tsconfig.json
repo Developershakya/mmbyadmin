@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -14,9 +18,59 @@
     "jsx": "preserve",
     "incremental": true,
     "paths": {
-      "@/*": ["./src/*"]
-    }
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "src/components/AlertOverlay.jsx", "src/components/Footer.jsx", "src/components/Header.jsx", "src/components/HeroSection.jsx", "src/components/login-form.jsx", "src/components/PopularDestinations.jsx", "src/components/TravelPackages.jsx", "src/pages/_app.jsx", "src/pages/404.jsx", "src/pages/aboutUs.jsx", "src/pages/blog.jsx", "src/pages/bus.jsx", "src/pages/cab.jsx", "src/pages/career.jsx", "src/pages/contactUs.jsx", "src/pages/flight.jsx", "src/pages/form-contact.jsx", "src/pages/hotel.jsx", "src/pages/index.jsx", "src/pages/login.jsx", "src/pages/ourServices.jsx", "src/pages/package.jsx", "src/pages/termAndCondition.jsx", "src/pages/_document.jsx", "src/components/ui/textarea.jsx", "src/components/ui/image.jsx", "src/components/ui/input.jsx", "src/components/ui/label.jsx", "src/components/ui/popover.jsx", "src/components/ui/separator.jsx", "src/components/ui/card.jsx", "src/components/ui/button.jsx", "src/components/ui/badge.jsx", "src/components/ui/select.jsx", "src/components/ui/tabs.jsx", "src/components/ui/index.jsx"],
-  "exclude": ["node_modules"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "next-env.d.ts",
+    "src/app/layout.jsx",
+    "src/app/page.jsx",
+    "src/components/AlertOverlay.jsx",
+    "src/components/Footer.jsx",
+    "src/components/Header.jsx",
+    "src/components/HeroSection.jsx",
+    "src/components/PopularDestinations.jsx",
+    "src/components/TravelPackages.jsx",
+    "src/components/login-form.jsx",
+    "src/components/ui/badge.jsx",
+    "src/components/ui/button.jsx",
+    "src/components/ui/card.jsx",
+    "src/components/ui/image.jsx",
+    "src/components/ui/index.jsx",
+    "src/components/ui/input.jsx",
+    "src/components/ui/label.jsx",
+    "src/components/ui/popover.jsx",
+    "src/components/ui/select.jsx",
+    "src/components/ui/separator.jsx",
+    "src/components/ui/tabs.jsx",
+    "src/components/ui/textarea.jsx",
+    "src/pages/404.jsx",
+    "src/pages/_document.jsx",
+    "src/pages/aboutUs.jsx",
+    "src/pages/blog.jsx",
+    "src/pages/bus.jsx",
+    "src/pages/cab.jsx",
+    "src/pages/career.jsx",
+    "src/pages/contactUs.jsx",
+    "src/pages/flight.jsx",
+    "src/app/form-contact/page.jsx",
+    "src/pages/hotel.jsx",
+    "src/pages/login.jsx",
+    "src/pages/ourServices.jsx",
+    "src/app/holi/page.jsx",
+    "src/pages/termAndCondition.jsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
