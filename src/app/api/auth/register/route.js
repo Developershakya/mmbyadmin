@@ -1,12 +1,15 @@
 import { handleApiError } from "@/lib/apiError";
 import { signToken, setAuthCookie } from "@/lib/auth";
+import { withAppRoute } from "@/lib/routeCompat";
+import User from "../../../../../models/User.js";
+
 async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password } = req.body || {};
 
     if (!email || !password) {
       return res.status(400).json({ error: "Email aur password required hai" });
@@ -18,7 +21,6 @@ async function handler(req, res) {
     }
 
     const user = await User.create({ name, email, password });
-    // password hash User model ke beforeCreate hook mein already ho raha hai
 
     const token = signToken({ id: user.id, email: user.email });
     setAuthCookie(res, token);
@@ -33,5 +35,5 @@ async function handler(req, res) {
   }
 }
 
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }
+export const GET = withAppRoute(handler);
+export const POST = withAppRoute(handler);

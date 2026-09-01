@@ -1,12 +1,17 @@
 import jwt from "jsonwebtoken";
 
+const DEFAULT_JWT_SECRET = "makemybharat-dev-secret-change-me";
+export function getJwtSecret() {
+  return process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
+}
+
 export function signToken(payload) {
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: "7d" });
 }
 
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, process.env.JWT_SECRET);
+    return jwt.verify(token, getJwtSecret());
   } catch (err) {
     return null;
   }

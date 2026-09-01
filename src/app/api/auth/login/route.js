@@ -1,12 +1,16 @@
 import { handleApiError } from "@/lib/apiError";
 import { signToken, setAuthCookie } from "@/lib/auth";
+import { withAppRoute } from "@/lib/routeCompat";
+import bcrypt from "bcryptjs";
+import User from "../../../../../models/User.js";
+
 async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
     const user = await User.findOne({ where: { email } });
     if (!user) {
@@ -31,5 +35,5 @@ async function handler(req, res) {
   }
 }
 
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }
+export const GET = withAppRoute(handler);
+export const POST = withAppRoute(handler);

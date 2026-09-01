@@ -41,7 +41,7 @@ export default function Header() {
           {/* Logo */}
           <Link href="/" className="flex items-center">
             <Image
-              src="/image/logo/make-my-bharat-yatra-logo.png"
+              src="/images/logo/make-my-bharat-yatra-logo.png"
               alt="Make My Bharat Yatra Logo"
               width={300}
               height={48}

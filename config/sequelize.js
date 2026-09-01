@@ -1,4 +1,5 @@
 import { Sequelize } from "sequelize";
+import mysql2 from "mysql2";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -23,6 +24,7 @@ const sequelize = new Sequelize(
     host: process.env.DB_HOST || "localhost",
     port: process.env.DB_PORT || 3306,
     dialect: "mysql",
+    dialectModule: mysql2,
     logging: console.log,
   }
 );
