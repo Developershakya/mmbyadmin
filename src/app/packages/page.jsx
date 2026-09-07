@@ -370,8 +370,13 @@ export default function Packages() {
     return () => document.removeEventListener("mousedown", handleOutClick);
   });
   useEffect(()=>{
-    
-  })
+    async function fetchPackage(){
+      try{
+
+      }
+    }
+    fetchPackage()
+  },[])
 
   return (
     <>

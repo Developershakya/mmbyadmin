@@ -1,9 +1,23 @@
+import { NextResponse } from "next/server";
 import Package from "../../../../models/Package.js";
-import { handleApiError } from "@/lib/apiError";
-async function handler(req) {
+
+export async function GET() {
   try {
-    const { to, adults, childs, infants } = req.query;
-  } catch (err) {
-    return handleApiError("undefinded");
+    const packages = await Package.findAll();
+
+    return NextResponse.json({
+      success: true,
+      data: packages,
+    });
+  } catch (error) {
+    console.error("Get packages error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        message: error.message,
+      },
+      { status: 500 }
+    );
   }
 }
