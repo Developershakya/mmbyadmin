@@ -1,5 +1,9 @@
-import { handleApiError } from "@/lib/apiError";
-import { getConnection } from '@/lib/db';
+import { NextResponse } from "next/server";
+import sequelize from "../../../../../config/sequelize.js";
+import Booking from "../../../../../models/Booking.js";
+import BookingLeg from "../../../../../models/BookingLeg.js";
+import BookingPassenger from "../../../../../models/BookingPassenger.js";
+import { callSrdvApi } from "@/lib/srdvApi";
 function generateBookingRef() {
   const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
   return `MMBY${Date.now().toString().slice(-6)}${rand}`;
@@ -22,19 +26,15 @@ function toSrdvPassengers(passengers, contact) {
   }));
 }
 
-async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
-
-  const { tripType, legs, passengers, contact } = req.body;
+export async function POST(request) {
+  const { tripType, legs, passengers, contact } = await request.json();
   // legs: [{ legIndex, traceId, resultIndex, price, airline_name, flight_number, origin_code, destination_code }]
 
   if (!Array.isArray(legs) || legs.length === 0 || !Array.isArray(passengers) || passengers.length === 0) {
-    return res.status(400).json({ success: false, message: 'Legs aur passengers required hain.' });
+    return NextResponse.json({ success: false, message: 'Legs aur passengers required hain.' }, { status: 400 });
   }
 const srdvPassengers = toSrdvPassengers(passengers, contact);
   const bookedLegs = [];
-
-  const connection = await getConnection();   // â­ NEW
 
   try {
     // Har leg apni independent Search se aayi thi (traceId alag), isliye har leg alag se book hogi
@@ -56,46 +56,56 @@ const data = await callSrdvApi(process.env.FLIGHT_API_URL, endpointName, {
       });
     }
 
-    // Sab legs book ho gayi -> ab MySQL me record save karo
+    // Sab legs book ho gayi -> ab ek transaction me local records save karo
     const totalPrice = legs.reduce((sum, l) => sum + Number(l.price), 0);
     const bookingRef = generateBookingRef();
+    const transaction = await sequelize.transaction();
+    try {
+      const booking = await Booking.create({
+        booking_ref: bookingRef,
+        trip_type: tripType,
+        contact_name: contact.name,
+        contact_email: contact.email,
+        contact_phone: contact.phone,
+        total_price: totalPrice,
+        status: "confirmed",
+      }, { transaction });
 
-const [bookingResult] = await connection.query(
-  `INSERT INTO bookings (booking_ref, trip_type, contact_name, contact_email, contact_phone, total_price, status)
-   VALUES (?, ?, ?, ?, ?, ?, 'confirmed')`,
-  [bookingRef, tripType, contact.name, contact.email, contact.phone, totalPrice]
-);
-    const bookingId = bookingResult.insertId;
+      await BookingLeg.bulkCreate(bookedLegs.map((leg) => ({
+        booking_id: booking.id,
+        leg_index: leg.legIndex,
+        trace_id: leg.traceId,
+        result_index: leg.resultIndex,
+        pnr: leg.pnr,
+        airline_name: leg.airline_name,
+        flight_number: leg.flight_number,
+        origin_code: leg.origin_code,
+        destination_code: leg.destination_code,
+        price: leg.price,
+      })), { transaction });
 
-for (const leg of bookedLegs) {
-  await connection.query(
-    `INSERT INTO booking_legs (booking_id, leg_index, trace_id, result_index, pnr, airline_name, flight_number, origin_code, destination_code, price)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [bookingId, leg.legIndex, leg.traceId, leg.resultIndex, leg.pnr, leg.airline_name, leg.flight_number, leg.origin_code, leg.destination_code, leg.price]
-  );
-}
-
-for (const p of passengers) {
-  await connection.query(
-    `INSERT INTO booking_passengers 
-      (booking_id, passenger_type, title, first_name, last_name, gender, dob, contact_number, email, passport_number, passport_issue_date, passport_expiry)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      bookingId, p.type, p.title, p.firstName, p.lastName, p.gender, p.dob || null,
-      p.contactNumber || null, p.email || null,
-      p.passportNumber || null, p.passportIssueDate || null, p.passportExpiry || null,
-    ]
-  );
-}
-
-await connection.end();   // â­ NEW
-    return res.status(200).json({ success: true, bookingRef, totalPrice, legs: bookedLegs });
+      await BookingPassenger.bulkCreate(passengers.map((p) => ({
+        booking_id: booking.id,
+        passenger_type: p.type,
+        title: p.title,
+        first_name: p.firstName,
+        last_name: p.lastName,
+        gender: p.gender,
+        dob: p.dob || null,
+        contact_number: p.contactNumber || null,
+        email: p.email || null,
+        passport_number: p.passportNumber || null,
+        passport_issue_date: p.passportIssueDate || null,
+        passport_expiry: p.passportExpiry || null,
+      })), { transaction });
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+    return NextResponse.json({ success: true, bookingRef, totalPrice, legs: bookedLegs });
   } catch (err) {
     console.error('book error:', err.message);
-    await connection.end().catch(() => {});   // â­ NEW â€” safe close even on error
-    return res.status(500).json({ success: false, message: err.message || 'Booking fail ho gayi, dobara try karo.' });
+    return NextResponse.json({ success: false, message: err.message || 'Booking fail ho gayi, dobara try karo.' }, { status: 500 });
   }
 }
-
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

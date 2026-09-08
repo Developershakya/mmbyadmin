@@ -1,8 +1,7 @@
 import { callSrdvApi } from '@/lib/srdvApi';
-import { handleApiError } from "@/lib/apiError";
-async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
-  const { traceId, resultIndex, srdvType, srdvIndex } = req.body;
+import { NextResponse } from "next/server";
+export async function POST(request) {
+  const { traceId, resultIndex, srdvType, srdvIndex } = await request.json();
 
   try {
     const data = await callSrdvApi(process.env.FLIGHT_API_URL, 'SSR', {
@@ -15,15 +14,13 @@ async function handler(req, res) {
     console.log('SSR RAW response:', JSON.stringify(data, null, 2));
 
     if (data.Error?.ErrorCode && data.Error.ErrorCode !== '0') {
-      return res.status(409).json({ success: false, message: data.Error.ErrorMessage });
+      return NextResponse.json({ success: false, message: data.Error.ErrorMessage }, { status: 409 });
     }
 
-    return res.status(200).json({ success: true, data });
+    return NextResponse.json({ success: true, data });
   } catch (err) {
     console.error('ssr error:', err.message);
-    return handleApiError(res, err, "Something went wrong");
+    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
 }
 
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

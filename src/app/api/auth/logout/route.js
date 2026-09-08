@@ -1,9 +1,13 @@
-import { clearAuthCookie } from "@/lib/auth";
-import { handleApiError } from "@/lib/apiError";
-async function handler(req, res) {
-  clearAuthCookie(res);
-  return res.status(200).json({ message: "Logged out" });
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  const response = NextResponse.json({ message: "Logged out" });
+  response.cookies.delete("token");
+  return response;
 }
 
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }
+export async function POST() {
+  const response = NextResponse.json({ message: "Logged out" });
+  response.cookies.delete("token");
+  return response;
+}

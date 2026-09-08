@@ -1,23 +1,22 @@
 import Razorpay from 'razorpay';
-import { handleApiError } from "@/lib/apiError";
 import { getUserFromRequest } from '@/lib/auth';
+import { NextResponse } from "next/server";
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
-async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+export async function POST(request) {
+  const user = getUserFromRequest({ cookies: { token: request.cookies.get("token")?.value } });
 
-  const user = getUserFromRequest(req);
   if (!user) {
-    return res.status(401).json({ success: false, message: 'Login required' });
+    return NextResponse.json({ success: false, message: 'Login required' }, { status: 401 });
   }
 
-  const { amount } = req.body; // amount in Rupees
+  const { amount } = await request.json(); // amount in Rupees
 
   if (!amount || amount <= 0) {
-    return res.status(400).json({ success: false, message: 'Invalid amount' });
+    return NextResponse.json({ success: false, message: 'Invalid amount' }, { status: 400 });
   }
 
   try {
@@ -27,7 +26,7 @@ async function handler(req, res) {
       currency: 'INR'
     });
 
-    res.status(200).json({
+    return NextResponse.json({
       success: true,
       order_id: order.id,
       amount: order.amount,
@@ -35,9 +34,7 @@ async function handler(req, res) {
       key_id: process.env.RAZORPAY_KEY_ID
     });
   } catch (error) {
-    return handleApiError(res, error, "Something went wrong");
+    console.error("Payment order error:", error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
-
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

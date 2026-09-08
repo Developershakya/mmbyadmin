@@ -1,5 +1,5 @@
 import { callSrdvApi } from '@/lib/srdvApi';
-import { handleApiError } from "@/lib/apiError";
+import { NextResponse } from "next/server";
 function parseBusItem(item, traceId) {
   return {
     id: item.ResultIndex,
@@ -34,18 +34,16 @@ async function resolveCityId(cityName) {
   return match ? match.CityId : null;
 }
 
-async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+export async function POST(request) {
+  const { sourceCity, destinationCity, journeyDate } = await request.json();
 
-  const { sourceCity, destinationCity, journeyDate } = req.body;
-
-  console.log('BUS SEARCH REQUEST BODY:', req.body);
+  console.log('BUS SEARCH REQUEST BODY:', { sourceCity, destinationCity, journeyDate });
 
   if (!sourceCity || !destinationCity || !journeyDate) {
-    return res.status(400).json({
+    return NextResponse.json({
       success: false,
       message: 'sourceCity, destinationCity aur journeyDate zaroori hain',
-    });
+    }, { status: 400 });
   }
 
   try {
@@ -55,7 +53,7 @@ async function handler(req, res) {
     console.log('RESOLVED IDS:', { sourceCity, sourceId, destinationCity, destinationId });
 
     if (!sourceId || !destinationId) {
-      return res.status(200).json({
+      return NextResponse.json({
         success: false,
         message: `"${sourceCity}" ya "${destinationCity}" SRDV city list me nahi mila.`,
       });
@@ -76,22 +74,20 @@ async function handler(req, res) {
     console.log('RAW BUS SEARCH RESPONSE:', JSON.stringify(data, null, 2));
 
     if (data.Error && Number(data.Error.ErrorCode) !== 0) {
-      return res.status(200).json({ success: false, message: data.Error.ErrorMessage });
+      return NextResponse.json({ success: false, message: data.Error.ErrorMessage });
     }
 
     const rawResults = Array.isArray(data.Result) ? data.Result : [];
 
     if (rawResults.length > 0) {
       const results = rawResults.map((item) => parseBusItem(item, data.TraceId));
-      return res.status(200).json({ success: true, traceId: data.TraceId, results });
+      return NextResponse.json({ success: true, traceId: data.TraceId, results });
     }
 
-    return res.status(200).json({ success: false, message: 'No bus was available for this route.' });
+    return NextResponse.json({ success: false, message: 'No bus was available for this route.' });
   } catch (error) {
     console.error('Bus search error:', error.message);
-    return handleApiError(res, error, "Something went wrong");
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
 
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

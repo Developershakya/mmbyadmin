@@ -1,33 +1,40 @@
-import { getConnection } from '@/lib/db';
-import { handleApiError } from "@/lib/apiError";
-import { withAppRoute } from '@/lib/routeCompat';
+import { Op } from "sequelize";
+import { NextResponse } from "next/server";
+import AirportList from "../../../../../models/airport_list.js";
 
-async function handler(req) {
-  const { query: searchQuery, code } = req.query || {};
+export async function GET(request) {
   try {
-    const connection = await getConnection();
-
+    const { searchParams } = new URL(request.url);
+    const searchQuery = searchParams.get("query")?.trim() || "";
+    const code = searchParams.get("code")?.trim();
     if (code) {
-      const [rows] = await connection.execute(
-        `SELECT DISTINCT airport_city_name, airport_name, airport_code FROM airport_list 
-         WHERE airport_code = ? LIMIT 1`,
-        [String(code).toUpperCase()]
-      );
-      await connection.end();
-      return Response.json(rows);
+      const rows = await AirportList.findAll({
+        where: { airport_code: String(code).toUpperCase() },
+        attributes: ["airport_city_name", "airport_name", "airport_code"],
+        group: ["airport_city_name", "airport_name", "airport_code"],
+        limit: 1,
+        raw: true,
+      });
+      return NextResponse.json(rows);
     }
 
-    const [rows] = await connection.execute(
-      `SELECT DISTINCT airport_city_name, airport_name, airport_code FROM airport_list 
-       WHERE airport_city_name LIKE ? OR airport_name LIKE ? OR airport_code LIKE ? LIMIT 10`,
-      [`%${searchQuery || ''}%`, `%${searchQuery || ''}%`, `%${searchQuery || ''}%`]
-    );
-    await connection.end();
-    return Response.json(rows);
+    const search = `%${searchQuery || ""}%`;
+    const rows = await AirportList.findAll({
+      where: {
+        [Op.or]: [
+          { airport_city_name: { [Op.like]: search } },
+          { airport_name: { [Op.like]: search } },
+          { airport_code: { [Op.like]: search } },
+        ],
+      },
+      attributes: ["airport_city_name", "airport_name", "airport_code"],
+      group: ["airport_city_name", "airport_name", "airport_code"],
+      limit: 10,
+      raw: true,
+    });
+    return NextResponse.json(rows);
   } catch (error) {
-    return handleApiError(undefined, error, "Something went wrong");
+    console.error("Airport city API error:", error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
-
-export const GET = withAppRoute(handler);
-export const POST = withAppRoute(handler);

@@ -1,15 +1,13 @@
 import { getUserFromRequest } from "@/lib/auth";
-import { handleApiError } from "@/lib/apiError";
-import { withAppRoute } from '@/lib/routeCompat';
+import { NextResponse } from "next/server";
 
-async function handler(req) {
+export async function GET(request) {
   try {
-    const user = getUserFromRequest(req);
-    return Response.json({ user });
+    const user = getUserFromRequest({ cookies: { token: request.cookies.get("token")?.value } });
+    return NextResponse.json({ user });
   } catch (error) {
-    return handleApiError(undefined, error, 'Something went wrong');
+    console.error("Auth me API error:", error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
 
-export const GET = withAppRoute(handler);
-export const POST = withAppRoute(handler);

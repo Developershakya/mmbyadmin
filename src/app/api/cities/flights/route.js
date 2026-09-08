@@ -1,9 +1,8 @@
 import { callSrdvApi } from '@/lib/srdvApi';
-import { handleApiError } from "@/lib/apiError";
-async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+import { NextResponse } from "next/server";
+export async function POST(request) {
 
-  const { adultCount, childCount, infantCount, journeyType, segments } = req.body;
+  const { adultCount, childCount, infantCount, journeyType, segments } = await request.json();
 
   try {
     const data = await callSrdvApi(process.env.FLIGHT_API_URL, 'Search', {
@@ -22,17 +21,15 @@ async function handler(req, res) {
     });
 
     if (data.Results && data.Results.length > 0) {
-      return res.status(200).json({
+      return NextResponse.json({
         success: true,
         traceId: data.TraceId,
         results: data.Results
       });
     }
-    return res.status(200).json({ success: false, message: 'No flights found' });
+    return NextResponse.json({ success: false, message: 'No flights found' });
   } catch (error) {
-    return handleApiError(res, error, "Something went wrong");
+    console.error("Flight city API error:", error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
-
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

@@ -1,20 +1,40 @@
-import { getConnection } from '@/lib/db';
-import { handleApiError } from "@/lib/apiError";
-async function handler(req, res) {
-  const { query } = req.query;
+import { Op } from "sequelize";
+import { NextResponse } from "next/server";
+import Hotel from "../../../../../models/hotel.js";
+
+export async function GET(request) {
   try {
-    const connection = await getConnection();
-    const [rows] = await connection.execute(
-      `SELECT cityid, Destination, country FROM hotel_city_code_v8 
-       WHERE Destination LIKE ? AND status = 'Active' LIMIT 10`,
-      [`${query}%`]
-    );
-    await connection.end();
-    res.status(200).json(rows);
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get("query")?.trim() || "";
+
+    if (query.length < 2) {
+      return NextResponse.json([]);
+    }
+
+    const rows = await Hotel.findAll({
+      attributes: ["cityid", "Destination", "country"],
+      where: {
+        Destination: {
+          [Op.like]: `${query}%`,
+        },
+        status: "Active",
+      },
+      limit: 10,
+      raw: true,
+    });
+
+    console.log("Hotel city rows:", rows);
+
+    return NextResponse.json(rows);
   } catch (error) {
-    return handleApiError(res, error, "Something went wrong");
+    console.log("Hotel city API error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        message: error.message,
+      },
+      { status: 500 }
+    );
   }
 }
-
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

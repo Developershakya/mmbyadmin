@@ -127,11 +127,14 @@ export default function LocationSearchBox({
         setApiLoading(true);
         const res = await fetch(`${citySearchApi}?query=${encodeURIComponent(query.trim())}`);
         const data = await res.json();
-        const mapped = (Array.isArray(data) ? data : []).map((row) => ({
-          code: row.airport_code || row.code || row.cityid || row.id,
-          name: row.airport_city_name || row.name || row.Destination || row.city,
-          sub: row.airport_name || row.sub || row.country || row.state,
-        }));
+        const rows = Array.isArray(data) ? data : data?.data || [];
+        const mapped = rows
+          .map((row) => ({
+            code: String(row.airport_code || row.code || row.cityid || row.id || ""),
+            name: row.airport_city_name || row.name || row.Destination || row.city || "",
+            sub: row.airport_name || row.sub || row.country || row.state || "",
+          }))
+          .filter((item) => item.code && item.name);
         setApiResults(mapped);
       } catch (err) {
         console.error("City search error:", err);
@@ -170,7 +173,7 @@ export default function LocationSearchBox({
   }
 
   return (
-    <div className="relative w-full h-full cursor-pointer" ref={boxRef} onClick={() => setOpen((prev) => !prev)}>
+    <div className="relative z-50 w-full h-full cursor-pointer" ref={boxRef} onClick={() => setOpen((prev) => !prev)}>
       <span className={`text-[9px] uppercase tracking-wider block mb-0.5 font-medium ${isDark ? "text-orange-500 font-bold" : "text-gray-400"}`}>
         {label}
       </span>
@@ -187,7 +190,7 @@ export default function LocationSearchBox({
 
       {open && (
         <div
-          className={`absolute mt-2 w-[340px] bg-white shadow-2xl rounded-xl border border-gray-100 z-30 flex flex-col overflow-hidden ${
+          className={`absolute mt-2 w-[340px] bg-white shadow-2xl rounded-xl border border-gray-100 z-[100] flex flex-col overflow-hidden ${
             align === "right" ? "right-0" : "left-0"
           }`}
           style={{ maxHeight: "420px" }}
@@ -199,6 +202,8 @@ export default function LocationSearchBox({
               autoFocus
               type="text"
               value={query}
+              onFocus={() => setOpen(true)}
+              onClick={(event) => event.stopPropagation()}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={`Search ${label.toLowerCase()}`}
               className="w-full text-sm outline-none text-gray-800"

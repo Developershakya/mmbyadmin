@@ -1,16 +1,11 @@
 import { callSrdvApi } from '@/lib/srdvApi';
-import { handleApiError } from "@/lib/apiError";
-import { withAppRoute } from '@/lib/routeCompat';
+import { NextResponse } from "next/server";
 
-async function handler(req) {
-  if (req.method !== 'POST') {
-    return Response.json({ success: false, message: 'Method not allowed' }, { status: 405 });
-  }
-
-  const { legs } = req.body || {}; // [{ traceId, resultIndex, srdvType, srdvIndex, legIndex }]
+export async function POST(request) {
+  const { legs } = await request.json(); // [{ traceId, resultIndex, srdvType, srdvIndex, legIndex }]
 
   if (!Array.isArray(legs) || legs.length === 0) {
-    return Response.json({ success: false, message: 'Legs required hain.' }, { status: 400 });
+    return NextResponse.json({ success: false, message: 'Legs required hain.' }, { status: 400 });
   }
 
   try {
@@ -48,12 +43,9 @@ async function handler(req) {
       })
     );
 
-    return Response.json({ success: true, legs: results });
+    return NextResponse.json({ success: true, legs: results });
   } catch (err) {
     console.error('fare-quote error (actual):', err.message);
-    return Response.json({ success: false, message: err.message }, { status: 409 });
+    return NextResponse.json({ success: false, message: err.message }, { status: 409 });
   }
 }
-
-export const GET = withAppRoute(handler);
-export const POST = withAppRoute(handler);

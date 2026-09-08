@@ -1,9 +1,15 @@
 import { callSrdvApi } from '@/lib/srdvApi';
-import { handleApiError } from "@/lib/apiError";
-async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+import { NextResponse } from "next/server";
 
-  const { checkInDate, noOfNights, cityId, guestNationality, noOfRooms, roomGuests } = req.body;
+export async function POST(request) {
+  const { checkInDate, noOfNights, cityId, guestNationality, noOfRooms, roomGuests } = await request.json();
+
+  if (!checkInDate || !cityId) {
+    return NextResponse.json({
+      success: false,
+      message: "checkInDate aur cityId required hain",
+    }, { status: 400 });
+  }
 
   try {
     const formattedRoomGuests = Array.isArray(roomGuests)
@@ -31,24 +37,30 @@ async function handler(req, res) {
 
     const data = await callSrdvApi(process.env.HOTEL_API_URL, 'Search', payload);
 
-    if (data.Error && data.Error.ErrorCode !== 0) {
-      return res.status(200).json({ success: false, message: data.Error.ErrorMessage });
+    if (data.Error && String(data.Error.ErrorCode) !== '0') {
+      return NextResponse.json({ success: false, message: data.Error.ErrorMessage });
     }
 
-if (data.Results && data.Results.length > 0) {
-  return res.status(200).json({
+    const rawResults = Array.isArray(data.Results)
+      ? data.Results
+      : Array.isArray(data.Response?.Results)
+        ? data.Response.Results
+        : [];
+    const results = rawResults.flatMap((group) => Array.isArray(group) ? group : [group]).filter(Boolean);
+
+    if (results.length > 0) {
+  return NextResponse.json({
     success: true,
     traceId: data.TraceId,
     srdvType: data.SrdvType,
-    results: data.Results
+        results,
   });
 }
 
-    return res.status(200).json({ success: false, message: 'No hotels found' });
+    return NextResponse.json({ success: false, message: 'No hotels found' });
   } catch (error) {
-    return handleApiError(res, error, "Something went wrong");
+    console.error("Hotel search API error:", error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
 
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

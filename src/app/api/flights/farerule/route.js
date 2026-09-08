@@ -1,5 +1,5 @@
 import { callSrdvApi } from '@/lib/srdvApi';
-import { handleApiError } from "@/lib/apiError";
+import { NextResponse } from "next/server";
 // Response ke andar kahin bhi (kisi bhi key ke neeche) HTML table wala string dhoondta hai
 function findFareRuleHtml(obj) {
   if (!obj) return null;
@@ -26,13 +26,11 @@ function findFareRuleHtml(obj) {
   return null;
 }
 
-async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
-
-  const { traceId, resultIndex, srdvType, srdvIndex } = req.body;
+export async function POST(request) {
+  const { traceId, resultIndex, srdvType, srdvIndex } = await request.json();
 
   if (!traceId || !resultIndex) {
-    return res.status(400).json({ success: false, message: 'traceId ya resultIndex missing hai.' });
+    return NextResponse.json({ success: false, message: 'traceId ya resultIndex missing hai.' }, { status: 400 });
   }
 
   try {
@@ -48,15 +46,13 @@ async function handler(req, res) {
     const fareRuleText = findFareRuleHtml(data);
 
     if (!fareRuleText) {
-      return res.status(200).json({ success: false, message: 'Fare rules is flight ke liye available nahi hain.' });
+      return NextResponse.json({ success: false, message: 'Fare rules is flight ke liye available nahi hain.' });
     }
 
-    return res.status(200).json({ success: true, fareRuleText });
+    return NextResponse.json({ success: true, fareRuleText });
   } catch (error) {
     console.error('FareRule error:', error.message);
-    return handleApiError(res, error, "Something went wrong");
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
 
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

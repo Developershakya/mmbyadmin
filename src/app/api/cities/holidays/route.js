@@ -1,25 +1,34 @@
-import { getConnection } from '@/lib/db';
-import { handleApiError } from "@/lib/apiError";
-async function handler(req, res) {
-  const { query } = req.query;
-  let connection;
+import { Op } from "sequelize";
+import { NextResponse } from "next/server";
+import Cities from "../../../../../models/cities.js";
+import Package from "../../../../../models/Package.js";
+export async function GET(request) {
   try {
-    connection = await getConnection();
-    const [rows] = await connection.execute(
-      `SELECT DISTINCT c.id AS code, c.city_name AS name, 'India' AS country
-       FROM package p
-       JOIN cities c ON p.city_id = c.id
-       WHERE p.status = 1 AND c.city_name LIKE ?
-       LIMIT 10`,
-      [`%${query}%`]
-    );
-    res.status(200).json(rows);
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get("query")?.trim() || "";
+    const packages = await Package.findAll({
+      attributes: ["city"],
+      raw: true,
+    });
+    const packageCities = [...new Set(packages.map(({ city }) => city).filter(Boolean))];
+    const cities = await Cities.findAll({
+      where: {
+        city_name: {
+          [Op.and]: [
+            { [Op.like]: `%${query || ""}%` },
+            { [Op.in]: packageCities },
+          ],
+        },
+      },
+      attributes: [["id", "code"], ["city_name", "name"]],
+      limit: 10,
+      raw: true,
+    });
+    const rows = cities.map((city) => ({ ...city, country: "India" }));
+    
+    return NextResponse.json(rows);
   } catch (error) {
-    return handleApiError(res, error, "Something went wrong");
-  } finally {
-    if (connection) await connection.end();
+    console.error("Holiday city API error:", error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
-
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

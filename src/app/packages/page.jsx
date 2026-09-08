@@ -10,6 +10,7 @@ import {
   SoupIcon,
   StarIcon,
 } from "lucide-react";
+import { useParams, useSearchParams } from "next/navigation";
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 
 const SearchBox = forwardRef(
@@ -79,7 +80,10 @@ const SearchBox = forwardRef(
                 </div>
                 <div className="flex flex-col ">
                   <span className=""> {item.Destination} </span>
-                  <span className="text-xs text-gray-600"> {item.country} </span>
+                  <span className="text-xs text-gray-600">
+                    {" "}
+                    {item.country}{" "}
+                  </span>
                 </div>
               </div>
             ))}
@@ -164,115 +168,42 @@ export default function Packages() {
   const [budget, setBudget] = useState();
   const [sortOrder, setSortOrder] = useState("");
   const [selectedStates, setSelectedStates] = useState([]);
-
+  const [pack, setPackage] = useState([]);
   const [duration, setDuration] = useState(4);
   const [durationOpen, setDurationOpen] = useState(false);
   const [customDays, setCustomDays] = useState("");
-  const [searchFrom ,setSearchForm] = useState({
-    
-  })
+  const [loading, setLoading] = useState(true);
+  const [searchFrom, setSearchForm] = useState({});
   const searchOpenRef = useRef();
   const passengerRef = useRef();
   const durationRef = useRef();
   const label = "text-[12px] text-gray-600 tracking-widest uppercase";
+  const searchParams = useSearchParams();
 
-  const pack = [
-    {
-      packageName: "Manali Package Trip",
-      coverLocation: ["solang valley", "rohtang"],
-      city: "Manali",
-      state: "Himachal",
-      totalPrice: 39000,
-      offerPrice: 38000,
-      hotel: ["manali luxury hotel"],
-      foodType: ["Breakfast"],
-      totalTransfer: 3,
-      rating: "5",
-      days: 4,
-      tagType: "Best",
-      coverImage: "https://i.ytimg.com/vi/7NKk41YVWyA/maxresdefault.jpg",
-    },
-
-    {
-      packageName: "Manali Premium Adventure",
-      coverLocation: ["kasol", "manikaran"],
-      city: "Manali",
-      state: "Himachal",
-      totalPrice: 40000,
-      offerPrice: 36000,
-      hotel: ["mountain view resort"],
-      foodType: ["Breakfast", "Lunch"],
-      totalTransfer: 2,
-      rating: "1",
-      days: 5,
-      tagType: "Popular",
-      coverImage:
-        "https://i.pinimg.com/736x/c4/1b/24/c41b245b832fffa9e3ea316f8bcec015.jpg",
-    },
-    {
-      packageName: "Shimla & Kufri Explorer",
-      coverLocation: ["mall road", "kufri"],
-      city: "Shimla",
-      state: "Himachal",
-      totalPrice: 32000,
-      offerPrice: 28000,
-      hotel: ["shimla grand residency"],
-      foodType: ["Breakfast", "Dinner"],
-      totalTransfer: 4,
-      rating: "4",
-      days: 3,
-      tagType: "Trending",
-      coverImage:
-        "https://i.pinimg.com/736x/61/76/11/617611ac168f92de98f485c0bcece2db.jpg",
-    },
-    {
-      packageName: "Goa Beach Party Trip",
-      coverLocation: ["baga beach", "calangute"],
-      city: "North Goa",
-      state: "Goa",
-      totalPrice: 45000,
-      offerPrice: 41000,
-      hotel: ["goa beach resort"],
-      foodType: ["Breakfast", "Lunch", "Dinner"],
-      totalTransfer: 5,
-      rating: "5",
-      days: 6,
-      tagType: "Best Seller",
-      coverImage:
-        "https://i.pinimg.com/1200x/f5/df/90/f5df90f664d65b29009c6e91cadd1f24.jpg",
-    },
-    {
-      packageName: "Kerala Backwaters & Hills",
-      coverLocation: ["munnar", "alleppey"],
-      city: "Munnar",
-      state: "Kerala",
-      totalPrice: 50000,
-      offerPrice: 46000,
-      hotel: ["tea valley resort", "houseboat"],
-      foodType: ["Breakfast", "Dinner"],
-      totalTransfer: 3,
-      rating: "5",
-      days: 5,
-      tagType: "Recommended",
-      coverImage:
-        "https://i.pinimg.com/736x/3a/48/77/3a4877acae3645a2199e34afe8fc14fc.jpg",
-    },
-  ];
   const { minOfferPrice, maxOfferPrice } = useMemo(() => {
-    const min = pack.reduce(
-      (min, p) => (min.offerPrice < p.offerPrice ? min : p),
-      pack[0],
-    );
-    const max = pack.reduce(
-      (max, p) => (max.offerPrice > p.offerPrice ? max : p),
-      pack[0],
-    );
+    if (!Array.isArray(pack) || pack.length === 0) {
+      return {
+        minOfferPrice: 0,
+        maxOfferPrice: 0,
+      };
+    }
+
+    const prices = pack
+      .map((p) => Number(p.offerPrice))
+      .filter((price) => Number.isFinite(price));
+
+    if (prices.length === 0) {
+      return {
+        minOfferPrice: 0,
+        maxOfferPrice: 0,
+      };
+    }
 
     return {
-      minOfferPrice: min.offerPrice,
-      maxOfferPrice: max.offerPrice,
+      minOfferPrice: Math.min(...prices),
+      maxOfferPrice: Math.max(...prices),
     };
-  }, []);
+  }, [pack]);
   const currentBudget = budget ?? maxOfferPrice;
   const filterData = pack
     .filter((item) => {
@@ -369,14 +300,30 @@ export default function Packages() {
     document.addEventListener("mousedown", handleOutClick);
     return () => document.removeEventListener("mousedown", handleOutClick);
   });
-  useEffect(()=>{
-    async function fetchPackage(){
-      try{
+  useEffect(() => {
+    async function fetchPackage() {
+      try {
+        const result = await fetch("api/package");
+        const data = await result.json();
+        const packages = (data.data || []).map((item) => ({
+          ...item,
+          coverLocation: item.coverLocation
+            ? JSON.parse(item.coverLocation)
+            : [],
 
-      }
-    }
-    fetchPackage()
-  },[])
+          hotel: item.hotel ? JSON.parse(item.hotel) : [],
+
+          foodType: item.foodType ? JSON.parse(item.foodType) : [],
+        }));
+        setPackage(packages);
+        console.log(data.data);
+        
+      } catch (error) {
+        console.log(error.message);
+
+    }}
+    fetchPackage();
+  }, []);
 
   return (
     <>
@@ -705,125 +652,133 @@ export default function Packages() {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 p-2 gap-8">
-              {filterData.map((p, i) => {
-                const TAG_COLOR = cardTagColor(p.tagType);
-                return (
-                  <div
-                    key={`${p.packageName}-${i}`}
-                    onClick={() => setSelect((prev) => (prev === i ? null : i))}
-                    className={` bg-white min-w-[350px]  relative rounded-xl  shadow-md overflow-hidden`}
-                  >
+              {filterData.length === 0 ? (
+                <div className="col-span-full flex justify-center items-center py-10">
+                  <div className="w-10 h-10 border-4 border-gray-300 border-t-purple-800 rounded-full animate-spin"></div>
+                </div>
+              ) : (
+                filterData.map((p, i) => {
+                  const TAG_COLOR = cardTagColor(p.tagType);
+                  return (
                     <div
-                      className={`p-4 z-8 absolute bottom-0 left-0 w-full h-full  rounded-t-2xl border
+                      key={`${p.packageName}-${i}`}
+                      onClick={() =>
+                        setSelect((prev) => (prev === i ? null : i))
+                      }
+                      className={` bg-white min-w-[350px]  relative rounded-xl  shadow-md overflow-hidden`}
+                    >
+                      <div
+                        className={`p-4 z-8 absolute bottom-0 left-0 w-full h-full  rounded-t-2xl border
                        duration-100 ease-out
                       
                       
                       bg-black/10 backdrop-blur-xs border-white/20
                       
                       ${selectOption === i ? "translate-y-0" : "translate-y-full"}`}
-                    ></div>
+                      ></div>
 
-                    <div
-                      className={`  p-4 z-10 absolute  transition-all duration-300 left-0 bottom-0 w-full bg-white rounded-2xl border
+                      <div
+                        className={`  p-4 z-10 absolute  transition-all duration-300 left-0 bottom-0 w-full bg-white rounded-2xl border
                        ${selectOption === i ? "translate-y-0" : "translate-y-full"}`}
-                    >
-                      <h3 className={`${label} mb-4`}>
-                        please select an option
-                      </h3>
-                      <div className="gap-4 flex flex-col">
-                        <div className="p-4 border rounded-xl">
-                          <h2>With Flight</h2>
-                          <p>Starting from </p>
-                        </div>
-                        <div className="p-4 border rounded-xl">
-                          <h2>Without Flight</h2>
-                          <p>Starting from </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="relative">
-                      <span
-                        className={`${TAG_COLOR}  absolute top-4 left-4  text-white  text-xs font-semibold p-1 px-2 rounded-md`}
                       >
-                        {p.tagType && p.tagType}
-                      </span>
-                      <span className="absolute top-4 right-4 bg-gray-600 text-white  text-[10px] font-semibold p-1 px-2 rounded-md">
-                        {p.days - 1}N/{p.days}D
-                      </span>
-                      <p className="absolute flex bottom-2 left-8 items-center justify-between font-mono  text-white  font-thin text-xs gap-1">
-                        <MapPin size={14} />
-                        {p.city}{" "}
-                        <span className="w-1 h-1 mx-1 flex bg-gray-300 rounded-full"></span>{" "}
-                        {p.state}
-                      </p>
-                      <img
-                        src={p.coverImage}
-                        alt={p.packageName}
-                        style={{
-                          height: "200px",
-                          width: "100%",
-                          objectFit: "cover",
-                        }}
-                      />
-                    </div>
-                    <div className="p-4">
-                      <h3 className="font-semibold font-serif  capitalize text-xl">
-                        {p.packageName}
-                      </h3>
-                      <div className="flex gap-2 font-mono">
-                        {p.coverLocation.map((c, index) => {
-                          return (
-                            <div
-                              key={index}
-                              className="flex items-center gap-2"
-                            >
-                              <p className="text-gray-400 text-xs ">{c}</p>
-                              <span className="w-1 h-1 flex bg-gray-300  rounded-full"></span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className="flex my-2 gap-3">
-                        {p.hotel && (
-                          <div className="flex gap-1 items-center text-gray-500 text-sm">
-                            <Bed size={14} className="" /> <span>hotel</span>
+                        <h3 className={`${label} mb-4`}>
+                          please select an option
+                        </h3>
+                        <div className="gap-4 flex flex-col">
+                          <div className="p-4 border rounded-xl">
+                            <h2>With Flight</h2>
+                            <p>Starting from </p>
                           </div>
-                        )}
-
-                        <div className="flex gap-1 items-center text-gray-500 text-sm">
-                          <SoupIcon size={14} className="" />{" "}
-                          <span>{foodTag(p.foodType)}</span>
-                        </div>
-                        <div className="flex gap-1 items-center text-gray-500 text-sm">
-                          <CarFrontIcon size={14} className="" />
-                          <span>{p.totalTransfer}</span>
+                          <div className="p-4 border rounded-xl">
+                            <h2>Without Flight</h2>
+                            <p>Starting from </p>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center  gap-2 mb-4">
-                        {fiveStar(p.rating)}
-
-                        <span className="text-[10px] text-gray-800 font-semibold bg-orange-300 px-2 py-0.5 rounded-md">
-                          {p.rating}
+                      <div className="relative">
+                        <span
+                          className={`${TAG_COLOR}  absolute top-4 left-4  text-white  text-xs font-semibold p-1 px-2 rounded-md`}
+                        >
+                          {p.tagType && p.tagType}
                         </span>
+                        <span className="absolute top-4 right-4 bg-gray-600 text-white  text-[10px] font-semibold p-1 px-2 rounded-md">
+                          {p.days - 1}N/{p.days}D
+                        </span>
+                        <p className="absolute flex bottom-2 left-8 items-center justify-between font-mono  text-white  font-thin text-xs gap-1">
+                          <MapPin size={14} />
+                          {p.city}{" "}
+                          <span className="w-1 h-1 mx-1 flex bg-gray-300 rounded-full"></span>{" "}
+                          {p.state}
+                        </p>
+                        <img
+                          src={p.coverImage}
+                          alt={p.packageName}
+                          style={{
+                            height: "200px",
+                            width: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
                       </div>
-                      <div className="flex justify-between items-center border-t border-dashed p-4 border-gray-300">
-                        <div className="flex gap-2 items-center">
-                          <span className="font-semibold text-2xl">
-                            ₹{p.offerPrice.toLocaleString("en")}
-                          </span>
-                          <span className="text-gray-400 text-sm line-through">
-                            ₹{p.totalPrice.toLocaleString("en")}
+                      <div className="p-4">
+                        <h3 className="font-semibold font-serif  capitalize text-xl">
+                          {p.packageName}
+                        </h3>
+                        <div className="flex gap-2 font-mono">
+                          {p.coverLocation.map((c, index) => {
+                            return (
+                              <div
+                                key={index}
+                                className="flex items-center gap-2"
+                              >
+                                <p className="text-gray-400 text-xs ">{c}</p>
+                                <span className="w-1 h-1 flex bg-gray-300  rounded-full"></span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="flex my-2 gap-3">
+                          {p.hotel && (
+                            <div className="flex gap-1 items-center text-gray-500 text-sm">
+                              <Bed size={14} className="" /> <span>hotel</span>
+                            </div>
+                          )}
+
+                          <div className="flex gap-1 items-center text-gray-500 text-sm">
+                            <SoupIcon size={14} className="" />{" "}
+                            <span>{foodTag(p.foodType)}</span>
+                          </div>
+                          <div className="flex gap-1 items-center text-gray-500 text-sm">
+                            <CarFrontIcon size={14} className="" />
+                            <span>{p.totalTransfer}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center  gap-2 mb-4">
+                          {fiveStar(p.rating)}
+
+                          <span className="text-[10px] text-gray-800 font-semibold bg-orange-300 px-2 py-0.5 rounded-md">
+                            {p.rating}
                           </span>
                         </div>
-                        <button className="bg-gray-800 text-white font-semibold py-2 px-4 rounded-lg tracking-wider cursor-pointer">
-                          View Details
-                        </button>
+                        <div className="flex justify-between items-center border-t border-dashed p-4 border-gray-300">
+                          <div className="flex gap-2 items-center">
+                            <span className="font-semibold text-2xl">
+                              ₹{p.offerPrice.toLocaleString("en")}
+                            </span>
+                            <span className="text-gray-400 text-sm line-through">
+                              ₹{p.totalPrice.toLocaleString("en")}
+                            </span>
+                          </div>
+                          <button className="bg-gray-800 text-white font-semibold py-2 px-4 rounded-lg tracking-wider cursor-pointer">
+                            View Details
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

@@ -1,4 +1,10 @@
 export async function callSrdvApi(baseUrl, endpoint, extraPayload = {}) {
+  if (!baseUrl) {
+    const error = new Error(`SRDV ${endpoint} URL is not configured`);
+    error.statusCode = 500;
+    throw error;
+  }
+
   const payload = {
     ClientId: process.env.SRDV_CLIENT_ID,
     UserName: process.env.SRDV_USERNAME,
@@ -22,6 +28,13 @@ export async function callSrdvApi(baseUrl, endpoint, extraPayload = {}) {
 
   const text = await response.text();
 
+  if (!response.ok) {
+    const error = new Error(`SRDV ${endpoint} request failed with status ${response.status}`);
+    error.statusCode = 502;
+    error.details = text.slice(0, 500);
+    throw error;
+  }
+
   try {
     return JSON.parse(text);
   } catch (e) {
@@ -31,6 +44,12 @@ export async function callSrdvApi(baseUrl, endpoint, extraPayload = {}) {
 }
 
 export async function callSrdvApiForm(baseUrl, endpoint, extraPayload = {}) {
+  if (!baseUrl) {
+    const error = new Error(`SRDV ${endpoint} URL is not configured`);
+    error.statusCode = 500;
+    throw error;
+  }
+
   const payload = {
     ClientId: process.env.SRDV_CLIENT_ID,
     UserName: process.env.SRDV_USERNAME,
@@ -58,6 +77,13 @@ export async function callSrdvApiForm(baseUrl, endpoint, extraPayload = {}) {
   });
 
   const text = await response.text();
+
+  if (!response.ok) {
+    const error = new Error(`SRDV ${endpoint} request failed with status ${response.status}`);
+    error.statusCode = 502;
+    error.details = text.slice(0, 500);
+    throw error;
+  }
 
   try {
     return JSON.parse(text);

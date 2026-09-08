@@ -1,24 +1,27 @@
-import { getConnection } from '@/lib/db';
-import { handleApiError } from "@/lib/apiError";
-async function handler(req, res) {
-  const { query } = req.query;
+import { Op } from "sequelize";
+import { NextResponse } from "next/server";
+import Cities from "../../../../../models/cities.js";
+export async function GET(request) {
   try {
-    const connection = await getConnection();
-    const [rows] = await connection.execute(
-      `SELECT 
-         caoncitlst_mti_code AS cityid, 
-         caoncitlst_city_name AS Destination, 
-         caoncitlst_state AS country
-       FROM car_on_city_list 
-       WHERE caoncitlst_city_name LIKE ? AND caoncitlst_status = 'Active' LIMIT 10`,
-      [`%${query}%`]
-    );
-    await connection.end();
-    res.status(200).json(rows);
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get("query")?.trim() || "";
+    const cities = await Cities.findAll({
+      where: query.trim().length >= 2
+        ? { city_name: { [Op.like]: `%${query.trim()}%` } }
+        : undefined,
+      attributes: [
+        ["id", "cityid"],
+        ["city_name", "Destination"],
+        ["state_id", "country"],
+      ],
+      order: [["city_name", "ASC"]],
+      limit: 10,
+      raw: true,
+    });
+    const rows = cities;
+    return NextResponse.json(rows);
   } catch (error) {
-    return handleApiError(res, error, "Something went wrong");
+    console.error("Cab city API error:", error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
-
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

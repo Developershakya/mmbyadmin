@@ -1,13 +1,11 @@
-import { handleApiError } from "@/lib/apiError";// âœ… FIXED CODE
 import { callSrdvApi } from '@/lib/srdvApi';
+import { NextResponse } from "next/server";
 
-async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
-
-  const { traceId, resultIndex } = req.body;
+export async function POST(request) {
+  const { traceId, resultIndex } = await request.json();
 
   if (!traceId || !resultIndex) {
-    return res.status(400).json({ success: false, message: 'traceId aur resultIndex zaroori hain' });
+    return NextResponse.json({ success: false, message: 'traceId aur resultIndex zaroori hain' }, { status: 400 });
   }
 
   try {
@@ -19,7 +17,7 @@ const data = await callSrdvApi(process.env.BUS_API_URL, 'GetSeatLayout', {
 console.log('RAW SEAT LAYOUT RESPONSE:', JSON.stringify(data, null, 2));   
 
     if (data?.Error && Number(data.Error.ErrorCode) !== 0) {
-      return res.status(200).json({ success: false, message: data.Error.ErrorMessage });
+      return NextResponse.json({ success: false, message: data.Error.ErrorMessage });
     }
 // SRDV response se seats dhoondo (chahe kisi bhi key/nesting ke andar ho)
 function findSeatArray(obj) {
@@ -42,7 +40,7 @@ function findSeatArray(obj) {
 const seatList = findSeatArray(data) || [];
 
 if (seatList.length === 0) {
-  return res.status(200).json({ success: false, message: 'Seat data available nahi hai.' });
+  return NextResponse.json({ success: false, message: 'Seat data available nahi hai.' });
 }
 
     // Clean formatting for React UI
@@ -57,7 +55,7 @@ if (seatList.length === 0) {
       price: seat.Price?.OfferedPrice ?? seat.Price?.PublishedPrice ?? seat.SeatFare ?? 0,
     }));
 
-    return res.status(200).json({
+    return NextResponse.json({
       success: true,
       seats,
       boardingPoints: data?.GetSeatLayoutResult?.BoardingPointDetails || data?.BoardingPointDetails || [],
@@ -66,9 +64,7 @@ if (seatList.length === 0) {
 
   } catch (error) {
     console.error('Seat layout error:', error.message);
-    return handleApiError(res, error, "Something went wrong");
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
 
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

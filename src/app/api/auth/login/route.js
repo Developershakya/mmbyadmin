@@ -1,39 +1,31 @@
-import { handleApiError } from "@/lib/apiError";
-import { signToken, setAuthCookie } from "@/lib/auth";
-import { withAppRoute } from "@/lib/routeCompat";
+import { signToken } from "@/lib/auth";
+import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import User from "../../../../../models/User.js";
 
-async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
+export async function POST(request) {
   try {
-    const { email, password } = req.body || {};
+    const { email, password } = await request.json();
 
     const user = await User.findOne({ where: { email } });
     if (!user) {
-      return res.status(401).json({ error: "Invalid email ya password" });
+      return NextResponse.json({ error: "Invalid email ya password" }, { status: 401 });
     }
 
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
-      return res.status(401).json({ error: "Invalid email ya password" });
+      return NextResponse.json({ error: "Invalid email ya password" }, { status: 401 });
     }
 
     const token = signToken({ id: user.id, email: user.email });
-    setAuthCookie(res, token);
-
-    return res.status(200).json({
+    const response = NextResponse.json({
       message: "Login successful",
       user: { id: user.id, email: user.email, name: user.name },
     });
+    response.cookies.set("token", token, { httpOnly: true, path: "/", maxAge: 7 * 24 * 60 * 60, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
+    return response;
   } catch (err) {
-    console.error(err);
-    return handleApiError(res, err, "Something went wrong");
+    console.error("Login API error:", err);
+    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
 }
-
-export const GET = withAppRoute(handler);
-export const POST = withAppRoute(handler);

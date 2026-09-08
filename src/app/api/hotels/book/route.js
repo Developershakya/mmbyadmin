@@ -1,15 +1,14 @@
 import { callSrdvApi } from '@/lib/srdvApi';
-import { handleApiError } from "@/lib/apiError";
-async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
+import { NextResponse } from "next/server";
+export async function POST(request) {
 
   const {
     traceId, srdvType, srdvIndex, resultIndex, hotelCode, hotelName,
     guestNationality, noOfRooms, room, passengers,
-  } = req.body;
+  } = await request.json();
 
   if (!room || !passengers || passengers.length === 0) {
-    return res.status(400).json({ success: false, message: 'Room ya passenger details missing.' });
+    return NextResponse.json({ success: false, message: 'Room ya passenger details missing.' }, { status: 400 });
   }
 
   try {
@@ -39,10 +38,10 @@ async function handler(req, res) {
     const result = data.BookResult;
 
     if (result?.Error && result.Error.ErrorCode !== 0) {
-      return res.status(200).json({ success: false, message: result.Error.ErrorMessage });
+      return NextResponse.json({ success: false, message: result.Error.ErrorMessage });
     }
 
-    return res.status(200).json({
+    return NextResponse.json({
       success: true,
       bookingRef: result?.BookingRefNo,
       confirmationNo: result?.ConfirmationNo,
@@ -51,9 +50,7 @@ async function handler(req, res) {
     });
   } catch (error) {
     console.error('Book ERROR:', error.message);
-    return handleApiError(res, error, "Something went wrong");
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
 
-export async function GET(req, res) { return handler(req, res); }
-export async function POST(req, res) { return handler(req, res); }

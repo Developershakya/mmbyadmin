@@ -1,5 +1,7 @@
 import { callSrdvApi } from '../../lib/srdvApi';
-import { getConnection } from '../../lib/db';
+import sequelize from '../../../config/sequelize.js';
+import BusBooking from '../../../models/BusBooking.js';
+import BusBookingPassenger from '../../../models/BusBookingPassenger.js';
 
 function generateBookingRef() {
   const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -31,8 +33,6 @@ export default async function handler(req, res) {
   }
 
   const srdvPassengers = toSrdvPassengers(passengers, contact);
-  const connection = await getConnection();
-
   try {
     // ⚠️ ADJUST: 'BlockTicket' — agar SRDV plan mein single-step booking hai to ye step hata ke
     // neeche wale call ka method 'Book'/'BookTicket' kar dena.
@@ -60,40 +60,40 @@ export default async function handler(req, res) {
     const pnr = bookData?.Response?.PNR || bookData?.PNR || blockData?.Response?.PNR || null;
     const bookingRef = generateBookingRef();
 
-    const [bookingResult] = await connection.query(
-      `INSERT INTO bus_bookings
-        (booking_ref, operator_name, bus_type, pnr, trace_id, result_index, boarding_point, dropping_point, contact_name, contact_email, contact_phone, total_price, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
-      [
-        bookingRef,
-        bus.operator_name,
-        bus.bus_type,
+    const transaction = await sequelize.transaction();
+    try {
+      const booking = await BusBooking.create({
+        booking_ref: bookingRef,
+        operator_name: bus.operator_name,
+        bus_type: bus.bus_type,
         pnr,
-        bus.traceId,
-        bus.resultIndex,
-        boardingPoint?.CityPointLocation || boardingPoint?.CityPointName || '',
-        droppingPoint?.CityPointLocation || droppingPoint?.CityPointName || '',
-        contact.name,
-        contact.email,
-        contact.phone,
-        totalPrice,
-      ]
-    );
-    const bookingId = bookingResult.insertId;
+        trace_id: bus.traceId,
+        result_index: bus.resultIndex,
+        boarding_point: boardingPoint?.CityPointLocation || boardingPoint?.CityPointName || '',
+        dropping_point: droppingPoint?.CityPointLocation || droppingPoint?.CityPointName || '',
+        contact_name: contact.name,
+        contact_email: contact.email,
+        contact_phone: contact.phone,
+        total_price: totalPrice,
+        status: 'confirmed',
+      }, { transaction });
 
-    for (const p of passengers) {
-      await connection.query(
-        `INSERT INTO bus_booking_passengers (booking_id, first_name, last_name, gender, age, seat_name)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [bookingId, p.firstName, p.lastName, p.gender, p.age, p.seatName]
-      );
+      await BusBookingPassenger.bulkCreate(passengers.map((p) => ({
+        booking_id: booking.id,
+        first_name: p.firstName,
+        last_name: p.lastName,
+        gender: p.gender,
+        age: p.age,
+        seat_name: p.seatName,
+      })), { transaction });
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
     }
-
-    await connection.end();
     return res.status(200).json({ success: true, bookingRef, pnr, totalPrice });
   } catch (err) {
     console.error('bus book error:', err.message);
-    await connection.end().catch(() => {});
     return res.status(500).json({ success: false, message: err.message || 'Booking fail ho gayi, dobara try karo.' });
   }
 }

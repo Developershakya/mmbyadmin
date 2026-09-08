@@ -1,6 +1,5 @@
 import { callSrdvApi } from '@/lib/srdvApi';
-import { handleApiError } from "@/lib/apiError";
-import { withAppRoute } from '@/lib/routeCompat';
+import { NextResponse } from "next/server";
 
 function parseFlightItem(item, legIndex, traceId, srdvType) {
   const legs = item.Segments?.[0] || [];
@@ -115,12 +114,8 @@ function extractResults(data, legIndex) {
   return results;
 }
 
-async function handler(req) {
-  if (req.method !== 'POST') {
-    return Response.json({ success: false, message: 'Method not allowed' }, { status: 405 });
-  }
-
-  const { adultCount, childCount, infantCount, journeyType, segments } = req.body || {};
+export async function POST(request) {
+  const { adultCount, childCount, infantCount, journeyType, segments } = await request.json();
 
   try {
     let flatResults = [];
@@ -149,16 +144,14 @@ async function handler(req) {
     }
 
     if (flatResults.length > 0) {
-      return Response.json({ success: true, results: flatResults });
+      return NextResponse.json({ success: true, results: flatResults });
     }
 
-    return Response.json({ success: false, message: 'Is route ke liye koi flight nahi mili.' });
+    return NextResponse.json({ success: false, message: 'Is route ke liye koi flight nahi mili.' });
 
   } catch (error) {
     console.error('Flight search error:', error.message);
-    return handleApiError(undefined, error, "Something went wrong");
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
 
-export const GET = withAppRoute(handler);
-export const POST = withAppRoute(handler);
