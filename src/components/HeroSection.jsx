@@ -59,16 +59,24 @@ function RoomsGuestsBox({ value, onChange }) {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onDec(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDec();
+            }}
             disabled={val <= min}
             className="w-8 h-8 rounded-full border border-gray-300 text-gray-600 font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:border-orange-400 hover:text-orange-500 transition"
           >
             –
           </button>
-          <span className="w-5 text-center font-semibold text-gray-800">{val}</span>
+          <span className="w-5 text-center font-semibold text-gray-800">
+            {val}
+          </span>
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onInc(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onInc();
+            }}
             className="w-8 h-8 rounded-full border border-gray-300 text-gray-600 font-bold hover:border-orange-400 hover:text-orange-500 transition"
           >
             +
@@ -80,11 +88,16 @@ function RoomsGuestsBox({ value, onChange }) {
 
   return (
     <div className="relative w-full h-full cursor-pointer" ref={boxRef}>
-      <span className="text-xs uppercase text-gray-400 block mb-1">Rooms &amp; Guests</span>
+      <span className="text-xs uppercase text-gray-400 block mb-1">
+        Rooms &amp; Guests
+      </span>
       <div onClick={() => setOpen((p) => !p)}>
         <div className="text-xl font-bold text-gray-800 flex items-center gap-1">
-          {rooms} Room{rooms > 1 ? "s" : ""}, {adults} Adult{adults > 1 ? "s" : ""}
-          {children > 0 ? `, ${children} Child${children > 1 ? "ren" : ""}` : ""}
+          {rooms} Room{rooms > 1 ? "s" : ""}, {adults} Adult
+          {adults > 1 ? "s" : ""}
+          {children > 0
+            ? `, ${children} Child${children > 1 ? "ren" : ""}`
+            : ""}
           <ChevronDown className="w-3 h-3 text-gray-400" />
         </div>
       </div>
@@ -94,19 +107,33 @@ function RoomsGuestsBox({ value, onChange }) {
           className="absolute right-0 mt-2 w-80 bg-white shadow-2xl rounded-xl border border-gray-100 z-30 p-4"
           onClick={(e) => e.stopPropagation()}
         >
-          <Counter label="Room" val={rooms} min={1}
+          <Counter
+            label="Room"
+            val={rooms}
+            min={1}
             onDec={() => update({ rooms: Math.max(1, rooms - 1) })}
-            onInc={() => update({ rooms: Math.min(9, rooms + 1) })} />
+            onInc={() => update({ rooms: Math.min(9, rooms + 1) })}
+          />
           <div className="border-t border-gray-100" />
-          <Counter label="Adults" val={adults} min={1}
+          <Counter
+            label="Adults"
+            val={adults}
+            min={1}
             onDec={() => update({ adults: Math.max(1, adults - 1) })}
-            onInc={() => update({ adults: Math.min(20, adults + 1) })} />
+            onInc={() => update({ adults: Math.min(20, adults + 1) })}
+          />
           <div className="border-t border-gray-100" />
-          <Counter label="Children" sub="0 - 17 Years Old" val={children} min={0}
+          <Counter
+            label="Children"
+            sub="0 - 17 Years Old"
+            val={children}
+            min={0}
             onDec={() => update({ children: Math.max(0, children - 1) })}
-            onInc={() => update({ children: Math.min(10, children + 1) })} />
+            onInc={() => update({ children: Math.min(10, children + 1) })}
+          />
           <p className="text-xs text-gray-400 mt-3 leading-relaxed">
-            Please provide the right number of children along with their correct age for the best options and prices.
+            Please provide the right number of children along with their correct
+            age for the best options and prices.
           </p>
           <button
             type="button"
@@ -144,11 +171,11 @@ export default function HeroSection() {
   const [openDeparture, setOpenDeparture] = useState(false);
   const [openReturn, setOpenReturn] = useState(false);
 
-const tomorrow = new Date(today);
-tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
 
-const [checkIn, setCheckIn] = useState(today);
-const [checkOut, setCheckOut] = useState(tomorrow);
+  const [checkIn, setCheckIn] = useState(today);
+  const [checkOut, setCheckOut] = useState(tomorrow);
   const [openCheckIn, setOpenCheckIn] = useState(false);
   const [openCheckOut, setOpenCheckOut] = useState(false);
   const [openPrice, setOpenPrice] = useState(false);
@@ -158,42 +185,49 @@ const [checkOut, setCheckOut] = useState(tomorrow);
   const [travelDate, setTravelDate] = useState(new Date());
   const [openTravelDate, setOpenTravelDate] = useState(false);
 
-  const [from, setFrom] = useState(
-    indianCities.find((c) => c.code === "DEL")
-  );
-  const [to, setTo] = useState(
-    indianCities.find((c) => c.code === "BOM")
-  );
+  const [from, setFrom] = useState(indianCities.find((c) => c.code === "DEL"));
+  const [to, setTo] = useState(indianCities.find((c) => c.code === "BOM"));
 
   const [multiCityLegs, setMultiCityLegs] = useState([
     { from: from, to: to, date: new Date() },
     { from: to, to: null, date: new Date(Date.now() + 86400000) },
   ]);
- const [hotelDestination, setHotelDestination] = useState({
-  code: "699356",
-  name: "GOA",
-});
+  const [hotelDestination, setHotelDestination] = useState({
+    code: "699356",
+    name: "GOA",
+  });
   const [roomsGuests, setRoomsGuests] = useState({
     rooms: 1,
     adults: 2,
     children: 0,
   });
 
-const [holidaysFrom, setHolidaysFrom] = useState({ code: "DEL", name: "New Delhi" });
-const [holidaysTo, setHolidaysTo] = useState({ code: "GOA", name: "Goa" });
-  const [holidaysDepartureDate, setHolidaysDepartureDate] = useState("");
-  const [holidaysRooms, setHolidaysRooms] = useState({
-    rooms: 1,
+  const getCurrentDateString = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const [holidaySearch, setHolidaySearch] = useState({
+    origin: { code: "DEL", name: "New Delhi, India", sub: "Indira Gandhi International Airport" },
+    destination: { code: "GOI", name: "Goa, India", sub: "Dabolim Airport" },
+    date: getCurrentDateString(),
+    days: "5",
     adults: 2,
     children: 0,
+    infants: 0,
   });
+  const [openHolidayDate, setOpenHolidayDate] = useState(false);
+  const [openHolidayDays, setOpenHolidayDays] = useState(false);
+  const [openHolidayGuests, setOpenHolidayGuests] = useState(false);
+  const holidayGuestRef = useRef(null);
+  const holidayDayRef = useRef(null);
+  const holidayDateRef = useRef(null);
 
-const [busFrom, setBusFrom] = useState(
-  { code: "Noida", name: "Noida" }
-);
-const [busTo, setBusTo] = useState(
-  { code: "Mathura", name: "Mathura" }
-);
+  const [busFrom, setBusFrom] = useState({ code: "Noida", name: "Noida" });
+  const [busTo, setBusTo] = useState({ code: "Mathura", name: "Mathura" });
 
   const [cabTripType, setCabTripType] = useState("oneway");
   const [cabFrom, setCabFrom] = useState(null);
@@ -231,18 +265,142 @@ const [busTo, setBusTo] = useState(
 
   useEffect(() => {
     function handleClickOutside(e) {
-      if (cabTripTypeRef.current && !cabTripTypeRef.current.contains(e.target)) {
+      if (
+        cabTripTypeRef.current &&
+        !cabTripTypeRef.current.contains(e.target)
+      ) {
         setCabTripTypeOpen(false);
+      }
+      if (
+        holidayGuestRef.current &&
+        !holidayGuestRef.current.contains(e.target)
+      ) {
+        setOpenHolidayGuests(false);
+      }
+      if (
+        holidayDayRef.current &&
+        !holidayDayRef.current.contains(e.target)
+      ) {
+        setOpenHolidayDays(false);
+      }
+      if (
+        holidayDateRef.current &&
+        !holidayDateRef.current.contains(e.target)
+      ) {
+        setOpenHolidayDate(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const normalizeLocationName = (value) => {
+    if (!value) return "";
+    if (typeof value === "string") return value.trim();
+    const name = value.name || value.Destination || value.city || "";
+    return String(name).split(",")[0].trim();
+  };
+
+  function HolidayGuestsBox({ value, onChange }) {
+    const adults = value?.adults ?? 2;
+    const children = value?.children ?? 0;
+    const infants = value?.infants ?? 0;
+
+    const update = (patch) => onChange({ adults, children, infants, ...patch });
+
+    function Counter({ label, val, min, onDec, onInc }) {
+      return (
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">{label}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDec();
+              }}
+              disabled={val <= min}
+              className="w-8 h-8 rounded-full border border-gray-300 text-gray-600 font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:border-orange-400 hover:text-orange-500 transition"
+            >
+              –
+            </button>
+            <span className="w-5 text-center font-semibold text-gray-800">{val}</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onInc();
+              }}
+              className="w-8 h-8 rounded-full border border-gray-300 text-gray-600 font-bold hover:border-orange-400 hover:text-orange-500 transition"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="relative w-full h-full cursor-pointer" ref={holidayGuestRef}>
+        <span className="text-xs uppercase text-gray-400 block mb-1">Guests</span>
+        <div onClick={() => setOpenHolidayGuests((p) => !p)}>
+          <div className="text-xl font-bold text-gray-800 flex items-center gap-1">
+            {adults} Adult{adults > 1 ? "s" : ""}
+            {children > 0 ? `, ${children} Child${children > 1 ? "ren" : ""}` : ""}
+            {infants > 0 ? `, ${infants} Infant${infants > 1 ? "s" : ""}` : ""}
+            <ChevronDown className="w-3 h-3 text-gray-400" />
+          </div>
+        </div>
+
+        {openHolidayGuests && (
+          <div
+            className="absolute right-0 mt-2 w-80 bg-white shadow-2xl rounded-xl border border-gray-100 z-30 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Counter
+              label="Adults"
+              val={adults}
+              min={1}
+              onDec={() => update({ adults: Math.max(1, adults - 1) })}
+              onInc={() => update({ adults: Math.min(20, adults + 1) })}
+            />
+            <div className="border-t border-gray-100" />
+            <Counter
+              label="Children"
+              val={children}
+              min={0}
+              onDec={() => update({ children: Math.max(0, children - 1) })}
+              onInc={() => update({ children: Math.min(10, children + 1) })}
+            />
+            <div className="border-t border-gray-100" />
+            <Counter
+              label="Infants"
+              val={infants}
+              min={0}
+              onDec={() => update({ infants: Math.max(0, infants - 1) })}
+              onInc={() => update({ infants: Math.min(10, infants + 1) })}
+            />
+            <button
+              type="button"
+              onClick={() => setOpenHolidayGuests(false)}
+              className="w-full mt-4 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-lg py-2.5 transition"
+            >
+              Apply
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function handleSearch() {
     if (activeTab === "flights") {
       if (tripType === "multicity") {
-        const incomplete = multiCityLegs.some((leg) => !leg.from || !leg.to || !leg.date);
+        const incomplete = multiCityLegs.some(
+          (leg) => !leg.from || !leg.to || !leg.date,
+        );
         if (incomplete) {
           alert("Please fill From, To and Date for all cities.");
           return;
@@ -251,7 +409,7 @@ const [busTo, setBusTo] = useState(
         const legsParam = multiCityLegs
           .map(
             (leg) =>
-              `${leg.from.code}-${leg.to.code}-${formatLocalDate(leg.date)}`
+              `${leg.from.code}-${leg.to.code}-${formatLocalDate(leg.date)}`,
           )
           .join(",");
 
@@ -267,8 +425,10 @@ const [busTo, setBusTo] = useState(
         }
         router.push(
           `/flights?from=${from.code}&to=${to.code}&date=${formatLocalDate(departureDate)}` +
-          (tripType === "roundtrip" ? `&returnDate=${formatLocalDate(returnDate)}` : "") +
-          `&trip=${tripType}&adults=${adults}&children=${children}&infants=${infants}`
+            (tripType === "roundtrip"
+              ? `&returnDate=${formatLocalDate(returnDate)}`
+              : "") +
+            `&trip=${tripType}&adults=${adults}&children=${children}&infants=${infants}`,
         );
       }
     } else if (activeTab === "hotels") {
@@ -289,52 +449,69 @@ const [busTo, setBusTo] = useState(
 
       router.push(
         `/hotels?cityId=${hotelDestination.code}` +
-        `&cityName=${encodeURIComponent(hotelDestination.name)}` +
-        `&checkin=${formatLocalDate(checkIn)}` +
-        `&nights=${nights}` +
-        `&rooms=${roomsGuests.rooms}` +
-        `&adults=${roomsGuests.adults}` +
-        `&children=${roomsGuests.children}`
+          `&cityName=${encodeURIComponent(hotelDestination.name)}` +
+          `&checkin=${formatLocalDate(checkIn)}` +
+          `&nights=${nights}` +
+          `&rooms=${roomsGuests.rooms}` +
+          `&adults=${roomsGuests.adults}` +
+          `&children=${roomsGuests.children}`,
+      );
+    } else if (activeTab === "holidays") {
+      const { origin, destination, date, days, adults, children, infants } = holidaySearch;
+
+      if (!origin || !normalizeLocationName(origin)) {
+        alert("Please select an origin.");
+        return;
+      }
+      if (!destination || !normalizeLocationName(destination)) {
+        alert("Please select a destination.");
+        return;
+      }
+      if (!date) {
+        alert("Please select a travel date.");
+        return;
+      }
+      if (!days || Number(days) < 1) {
+        alert("Please select valid trip days.");
+        return;
+      }
+      if (Number(adults) < 1) {
+        alert("Adults must be at least 1.");
+        return;
+      }
+
+      const query = new URLSearchParams({
+        origin: normalizeLocationName(origin),
+        destination: normalizeLocationName(destination),
+        date,
+        days: String(days),
+        adults: String(adults),
+        children: String(children || 0),
+        infants: String(infants || 0),
+      });
+
+      router.push(`/packages?${query.toString()}`);
+    } else if (activeTab === "buses") {
+      // Safe Fallback: Agar kisi case me states empty bhi hon to default cities pass kar do
+      const fromCode = busFrom?.code || "Noida";
+      const toCode = busTo?.code || "Mathura";
+      const dateStr = formatLocalDate(travelDate || new Date());
+
+      router.push(
+        `/buses?from=${encodeURIComponent(fromCode)}&to=${encodeURIComponent(toCode)}&date=${dateStr}`,
+      );
+    } else if (activeTab === "cabs") {
+      if (!cabFrom || !cabTo) {
+        alert("Please select pickup and drop locations.");
+        return;
+      }
+      router.push(
+        `/cab?from=${cabFrom.code}&to=${cabTo.code}` +
+          `&fromName=${encodeURIComponent(cabFrom.name)}` +
+          `&toName=${encodeURIComponent(cabTo.name)}` +
+          `&type=${cabTripType}`,
       );
     }
-else if (activeTab === "holidays") {
-  if (!holidaysTo) {
-    alert("Please select a destination.");
-    return;
-  }
-
-  const destinationName = holidaysTo.name || holidaysTo.Destination || "";
-
-  const query = new URLSearchParams({
-    destination: destinationName,
-  });
-  if (holidaysDepartureDate) query.set("startDate", holidaysDepartureDate);
-  query.set("guests", `${holidaysRooms.rooms} Room, ${holidaysRooms.adults} Adults`);
-
-  router.push(`/holiday/search?${query.toString()}`);
-}
-
-else if (activeTab === "buses") {
-  // Safe Fallback: Agar kisi case me states empty bhi hon to default cities pass kar do
-  const fromCode = busFrom?.code || "Noida";
-  const toCode = busTo?.code || "Mathura";
-  const dateStr = formatLocalDate(travelDate || new Date());
-
-  router.push(
-    `/buses?from=${encodeURIComponent(fromCode)}&to=${encodeURIComponent(toCode)}&date=${dateStr}`
-  );
-} else if (activeTab === "cabs") {
-  if (!cabFrom || !cabTo) {
-    alert("Please select pickup and drop locations.");
-    return;
-  }
-  router.push(
-    `/cab?from=${cabFrom.code}&to=${cabTo.code}` +
-    `&fromName=${encodeURIComponent(cabFrom.name)}` +
-    `&toName=${encodeURIComponent(cabTo.name)}` +
-    `&type=${cabTripType}`
-  );
-}
   }
 
   const formatWeekday = (date) =>
@@ -395,7 +572,9 @@ else if (activeTab === "buses") {
                       onChange={() => setTripType("oneway")}
                       className="accent-orange-600 w-4 h-4"
                     />
-                    <span className={tripType === "oneway" ? "text-orange-600" : ""}>
+                    <span
+                      className={tripType === "oneway" ? "text-orange-600" : ""}
+                    >
                       One Way
                     </span>
                   </label>
@@ -407,7 +586,11 @@ else if (activeTab === "buses") {
                       onChange={() => setTripType("roundtrip")}
                       className="accent-orange-600 w-4 h-4"
                     />
-                    <span className={tripType === "roundtrip" ? "text-orange-600" : ""}>
+                    <span
+                      className={
+                        tripType === "roundtrip" ? "text-orange-600" : ""
+                      }
+                    >
                       Round Trip
                     </span>
                   </label>
@@ -419,7 +602,11 @@ else if (activeTab === "buses") {
                       onChange={() => setTripType("multicity")}
                       className="accent-orange-600 w-4 h-4"
                     />
-                    <span className={tripType === "multicity" ? "text-orange-600" : ""}>
+                    <span
+                      className={
+                        tripType === "multicity" ? "text-orange-600" : ""
+                      }
+                    >
                       Multi City
                     </span>
                   </label>
@@ -431,36 +618,66 @@ else if (activeTab === "buses") {
                 {tripType !== "multicity" ? (
                   <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
                     <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-                      <LocationSearchBox label="From" value={from} placeholder="New Delhi" onSelect={setFrom} citySearchApi="/api/cities/airports" />
+                      <LocationSearchBox
+                        label="From"
+                        value={from}
+                        placeholder="New Delhi"
+                        onSelect={setFrom}
+                        citySearchApi="/api/cities/airports"
+                      />
                     </div>
 
                     <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition">
-                      <LocationSearchBox label="To" value={to} placeholder="Leh" onSelect={setTo} citySearchApi="/api/cities/airports" />
+                      <LocationSearchBox
+                        label="To"
+                        value={to}
+                        placeholder="Leh"
+                        onSelect={setTo}
+                        citySearchApi="/api/cities/airports"
+                      />
                     </div>
 
                     {/* Departure */}
                     <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
                       <span
                         className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
-                        onClick={() => { setOpenDeparture(!openDeparture); setOpenReturn(false); }}
+                        onClick={() => {
+                          setOpenDeparture(!openDeparture);
+                          setOpenReturn(false);
+                        }}
                       >
                         Departure <ChevronDown className="w-3 h-3" />
                       </span>
-                      <div onClick={() => { setOpenDeparture(!openDeparture); setOpenReturn(false); }}>
+                      <div
+                        onClick={() => {
+                          setOpenDeparture(!openDeparture);
+                          setOpenReturn(false);
+                        }}
+                      >
                         <div className="text-xl font-bold text-gray-800">
                           {departureDate ? departureDate.getDate() : "--"}{" "}
                           <span className="text-sm font-semibold">
-                            {departureDate ? departureDate.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) : ""}
+                            {departureDate
+                              ? departureDate.toLocaleDateString("en-GB", {
+                                  month: "short",
+                                  year: "2-digit",
+                                })
+                              : ""}
                           </span>
                         </div>
-                        <span className="text-xs text-gray-500">{formatWeekday(departureDate)}</span>
+                        <span className="text-xs text-gray-500">
+                          {formatWeekday(departureDate)}
+                        </span>
                       </div>
                       {openDeparture && (
                         <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 left-0">
                           <DayPicker
                             mode="single"
                             selected={departureDate}
-                            onSelect={(date) => { setDepartureDate(date); setOpenDeparture(false); }}
+                            onSelect={(date) => {
+                              setDepartureDate(date);
+                              setOpenDeparture(false);
+                            }}
                             disabled={{ before: today }}
                           />
                         </div>
@@ -472,25 +689,43 @@ else if (activeTab === "buses") {
                       <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition relative">
                         <span
                           className="text-xs uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between"
-                          onClick={() => { setOpenReturn(!openReturn); setOpenDeparture(false); }}
+                          onClick={() => {
+                            setOpenReturn(!openReturn);
+                            setOpenDeparture(false);
+                          }}
                         >
                           Return <ChevronDown className="w-3 h-3" />
                         </span>
-                        <div onClick={() => { setOpenReturn(!openReturn); setOpenDeparture(false); }}>
+                        <div
+                          onClick={() => {
+                            setOpenReturn(!openReturn);
+                            setOpenDeparture(false);
+                          }}
+                        >
                           <div className="text-xl font-bold text-gray-800">
                             {returnDate ? returnDate.getDate() : "--"}{" "}
                             <span className="text-sm font-semibold">
-                              {returnDate ? returnDate.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) : ""}
+                              {returnDate
+                                ? returnDate.toLocaleDateString("en-GB", {
+                                    month: "short",
+                                    year: "2-digit",
+                                  })
+                                : ""}
                             </span>
                           </div>
-                          <span className="text-xs text-gray-500">{formatWeekday(returnDate)}</span>
+                          <span className="text-xs text-gray-500">
+                            {formatWeekday(returnDate)}
+                          </span>
                         </div>
                         {openReturn && (
                           <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 left-0">
                             <DayPicker
                               mode="single"
                               selected={returnDate}
-                              onSelect={(date) => { setReturnDate(date); setOpenReturn(false); }}
+                              onSelect={(date) => {
+                                setReturnDate(date);
+                                setOpenReturn(false);
+                              }}
                               disabled={{ before: departureDate || today }}
                             />
                           </div>
@@ -500,8 +735,13 @@ else if (activeTab === "buses") {
 
                     {/* Tap to add return — sirf oneway mein */}
                     {tripType === "oneway" && (
-                      <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition" onClick={() => setTripType("roundtrip")}>
-                        <span className="text-xs uppercase tracking-wider text-gray-400 mb-1 block">Return</span>
+                      <div
+                        className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50/80 transition"
+                        onClick={() => setTripType("roundtrip")}
+                      >
+                        <span className="text-xs uppercase tracking-wider text-gray-400 mb-1 block">
+                          Return
+                        </span>
                         <div className="text-xs text-gray-400 font-medium mt-1 leading-tight">
                           Tap to add return date for savings
                         </div>
@@ -516,7 +756,10 @@ else if (activeTab === "buses") {
                       >
                         Travellers <ChevronDown className="w-3 h-3" />
                       </span>
-                      <div className="text-base font-bold text-gray-800 mt-0.5" onClick={() => setTravelersOpen(!travelersOpen)}>
+                      <div
+                        className="text-base font-bold text-gray-800 mt-0.5"
+                        onClick={() => setTravelersOpen(!travelersOpen)}
+                      >
                         {displayValue}
                       </div>
 
@@ -526,8 +769,12 @@ else if (activeTab === "buses") {
                           onClick={(e) => e.stopPropagation()}
                         >
                           <div className="mb-5">
-                            <p className="text-sm font-bold text-gray-800">Adults (12y +)</p>
-                            <p className="text-xs text-gray-400 mb-2">on the day of travel</p>
+                            <p className="text-sm font-bold text-gray-800">
+                              Adults (12y +)
+                            </p>
+                            <p className="text-xs text-gray-400 mb-2">
+                              on the day of travel
+                            </p>
                             <div className="flex flex-wrap gap-2">
                               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
                                 <button
@@ -548,8 +795,12 @@ else if (activeTab === "buses") {
 
                           <div className="flex gap-8 mb-5">
                             <div>
-                              <p className="text-sm font-bold text-gray-800">Children (2y - 12y)</p>
-                              <p className="text-xs text-gray-400 mb-2">on the day of travel</p>
+                              <p className="text-sm font-bold text-gray-800">
+                                Children (2y - 12y)
+                              </p>
+                              <p className="text-xs text-gray-400 mb-2">
+                                on the day of travel
+                              </p>
                               <div className="flex flex-wrap gap-2">
                                 {[0, 1, 2, 3, 4, 5, 6].map((n) => (
                                   <button
@@ -569,8 +820,12 @@ else if (activeTab === "buses") {
                             </div>
 
                             <div>
-                              <p className="text-sm font-bold text-gray-800">Infants (below 2y)</p>
-                              <p className="text-xs text-gray-400 mb-2">on the day of travel</p>
+                              <p className="text-sm font-bold text-gray-800">
+                                Infants (below 2y)
+                              </p>
+                              <p className="text-xs text-gray-400 mb-2">
+                                on the day of travel
+                              </p>
                               <div className="flex flex-wrap gap-2">
                                 {[0, 1, 2, 3, 4, 5, 6].map((n) => (
                                   <button
@@ -604,7 +859,9 @@ else if (activeTab === "buses") {
 
                     {/* Cabin Class */}
                     <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition">
-                      <span className="text-xs uppercase tracking-wider text-gray-400 mb-1 block">Cabin Class</span>
+                      <span className="text-xs uppercase tracking-wider text-gray-400 mb-1 block">
+                        Cabin Class
+                      </span>
                       <select
                         value={travelClass}
                         onChange={(e) => setTravelClass(e.target.value)}
@@ -621,7 +878,10 @@ else if (activeTab === "buses") {
                   /* -------- MULTI CITY -------- */
                   <div className="space-y-3 mb-6">
                     {multiCityLegs.map((leg, idx) => (
-                      <div key={idx} className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
+                      <div
+                        key={idx}
+                        className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200"
+                      >
                         <div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition">
                           <LocationSearchBox
                             label="From"
@@ -648,13 +908,23 @@ else if (activeTab === "buses") {
                             citySearchApi="/api/cities/airports"
                           />
                         </div>
-                        <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50 relative"
-                          onClick={() => setOpenMultiDate(openMultiDate === idx ? null : idx)}>
-                          <span className="text-xs uppercase text-gray-400 block mb-1">Departure</span>
+                        <div
+                          className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50 relative"
+                          onClick={() =>
+                            setOpenMultiDate(openMultiDate === idx ? null : idx)
+                          }
+                        >
+                          <span className="text-xs uppercase text-gray-400 block mb-1">
+                            Departure
+                          </span>
                           <div className="text-xl font-bold text-gray-800">
                             {leg.date ? leg.date.getDate() : "--"}{" "}
                             <span className="text-sm font-semibold">
-                              {leg.date ? leg.date.toLocaleDateString("en-GB", { month: "short" }) : ""}
+                              {leg.date
+                                ? leg.date.toLocaleDateString("en-GB", {
+                                    month: "short",
+                                  })
+                                : ""}
                             </span>
                           </div>
                           {openMultiDate === idx && (
@@ -676,7 +946,11 @@ else if (activeTab === "buses") {
                         <div className="lg:col-span-1 p-4 flex items-center justify-center">
                           {idx === multiCityLegs.length - 1 && idx > 1 && (
                             <button
-                              onClick={() => setMultiCityLegs(multiCityLegs.filter((_, i) => i !== idx))}
+                              onClick={() =>
+                                setMultiCityLegs(
+                                  multiCityLegs.filter((_, i) => i !== idx),
+                                )
+                              }
                               className="text-red-500 text-xs font-semibold"
                             >
                               Remove
@@ -687,7 +961,14 @@ else if (activeTab === "buses") {
                     ))}
                     <button
                       onClick={() =>
-                        setMultiCityLegs([...multiCityLegs, { from: multiCityLegs[multiCityLegs.length - 1].to, to: null, date: new Date() }])
+                        setMultiCityLegs([
+                          ...multiCityLegs,
+                          {
+                            from: multiCityLegs[multiCityLegs.length - 1].to,
+                            to: null,
+                            date: new Date(),
+                          },
+                        ])
                       }
                       className="text-orange-600 border border-orange-500 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-orange-50 transition"
                     >
@@ -740,24 +1021,31 @@ else if (activeTab === "buses") {
                           : ""}
                       </span>
                     </div>
-{openCheckIn && (
-  <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
-    <DayPicker
-      mode="single"
-      selected={checkIn}
-      onSelect={(date) => {
-        if (!date) { setOpenCheckIn(false); return; }
-        setCheckIn(date);
-        const nextDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-        if (!checkOut || checkOut <= date) {
-          setCheckOut(nextDay);
-        }
-        setOpenCheckIn(false);
-      }}
-      disabled={{ before: today }}
-    />
-  </div>
-)}
+                    {openCheckIn && (
+                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
+                        <DayPicker
+                          mode="single"
+                          selected={checkIn}
+                          onSelect={(date) => {
+                            if (!date) {
+                              setOpenCheckIn(false);
+                              return;
+                            }
+                            setCheckIn(date);
+                            const nextDay = new Date(
+                              date.getFullYear(),
+                              date.getMonth(),
+                              date.getDate() + 1,
+                            );
+                            if (!checkOut || checkOut <= date) {
+                              setCheckOut(nextDay);
+                            }
+                            setOpenCheckIn(false);
+                          }}
+                          disabled={{ before: today }}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative">
@@ -789,12 +1077,27 @@ else if (activeTab === "buses") {
                     </div>
                     {openCheckOut && (
                       <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
-<DayPicker
-  mode="single"
-  selected={checkOut}
-  onSelect={(date) => { if (!date) { setOpenCheckOut(false); return; } setCheckOut(date); setOpenCheckOut(false); }}
-  disabled={{ before: checkIn ? new Date(checkIn.getFullYear(), checkIn.getMonth(), checkIn.getDate() + 1) : tomorrow }}
-/>
+                        <DayPicker
+                          mode="single"
+                          selected={checkOut}
+                          onSelect={(date) => {
+                            if (!date) {
+                              setOpenCheckOut(false);
+                              return;
+                            }
+                            setCheckOut(date);
+                            setOpenCheckOut(false);
+                          }}
+                          disabled={{
+                            before: checkIn
+                              ? new Date(
+                                  checkIn.getFullYear(),
+                                  checkIn.getMonth(),
+                                  checkIn.getDate() + 1,
+                                )
+                              : tomorrow,
+                          }}
+                        />
                       </div>
                     )}
                   </div>
@@ -812,29 +1115,98 @@ else if (activeTab === "buses") {
             {/* ---------------- HOLIDAYS ---------------- */}
             {activeTab === "holidays" && (
               <div>
-                <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
-                  {/* From City */}
-                  <div className="lg:col-span-6 p-4 hover:bg-gray-50">
+                <div className="grid grid-cols-1 lg:grid-cols-5 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
+                  <div className="lg:col-span-1 p-4 hover:bg-gray-50 min-w-0">
                     <LocationSearchBox
-                      label="From City"
-                      value={holidaysFrom}
-                      placeholder="Noida"
-                      onSelect={setHolidaysFrom}
+                      label="Origin"
+                      value={holidaySearch.origin}
+                      placeholder="Delhi"
+                      onSelect={(item) => setHolidaySearch((prev) => ({ ...prev, origin: item }))}
                       showAllSections={false}
-                      citySearchApi="/api/cities/airports"
+                      citySearchApi="/api/cities/cab"
                     />
                   </div>
 
-                  {/* Destination */}
-                  <div className="lg:col-span-6 p-4 hover:bg-gray-50">
+                  <div className="lg:col-span-1 p-4 hover:bg-gray-50 min-w-0">
                     <LocationSearchBox
-                      label="To City/Country/Category"
-                      value={holidaysTo}
+                      label="Destination"
+                      value={holidaySearch.destination}
                       placeholder="Goa"
-                      onSelect={setHolidaysTo}
+                      onSelect={(item) => setHolidaySearch((prev) => ({ ...prev, destination: item }))}
                       align="right"
                       showAllSections={false}
-                      citySearchApi="/api/cities/holidays"
+                      citySearchApi="/api/cities/cab"
+                    />
+                  </div>
+
+                  <div ref={holidayDateRef} className="lg:col-span-1 p-4 cursor-pointer hover:bg-gray-50 relative min-w-0">
+                    <span className="text-xs uppercase text-gray-400 block mb-1" onClick={() => setOpenHolidayDate((p) => !p)}>
+                      Date
+                    </span>
+                    <div className="text-xl font-bold text-gray-800" onClick={() => setOpenHolidayDate((p) => !p)}>
+                      {holidaySearch.date ? holidaySearch.date.split("-")[2] : "--"}{" "}
+                      <span className="text-sm font-semibold">
+                        {holidaySearch.date
+                          ? new Date(`${holidaySearch.date}T00:00:00`).toLocaleDateString("en-GB", {
+                              month: "short",
+                              year: "2-digit",
+                            })
+                          : ""}
+                      </span>
+                    </div>
+                    {openHolidayDate && (
+                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 left-0">
+                        <DayPicker
+                          mode="single"
+                          selected={holidaySearch.date ? new Date(`${holidaySearch.date}T00:00:00`) : undefined}
+                          onSelect={(date) => {
+                            if (!date) {
+                              setOpenHolidayDate(false);
+                              return;
+                            }
+                            const year = date.getFullYear();
+                            const month = String(date.getMonth() + 1).padStart(2, "0");
+                            const day = String(date.getDate()).padStart(2, "0");
+                            setHolidaySearch((prev) => ({ ...prev, date: `${year}-${month}-${day}` }));
+                            setOpenHolidayDate(false);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div ref={holidayDayRef} className="lg:col-span-1 p-4 cursor-pointer hover:bg-gray-50 relative min-w-0">
+                    <span className="text-xs uppercase text-gray-400 block mb-1" onClick={() => setOpenHolidayDays((p) => !p)}>
+                      Days
+                    </span>
+                    <div className="text-xl font-bold text-gray-800" onClick={() => setOpenHolidayDays((p) => !p)}>
+                      {holidaySearch.days ? `${holidaySearch.days} Days` : "Select"}
+                    </div>
+                    {openHolidayDays && (
+                      <div className="absolute mt-2 w-48 bg-white shadow-2xl rounded-xl border border-gray-100 z-30 left-0 overflow-hidden">
+                        {[2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15].map((day) => (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => {
+                              setHolidaySearch((prev) => ({ ...prev, days: String(day) }));
+                              setOpenHolidayDays(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-sm font-medium hover:bg-orange-50 transition ${
+                              Number(holidaySearch.days) === day ? "text-orange-600 bg-orange-50" : "text-gray-700"
+                            }`}
+                          >
+                            {day} Days
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="lg:col-span-1 p-4 hover:bg-gray-50 min-w-0">
+                    <HolidayGuestsBox
+                      value={holidaySearch}
+                      onChange={(value) => setHolidaySearch((prev) => ({ ...prev, adults: value.adults, children: value.children, infants: value.infants }))}
                     />
                   </div>
                 </div>
@@ -886,16 +1258,23 @@ else if (activeTab === "buses") {
                           : ""}
                       </span>
                     </div>
-{openTravelDate && (
-  <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
-    <DayPicker
-      mode="single"
-      selected={travelDate}
-      onSelect={(date) => { if (!date) { setOpenTravelDate(false); return; } setTravelDate(date); setOpenTravelDate(false); }}
-      disabled={{ before: today }}
-    />
-  </div>
-)}
+                    {openTravelDate && (
+                      <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20 right-0">
+                        <DayPicker
+                          mode="single"
+                          selected={travelDate}
+                          onSelect={(date) => {
+                            if (!date) {
+                              setOpenTravelDate(false);
+                              return;
+                            }
+                            setTravelDate(date);
+                            setOpenTravelDate(false);
+                          }}
+                          disabled={{ before: today }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -941,7 +1320,9 @@ else if (activeTab === "buses") {
                               setCabTripTypeOpen(false);
                             }}
                             className={`w-full text-left px-4 py-3 text-sm font-medium hover:bg-orange-50 transition ${
-                              cabTripType === opt.id ? "text-orange-600 bg-orange-50" : "text-gray-700"
+                              cabTripType === opt.id
+                                ? "text-orange-600 bg-orange-50"
+                                : "text-gray-700"
                             }`}
                           >
                             {opt.label}
@@ -980,17 +1361,40 @@ else if (activeTab === "buses") {
                 {cabTripType === "round" && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
                     <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-                      <LocationSearchBox label="From" value={cabFrom} placeholder="Mumbai" onSelect={setCabFrom} showAllSections={false} citySearchApi="/api/cities/cab"/>
+                      <LocationSearchBox
+                        label="From"
+                        value={cabFrom}
+                        placeholder="Mumbai"
+                        onSelect={setCabFrom}
+                        showAllSections={false}
+                        citySearchApi="/api/cities/cab"
+                      />
                     </div>
                     <div className="lg:col-span-2 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-                      <LocationSearchBox label="To" value={cabTo} placeholder="Pune" onSelect={setCabTo} showAllSections={false} citySearchApi="/api/cities/cab" />
+                      <LocationSearchBox
+                        label="To"
+                        value={cabTo}
+                        placeholder="Pune"
+                        onSelect={setCabTo}
+                        showAllSections={false}
+                        citySearchApi="/api/cities/cab"
+                      />
                     </div>
-                    <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative" onClick={() => setOpenCabDate(!openCabDate)}>
-                      <span className="text-xs uppercase text-gray-400 block mb-1">Departure</span>
+                    <div
+                      className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative"
+                      onClick={() => setOpenCabDate(!openCabDate)}
+                    >
+                      <span className="text-xs uppercase text-gray-400 block mb-1">
+                        Departure
+                      </span>
                       <div className="text-xl font-bold text-gray-800">
                         {cabDate ? cabDate.getDate() : "--"}{" "}
                         <span className="text-sm font-semibold">
-                          {cabDate ? cabDate.toLocaleDateString("en-GB", { month: "short" }) : ""}
+                          {cabDate
+                            ? cabDate.toLocaleDateString("en-GB", {
+                                month: "short",
+                              })
+                            : ""}
                         </span>
                       </div>
                       {openCabDate && (
@@ -998,35 +1402,67 @@ else if (activeTab === "buses") {
                           <DayPicker
                             mode="single"
                             selected={cabDate}
-                            onSelect={(d) => { setCabDate(d); setOpenCabDate(false); }}
+                            onSelect={(d) => {
+                              setCabDate(d);
+                              setOpenCabDate(false);
+                            }}
                             disabled={{ before: today }}
                           />
                         </div>
                       )}
                     </div>
-                    <div className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative" onClick={() => setOpenReturnDate(!openReturnDate)}>
-                      <span className="text-xs uppercase text-gray-400 block mb-1">Return</span>
+                    <div
+                      className="lg:col-span-2 p-4 cursor-pointer hover:bg-gray-50 relative"
+                      onClick={() => setOpenReturnDate(!openReturnDate)}
+                    >
+                      <span className="text-xs uppercase text-gray-400 block mb-1">
+                        Return
+                      </span>
                       <div className="text-xl font-bold text-gray-800">
                         {cabReturnDate ? cabReturnDate.getDate() : "--"}{" "}
                         <span className="text-sm font-semibold">
-                          {cabReturnDate ? cabReturnDate.toLocaleDateString("en-GB", { month: "short" }) : ""}
+                          {cabReturnDate
+                            ? cabReturnDate.toLocaleDateString("en-GB", {
+                                month: "short",
+                              })
+                            : ""}
                         </span>
                       </div>
                       {openReturnDate && (
                         <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
-                          <DayPicker mode="single" selected={cabReturnDate} onSelect={(d) => { setCabReturnDate(d); setOpenReturnDate(false); }} disabled={{ before: cabDate || today }} />
+                          <DayPicker
+                            mode="single"
+                            selected={cabReturnDate}
+                            onSelect={(d) => {
+                              setCabReturnDate(d);
+                              setOpenReturnDate(false);
+                            }}
+                            disabled={{ before: cabDate || today }}
+                          />
                         </div>
                       )}
                     </div>
                     <div className="lg:col-span-2 p-4">
-                      <span className="text-xs uppercase text-gray-400 block mb-1">Pickup-Time</span>
-                      <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)}
-                        className="text-xl font-bold text-gray-800 outline-none bg-transparent" />
+                      <span className="text-xs uppercase text-gray-400 block mb-1">
+                        Pickup-Time
+                      </span>
+                      <input
+                        type="time"
+                        value={pickupTime}
+                        onChange={(e) => setPickupTime(e.target.value)}
+                        className="text-xl font-bold text-gray-800 outline-none bg-transparent"
+                      />
                     </div>
                     <div className="lg:col-span-2 p-4">
-                      <span className="text-xs uppercase text-gray-400 block mb-1">Drop Time</span>
-                      <input type="time" value={dropTime} onChange={(e) => setDropTime(e.target.value)}
-                        className="text-xl font-bold text-gray-800 outline-none bg-transparent" />
+                      <span className="text-xs uppercase text-gray-400 block mb-1">
+                        Drop Time
+                      </span>
+                      <input
+                        type="time"
+                        value={dropTime}
+                        onChange={(e) => setDropTime(e.target.value)}
+                        className="text-xl font-bold text-gray-800 outline-none bg-transparent"
+                      />
                     </div>
                   </div>
                 )}
@@ -1035,29 +1471,60 @@ else if (activeTab === "buses") {
                 {cabTripType === "hourly" && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 border border-gray-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-gray-200 mb-6">
                     <div className="lg:col-span-4 p-4 hover:bg-gray-50/80 transition cursor-pointer">
-                      <LocationSearchBox label="Pickup Location" value={cabFrom} placeholder="Bangalore" onSelect={setCabFrom} showAllSections={false} citySearchApi="/api/cities/cab" />
+                      <LocationSearchBox
+                        label="Pickup Location"
+                        value={cabFrom}
+                        placeholder="Bangalore"
+                        onSelect={setCabFrom}
+                        showAllSections={false}
+                        citySearchApi="/api/cities/cab"
+                      />
                     </div>
-                    <div className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50 relative" onClick={() => setOpenCabDate(!openCabDate)}>
-                      <span className="text-xs uppercase text-gray-400 block mb-1">Pickup Date</span>
+                    <div
+                      className="lg:col-span-3 p-4 cursor-pointer hover:bg-gray-50 relative"
+                      onClick={() => setOpenCabDate(!openCabDate)}
+                    >
+                      <span className="text-xs uppercase text-gray-400 block mb-1">
+                        Pickup Date
+                      </span>
                       <div className="text-xl font-bold text-gray-800">
                         {cabDate ? cabDate.getDate() : "--"}{" "}
                         <span className="text-sm font-semibold">
-                          {cabDate ? cabDate.toLocaleDateString("en-GB", { month: "short" }) : ""}
+                          {cabDate
+                            ? cabDate.toLocaleDateString("en-GB", {
+                                month: "short",
+                              })
+                            : ""}
                         </span>
                       </div>
                       {openCabDate && (
                         <div className="absolute mt-2 p-2 bg-white shadow-lg rounded-xl z-20">
-                          <DayPicker mode="single" selected={cabDate} onSelect={(d) => { setCabDate(d); setOpenCabDate(false); }} />
+                          <DayPicker
+                            mode="single"
+                            selected={cabDate}
+                            onSelect={(d) => {
+                              setCabDate(d);
+                              setOpenCabDate(false);
+                            }}
+                          />
                         </div>
                       )}
                     </div>
                     <div className="lg:col-span-2 p-4">
-                      <span className="text-xs uppercase text-gray-400 block mb-1">Pickup-Time</span>
-                      <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)}
-                        className="text-xl font-bold text-gray-800 outline-none bg-transparent" />
+                      <span className="text-xs uppercase text-gray-400 block mb-1">
+                        Pickup-Time
+                      </span>
+                      <input
+                        type="time"
+                        value={pickupTime}
+                        onChange={(e) => setPickupTime(e.target.value)}
+                        className="text-xl font-bold text-gray-800 outline-none bg-transparent"
+                      />
                     </div>
                     <div className="lg:col-span-3 p-4">
-                      <span className="text-xs uppercase text-gray-400 block mb-1">Select Package</span>
+                      <span className="text-xs uppercase text-gray-400 block mb-1">
+                        Select Package
+                      </span>
                       <select
                         value={cabPackage}
                         onChange={(e) => setCabPackage(e.target.value)}

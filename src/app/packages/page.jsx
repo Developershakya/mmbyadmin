@@ -10,7 +10,7 @@ import {
   SoupIcon,
   StarIcon,
 } from "lucide-react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 
 const SearchBox = forwardRef(
@@ -157,6 +157,7 @@ const DURATION_OPTIONS = Array.from({ length: 9 }, (_, i) => {
 });
 
 export default function Packages() {
+  const router = useRouter();
   const [selectOption, setSelect] = useState(null);
   const [searchOpen, setSearchOpen] = useState(null);
   const [destination, setDestination] = useState("Goa");
@@ -168,8 +169,10 @@ export default function Packages() {
   const [budget, setBudget] = useState();
   const [sortOrder, setSortOrder] = useState("");
   const [selectedStates, setSelectedStates] = useState([]);
+  const [selectedDays, setSelectedDays] = useState([]);
   const [pack, setPackage] = useState([]);
   const [duration, setDuration] = useState(4);
+  const [travelDate, setTravelDate] = useState("");
   const [durationOpen, setDurationOpen] = useState(false);
   const [customDays, setCustomDays] = useState("");
   const [loading, setLoading] = useState(true);
@@ -179,6 +182,33 @@ export default function Packages() {
   const durationRef = useRef();
   const label = "text-[12px] text-gray-600 tracking-widest uppercase";
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const nextOrigin = searchParams.get("origin") || "Delhi";
+    const nextDestination = searchParams.get("destination") || "Goa";
+    const nextDate = searchParams.get("date") || "";
+    const nextDays = Number(searchParams.get("days") || 4);
+    const nextAdults = Number(searchParams.get("adults") || 1);
+    const nextChildren = Number(searchParams.get("children") || 0);
+    const nextInfants = Number(searchParams.get("infants") || 0);
+
+    setOrigin(nextOrigin);
+    setDestination(nextDestination);
+    setTravelDate(nextDate);
+    setDuration(nextDays || 4);
+    setAdult(nextAdults || 1);
+    setChild(nextChildren || 0);
+    setInfant(nextInfants || 0);
+    setSearchForm({
+      origin: nextOrigin,
+      destination: nextDestination,
+      date: nextDate,
+      days: nextDays || 4,
+      adults: nextAdults || 1,
+      children: nextChildren || 0,
+      infants: nextInfants || 0,
+    });
+  }, [searchParams]);
 
   const { minOfferPrice, maxOfferPrice } = useMemo(() => {
     if (!Array.isArray(pack) || pack.length === 0) {
@@ -204,13 +234,39 @@ export default function Packages() {
       maxOfferPrice: Math.max(...prices),
     };
   }, [pack]);
+  const allDays = Array.from(
+    new Set(
+      pack
+        .map((item) => Number(item.days))
+        .filter((day) => Number.isFinite(day) && day > 0),
+    ),
+  ).sort((a, b) => a - b);
+
   const currentBudget = budget ?? maxOfferPrice;
   const filterData = pack
     .filter((item) => {
+      const destinationName = String(destination || "").trim().toLowerCase();
+      const itemCity = String(item.city || "").trim().toLowerCase();
+      const itemState = String(item.state || "").trim().toLowerCase();
+      const itemMatchDestination =
+        !destinationName ||
+        itemCity.includes(destinationName) ||
+        itemState.includes(destinationName) ||
+        String(item.packageName || "").toLowerCase().includes(destinationName);
+      const itemDays = Number(item.days || 0);
+      const matchesDays = !duration || itemDays <= Number(duration);
+      const matchesSelectedDays =
+        selectedDays.length === 0 || selectedDays.includes(itemDays);
       const matchesBudget = item.offerPrice <= currentBudget;
       const matchesState =
         selectedStates.length === 0 || selectedStates.includes(item.city);
-      return matchesBudget && matchesState;
+      return (
+        itemMatchDestination &&
+        matchesDays &&
+        matchesSelectedDays &&
+        matchesBudget &&
+        matchesState
+      );
     })
     .sort((a, b) => {
       if (sortOrder === "low") {
@@ -242,6 +298,7 @@ export default function Packages() {
   const allDestination = getAllDestinations(pack);
 
   function foodTag(f) {
+    if (!Array.isArray(f)) return "All Include";
     if (f.length >= 3) {
       return "All Include";
     } else if (f.length == 2) {
@@ -249,6 +306,20 @@ export default function Packages() {
     } else {
       return "BreakFast";
     }
+  }
+
+  function handlePackageSearch() {
+    const query = new URLSearchParams({
+      origin: (origin || "Delhi").trim(),
+      destination: (destination || "Goa").trim(),
+      date: travelDate || "",
+      days: String(duration || 4),
+      adults: String(adult || 1),
+      children: String(child || 0),
+      infants: String(infant || 0),
+    });
+
+    router.push(`/packages?${query.toString()}`);
   }
 
   function cardTagColor(t) {
@@ -284,6 +355,15 @@ export default function Packages() {
     });
   };
 
+  const handleDayCheckboxChange = (day) => {
+    setSelectedDays((prev) => {
+      if (prev.includes(day)) {
+        return prev.filter((item) => item !== day);
+      }
+      return [...prev, day];
+    });
+  };
+
   useEffect(() => {
     function handleOutClick(e) {
       if (searchOpenRef.current && !searchOpenRef.current.contains(e.target)) {
@@ -303,7 +383,19 @@ export default function Packages() {
   useEffect(() => {
     async function fetchPackage() {
       try {
-        const result = await fetch("api/package");
+        setLoading(true);
+        const params = new URLSearchParams({
+          origin: origin || "",
+          destination: destination || "",
+          date: travelDate || "",
+          days: duration ? String(duration) : "",
+          adults: String(adult || 1),
+          children: String(child || 0),
+          infants: String(infant || 0),
+        });
+
+        const query = params.toString();
+        const result = await fetch(`/api/package${query ? `?${query}` : ""}`);
         const data = await result.json();
         const packages = (data.data || []).map((item) => ({
           ...item,
@@ -316,14 +408,14 @@ export default function Packages() {
           foodType: item.foodType ? JSON.parse(item.foodType) : [],
         }));
         setPackage(packages);
-        console.log(data.data);
-        
       } catch (error) {
-        console.log(error.message);
-
-    }}
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    }
     fetchPackage();
-  }, []);
+  }, [origin, destination, travelDate, duration, adult, child, infant]);
 
   return (
     <>
@@ -398,6 +490,8 @@ export default function Packages() {
               </label>
               <input
                 type="date"
+                value={travelDate}
+                onChange={(e) => setTravelDate(e.target.value)}
                 className="outline-none text-gray-600 text-sm min-w-[65px]"
               />
             </div>
@@ -566,7 +660,11 @@ export default function Packages() {
             </div>
 
             <div className="flex justify-center items-center">
-              <button className="bg-orange-600 cursor-pointer select-none text-white p-4 rounded-lg">
+              <button
+                type="button"
+                onClick={handlePackageSearch}
+                className="bg-orange-600 cursor-pointer select-none text-white p-4 rounded-lg"
+              >
                 Search
               </button>
             </div>
@@ -618,6 +716,24 @@ export default function Packages() {
                   </div>
                 );
               })}
+            </div>
+
+            <div className="gap-2 border-b py-4">
+              <h3 className="py-4 text-sm font-semibold uppercase font-mono tracking-wider">
+                Days
+              </h3>
+              {allDays.map((day) => (
+                <div key={day} className="flex space-y-2 space-x-2 text-sm">
+                  <input
+                    type="checkbox"
+                    value={day}
+                    checked={selectedDays.includes(day)}
+                    onChange={() => handleDayCheckboxChange(day)}
+                    className="w-5 h-5 cursor-pointer accent-orange-600 rounded"
+                  />
+                  <span>{day} Days</span>
+                </div>
+              ))}
             </div>
           </div>
 
