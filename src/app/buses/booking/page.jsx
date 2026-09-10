@@ -1,7 +1,8 @@
+"use client"
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Script from 'next/script';
-import useAuth from '../../lib/useAuth';
+import useAuth from '../../../lib/useAuth';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 

@@ -1,7 +1,8 @@
-import { callSrdvApi } from '../../lib/srdvApi';
-import sequelize from '../../../config/sequelize.js';
-import BusBooking from '../../../models/BusBooking.js';
-import BusBookingPassenger from '../../../models/BusBookingPassenger.js';
+"use client"
+import { callSrdvApi } from '../../../lib/srdvApi.js';
+import sequelize from '../../../../config/sequelize.js';
+import BusBooking from '../../../../models/BusBooking.js';
+import BusBookingPassenger from '../../../../models/BusBookingPassenger.js';
 
 function generateBookingRef() {
   const rand = Math.random().toString(36).substring(2, 8).toUpperCase();

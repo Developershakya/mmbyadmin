@@ -25,8 +25,8 @@ export async function callSrdvApi(baseUrl, endpoint, extraPayload = {}) {
     headers: headers,
     body: JSON.stringify(payload)
   });
-
   const text = await response.text();
+  console.log(text)
 
   if (!response.ok) {
     const error = new Error(`SRDV ${endpoint} request failed with status ${response.status}`);
@@ -77,7 +77,7 @@ export async function callSrdvApiForm(baseUrl, endpoint, extraPayload = {}) {
   });
 
   const text = await response.text();
-
+console.log(text)
   if (!response.ok) {
     const error = new Error(`SRDV ${endpoint} request failed with status ${response.status}`);
     error.statusCode = 502;

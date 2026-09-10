@@ -768,9 +768,18 @@ export default function Packages() {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 p-2 gap-8">
-              {filterData.length === 0 ? (
+              {loading ? (
                 <div className="col-span-full flex justify-center items-center py-10">
                   <div className="w-10 h-10 border-4 border-gray-300 border-t-purple-800 rounded-full animate-spin"></div>
+                </div>
+              ) : filterData.length === 0 ? (
+                <div className="col-span-full flex justify-center items-center py-16">
+                  <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-8 py-10 text-center shadow-sm">
+                    <p className="text-lg font-semibold text-gray-700">No packages found</p>
+                    <p className="mt-2 text-sm text-gray-500">
+                      Try a different destination or trip duration.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 filterData.map((p, i) => {
