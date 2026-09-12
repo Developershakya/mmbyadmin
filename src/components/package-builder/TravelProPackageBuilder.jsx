@@ -48,8 +48,14 @@ import {
   CabSearchModal,
   BusSearchModal
 } from './SearchModals.jsx';
+import {
+  SightseeingModal,
+  ActivityModal,
+  MealModal
+} from './ItineraryModals.jsx';
 import PackageInfoForm from './PackageInfoForm.jsx';
 import PricingRulesForm from './PricingRulesForm.jsx';
+import PoliciesForm from './PoliciesForm.jsx';
 import CustomerPreviewView from './CustomerPreviewView.jsx';
 import PublishView from './PublishView.jsx';
 import StepperControl from './StepperControl.jsx';
@@ -151,7 +157,30 @@ export default function TravelProPackageBuilder({
         'Monument entry fees, camera charges, and activity passes',
         'Any item not specified in package inclusions'
       ],
-      terms: pkg.terms || [],
+      terms: pkg.terms || [
+        'All package rates are subject to availability at the time of confirmed booking.',
+        'Standard hotel check-in time is 12:00 PM / 02:00 PM and check-out is 10:00 AM / 11:00 AM.',
+        'Valid Government ID proof (Aadhar / Passport / Voter ID) is mandatory for all travelers at check-in.',
+        'AC will not operate in hill stations or when vehicle is parked/idle.',
+        'Any changes or deviations in route requested by the traveler will attract additional charges.'
+      ],
+      cancellationPolicy: pkg.cancellationPolicy || {
+        rules: [
+          { timeframe: '30+ Days Before Departure', charge: '10% of Package Value', refund: '90% Refund within 7 working days' },
+          { timeframe: '15 to 29 Days Before Departure', charge: '25% of Package Value', refund: '75% Refund within 7 working days' },
+          { timeframe: '7 to 14 Days Before Departure', charge: '50% of Package Value', refund: '50% Refund within 7 working days' },
+          { timeframe: 'Within 7 Days of Departure / No Show', charge: '100% of Package Value', refund: 'Non-refundable' }
+        ],
+        notes: 'Refund processing will take 5 to 7 business working days to the original mode of payment.'
+      },
+      dateChangePolicy: pkg.dateChangePolicy || {
+        rules: [
+          { timeframe: 'Up to 15 Days Before Departure', charge: 'Free Date Rescheduling', remark: 'Hotel & airline fare difference applies' },
+          { timeframe: '7 to 14 Days Before Departure', charge: '₹1,500 per person change fee', remark: '+ airline/hotel fare difference' },
+          { timeframe: 'Less than 7 Days Before Departure', charge: 'Subject to Supplier Approval', remark: 'Treated as cancellation if not approved' }
+        ],
+        notes: 'Date change requests are subject to hotel and transport availability during requested revised dates.'
+      },
       travelers: pkg.travelers || {
         adults: 2,
         children: 0,
@@ -239,6 +268,12 @@ export default function TravelProPackageBuilder({
     customerPreview: { isOpen: false },
     resetConfirm: { isOpen: false }
   });
+
+  // Ticket / Attachment Image Preview Modal State
+  const [ticketViewer, setTicketViewer] = useState({ isOpen: false, url: '', title: '' });
+
+  // Reordering state for services within a day
+  const [draggedServiceInfo, setDraggedServiceInfo] = useState(null); // { dayId, svcIndex }
 
   // Calculated Pricing Breakdown
   const pricingBreakdown = useMemo(() => {
@@ -396,7 +431,7 @@ export default function TravelProPackageBuilder({
     setPackageData((prev) => ({ ...prev, days: updated }));
   };
 
-  // Drag & drop reordering handlers
+  // Day Drag & drop reordering handlers
   const [draggedDayIndex, setDraggedDayIndex] = useState(null);
 
   const handleDragStart = (e, index) => {
@@ -421,15 +456,100 @@ export default function TravelProPackageBuilder({
     showToast(`Reordered Day to Position ${targetIndex + 1}`, 'success');
   };
 
-  // Modal Open Handlers (Flight, Hotel, Cab, Bus)
-  const handleOpenSearchModal = (dayId, type) => {
+  const handleDragEnd = () => {
+    setDraggedDayIndex(null);
+  };
+
+  // Service within Day Drag & Drop Reordering handlers
+  const handleMoveService = (dayId, svcIndex, direction) => {
+    setPackageData((prev) => {
+      const day = prev.days.find((d) => d.id === dayId);
+      if (!day) return prev;
+      const targetIndex = svcIndex + direction;
+      if (targetIndex < 0 || targetIndex >= (day.services || []).length) return prev;
+      const updatedServices = [...day.services];
+      const temp = updatedServices[svcIndex];
+      updatedServices[svcIndex] = updatedServices[targetIndex];
+      updatedServices[targetIndex] = temp;
+      return {
+        ...prev,
+        days: prev.days.map((d) => (d.id === dayId ? { ...d, services: updatedServices } : d))
+      };
+    });
+  };
+
+  const handleServiceDragStart = (e, dayId, svcIndex) => {
+    e.stopPropagation();
+    setDraggedServiceInfo({ dayId, svcIndex });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/service', JSON.stringify({ dayId, svcIndex }));
+  };
+
+  const handleServiceDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleServiceDrop = (e, targetDayId, targetIndex) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!draggedServiceInfo) return;
+    const { dayId: sourceDayId, svcIndex: sourceIndex } = draggedServiceInfo;
+    if (sourceDayId === targetDayId && sourceIndex === targetIndex) {
+      setDraggedServiceInfo(null);
+      return;
+    }
+    setPackageData((prev) => {
+      const sourceDay = prev.days.find((d) => d.id === sourceDayId);
+      const targetDay = prev.days.find((d) => d.id === targetDayId);
+      if (!sourceDay || !targetDay) return prev;
+
+      if (sourceDayId === targetDayId) {
+        const updatedServices = [...sourceDay.services];
+        const [moved] = updatedServices.splice(sourceIndex, 1);
+        updatedServices.splice(targetIndex, 0, moved);
+        return {
+          ...prev,
+          days: prev.days.map((d) => (d.id === targetDayId ? { ...d, services: updatedServices } : d))
+        };
+      } else {
+        const sourceServices = [...sourceDay.services];
+        const targetServices = [...targetDay.services];
+        const [moved] = sourceServices.splice(sourceIndex, 1);
+        targetServices.splice(targetIndex, 0, moved);
+        return {
+          ...prev,
+          days: prev.days.map((d) => {
+            if (d.id === sourceDayId) return { ...d, services: sourceServices };
+            if (d.id === targetDayId) return { ...d, services: targetServices };
+            return d;
+          })
+        };
+      }
+    });
+    setDraggedServiceInfo(null);
+    showToast('Reordered service inside day', 'success');
+  };
+
+  const handleServiceDragEnd = (e) => {
+    if (e) e.stopPropagation();
+    setDraggedServiceInfo(null);
+  };
+
+  // Modal Open Handlers (Flight, Hotel, Cab, Bus, Sightseeing, Activity, Meal)
+  const handleOpenSearchModal = (dayId, type, initialSvc = null) => {
+    const targetDay = packageData.days.find((d) => d.id === dayId);
+    const dayLoc = targetDay?.location || packageData.destination || 'Destination';
+
     if (type === 'flight') {
       setModalState((prev) => ({
         ...prev,
         flight: {
           isOpen: true,
           dayId,
-          initialData: {
+          serviceId: initialSvc?.id || null,
+          initialData: initialSvc?.data || {
             fromName: packageData.originCity || 'Delhi',
             toName: packageData.destination || 'Manali'
           }
@@ -441,7 +561,8 @@ export default function TravelProPackageBuilder({
         hotel: {
           isOpen: true,
           dayId,
-          initialData: { location: packageData.destination || 'Manali' }
+          serviceId: initialSvc?.id || null,
+          initialData: initialSvc?.data || { location: dayLoc }
         }
       }));
     } else if (type === 'cab') {
@@ -450,9 +571,10 @@ export default function TravelProPackageBuilder({
         cab: {
           isOpen: true,
           dayId,
-          initialData: {
-            pickup: `${packageData.destination || 'Manali'} Airport / Station`,
-            drop: `${packageData.destination || 'Manali'} Hotel`
+          serviceId: initialSvc?.id || null,
+          initialData: initialSvc?.data || {
+            pickup: `${dayLoc} Airport / Station`,
+            drop: `${dayLoc} Hotel`
           }
         }
       }));
@@ -462,264 +584,384 @@ export default function TravelProPackageBuilder({
         bus: {
           isOpen: true,
           dayId,
-          initialData: {
+          serviceId: initialSvc?.id || null,
+          initialData: initialSvc?.data || {
             from: packageData.originCity || 'Delhi',
-            to: packageData.destination || 'Manali'
+            to: dayLoc
           }
         }
       }));
-    } else {
-      handleAddServiceToDay(dayId, type);
+    } else if (type === 'sightseeing') {
+      setModalState((prev) => ({
+        ...prev,
+        sightseeing: {
+          isOpen: true,
+          dayId,
+          serviceId: initialSvc?.id || null,
+          item: null,
+          dayLocation: dayLoc
+        }
+      }));
+    } else if (type === 'activity') {
+      setModalState((prev) => ({
+        ...prev,
+        activity: {
+          isOpen: true,
+          dayId,
+          serviceId: initialSvc?.id || null,
+          item: null,
+          dayLocation: dayLoc
+        }
+      }));
+    } else if (type === 'meal') {
+      setModalState((prev) => ({
+        ...prev,
+        meal: {
+          isOpen: true,
+          dayId,
+          serviceId: initialSvc?.id || null,
+          item: null
+        }
+      }));
     }
   };
 
   // Callback when a flight is chosen from FlightSearchModal
   const handleSelectFlight = (flightData) => {
     const dayId = modalState.flight.dayId;
+    const serviceId = modalState.flight.serviceId;
     if (!dayId) return;
-    const newService = {
-      id: `svc-${Date.now()}-flight`,
-      type: 'flight',
-      customizable: true,
-      selected: true,
-      data: {
-        from: flightData.fromCode || 'DEL',
-        fromName: flightData.fromName || 'Delhi',
-        to: flightData.toCode || 'KUU',
-        toName: flightData.toName || 'Bhuntar / Kullu',
-        departure: flightData.departure || '09:00',
-        arrival: flightData.arrival || '11:15',
-        duration: flightData.duration || '2h 15m',
-        airline: flightData.airline || 'IndiGo',
-        flightNumber: flightData.flightNumber || '6E 501',
-        cabin: flightData.cabin || 'Economy',
-        fare: Number(flightData.fare) || 4500,
-        tax: Number(flightData.tax) || 600,
-        apiSelected: true
-      }
+
+    const flightPayload = {
+      from: flightData.from || flightData.fromCode || 'DEL',
+      fromName: flightData.fromName || 'Origin',
+      to: flightData.to || flightData.toCode || 'DEST',
+      toName: flightData.toName || 'Destination',
+      departure: flightData.departure || '09:00',
+      arrival: flightData.arrival || '11:15',
+      duration: flightData.duration || '2h',
+      airline: flightData.airline || 'Airline',
+      flightNumber: flightData.flightNumber || 'FL-001',
+      cabin: flightData.cabin || 'Economy',
+      fare: Number(flightData.fare) || 0,
+      tax: Number(flightData.tax) || 0,
+      flightImage: flightData.flightImage || flightData.image || null,
+      apiSelected: flightData.apiSelected !== false
     };
-    setPackageData((prev) => ({
-      ...prev,
-      days: prev.days.map((d) =>
-        d.id === dayId ? { ...d, services: [...(d.services || []), newService] } : d
-      )
-    }));
-    setModalState((prev) => ({ ...prev, flight: { isOpen: false, dayId: null } }));
-    showToast(`Added ${flightData.airline || 'Flight'} to Day!`, 'success');
+
+    if (serviceId) {
+      handleUpdateServiceData(dayId, serviceId, flightPayload);
+    } else {
+      const newService = {
+        id: `svc-${Date.now()}-flight`,
+        type: 'flight',
+        customizable: true,
+        selected: true,
+        data: flightPayload
+      };
+      setPackageData((prev) => ({
+        ...prev,
+        days: prev.days.map((d) =>
+          d.id === dayId ? { ...d, services: [...(d.services || []), newService] } : d
+        )
+      }));
+    }
+    setModalState((prev) => ({ ...prev, flight: { isOpen: false, dayId: null, serviceId: null, initialData: {} } }));
+    showToast(`Saved flight details!`, 'success');
   };
 
   // Callback when a hotel is chosen from HotelSearchModal
   const handleSelectHotel = (hotelData) => {
     const dayId = modalState.hotel.dayId;
+    const serviceId = modalState.hotel.serviceId;
     if (!dayId) return;
-    const newService = {
-      id: `svc-${Date.now()}-hotel`,
-      type: 'hotel',
-      customizable: true,
-      selected: true,
-      data: {
-        name: hotelData.name || 'Luxury Valley Resort',
-        stars: hotelData.stars || 4,
-        room: hotelData.roomType || 'Deluxe Mountain View',
-        meal: hotelData.mealPlan || 'Breakfast Included',
-        price: Number(hotelData.price) || 4200,
-        rating: hotelData.rating || 4.5,
-        reviews: hotelData.reviews || 850,
-        image: hotelData.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=400&auto=format&fit=crop',
-        location: hotelData.location || packageData.destination || 'Manali',
-        nights: 1,
-        apiSelected: true
-      }
+
+    const hotelPayload = {
+      name: hotelData.name || 'Hotel Stay',
+      stars: hotelData.stars || 4,
+      room: hotelData.room || hotelData.roomType || 'Standard Room',
+      meal: hotelData.meal || hotelData.mealPlan || 'Room Only',
+      price: Number(hotelData.price) || 0,
+      rating: hotelData.rating || 4.0,
+      reviews: hotelData.reviews || 0,
+      image: hotelData.image || '',
+      location: hotelData.location || packageData.destination || '',
+      nights: Number(hotelData.nights) || 1,
+      apiSelected: hotelData.apiSelected !== false
     };
-    setPackageData((prev) => ({
-      ...prev,
-      days: prev.days.map((d) =>
-        d.id === dayId ? { ...d, services: [...(d.services || []), newService] } : d
-      )
-    }));
-    setModalState((prev) => ({ ...prev, hotel: { isOpen: false, dayId: null } }));
-    showToast(`Added Hotel ${hotelData.name || ''} to Day!`, 'success');
+
+    if (serviceId) {
+      handleUpdateServiceData(dayId, serviceId, hotelPayload);
+    } else {
+      const newService = {
+        id: `svc-${Date.now()}-hotel`,
+        type: 'hotel',
+        customizable: true,
+        selected: true,
+        data: hotelPayload
+      };
+      setPackageData((prev) => ({
+        ...prev,
+        days: prev.days.map((d) =>
+          d.id === dayId ? { ...d, services: [...(d.services || []), newService] } : d
+        )
+      }));
+    }
+    setModalState((prev) => ({ ...prev, hotel: { isOpen: false, dayId: null, serviceId: null, initialData: {} } }));
+    showToast(`Saved hotel accommodation!`, 'success');
   };
 
   // Callback when a cab is chosen from CabSearchModal
   const handleSelectCab = (cabData) => {
     const dayId = modalState.cab.dayId;
+    const serviceId = modalState.cab.serviceId;
     if (!dayId) return;
-    const newService = {
-      id: `svc-${Date.now()}-cab`,
-      type: 'cab',
-      customizable: true,
-      selected: true,
-      data: {
-        vehicle: cabData.vehicle || 'Toyota Innova Crysta',
-        category: cabData.category || 'SUV',
-        seats: cabData.seats || 6,
-        luggage: cabData.luggage || 3,
-        pickup: cabData.pickup || `${packageData.destination || 'Manali'} Airport`,
-        drop: cabData.drop || `${packageData.destination || 'Manali'} Hotel`,
-        date: cabData.date || '2025-12-25',
-        time: cabData.time || '12:30 PM',
-        duration: cabData.duration || '1h 30m',
-        distance: cabData.distance || '45 km',
-        ac: true,
-        price: Number(cabData.price) || 2800,
-        tollIncluded: true,
-        apiSelected: true
-      }
+
+    const cabPayload = {
+      vehicle: cabData.vehicle || 'Cab Transfer',
+      category: cabData.category || 'Sedan',
+      seats: cabData.seats || 4,
+      luggage: cabData.luggage || 2,
+      pickup: cabData.pickup || 'Pickup Location',
+      drop: cabData.drop || 'Drop Location',
+      date: cabData.date || '',
+      time: cabData.time || '10:00 AM',
+      duration: cabData.duration || '',
+      distance: cabData.distance || '',
+      ac: cabData.ac !== false,
+      price: Number(cabData.price) || 0,
+      tollIncluded: cabData.tollIncluded !== false,
+      image: cabData.image || null,
+      voucherImage: cabData.voucherImage || cabData.image || null,
+      apiSelected: cabData.apiSelected !== false
     };
-    setPackageData((prev) => ({
-      ...prev,
-      days: prev.days.map((d) =>
-        d.id === dayId ? { ...d, services: [...(d.services || []), newService] } : d
-      )
-    }));
-    setModalState((prev) => ({ ...prev, cab: { isOpen: false, dayId: null } }));
-    showToast(`Added Cab ${cabData.vehicle || ''} to Day!`, 'success');
+
+    if (serviceId) {
+      handleUpdateServiceData(dayId, serviceId, cabPayload);
+    } else {
+      const newService = {
+        id: `svc-${Date.now()}-cab`,
+        type: 'cab',
+        customizable: true,
+        selected: true,
+        data: cabPayload
+      };
+      setPackageData((prev) => ({
+        ...prev,
+        days: prev.days.map((d) =>
+          d.id === dayId ? { ...d, services: [...(d.services || []), newService] } : d
+        )
+      }));
+    }
+    setModalState((prev) => ({ ...prev, cab: { isOpen: false, dayId: null, serviceId: null, initialData: {} } }));
+    showToast(`Saved cab transfer!`, 'success');
   };
 
   // Callback when a bus is chosen from BusSearchModal
   const handleSelectBus = (busData) => {
     const dayId = modalState.bus.dayId;
+    const serviceId = modalState.bus.serviceId;
     if (!dayId) return;
-    const newService = {
-      id: `svc-${Date.now()}-bus`,
-      type: 'bus',
-      customizable: true,
-      selected: true,
-      data: {
-        operator: busData.operator || 'Himachal Volvo Express',
-        busType: busData.busType || 'Bharat Benz Multi-Axle AC Sleeper',
-        from: busData.from || packageData.originCity || 'Delhi',
-        to: busData.to || packageData.destination || 'Manali',
-        departure: busData.departure || '20:30',
-        arrival: busData.arrival || '07:30 AM',
-        duration: busData.duration || '11h 00m',
-        rating: busData.rating || 4.4,
-        seatsLeft: busData.seatsLeft || 12,
-        price: Number(busData.price) || 1450,
-        apiSelected: true
-      }
+
+    const busPayload = {
+      operator: busData.operator || 'Bus Operator',
+      busType: busData.busType || 'AC Sleeper',
+      from: busData.from || packageData.originCity || 'Origin',
+      to: busData.to || packageData.destination || 'Destination',
+      departure: busData.departure || '20:00',
+      arrival: busData.arrival || '06:00',
+      duration: busData.duration || '',
+      rating: busData.rating || 4.0,
+      seatsLeft: busData.seatsLeft || 10,
+      price: Number(busData.price) || 0,
+      image: busData.image || null,
+      voucherImage: busData.voucherImage || busData.image || null,
+      apiSelected: busData.apiSelected !== false
     };
-    setPackageData((prev) => ({
-      ...prev,
-      days: prev.days.map((d) =>
-        d.id === dayId ? { ...d, services: [...(d.services || []), newService] } : d
-      )
-    }));
-    setModalState((prev) => ({ ...prev, bus: { isOpen: false, dayId: null } }));
-    showToast(`Added Bus ${busData.operator || ''} to Day!`, 'success');
+
+    if (serviceId) {
+      handleUpdateServiceData(dayId, serviceId, busPayload);
+    } else {
+      const newService = {
+        id: `svc-${Date.now()}-bus`,
+        type: 'bus',
+        customizable: true,
+        selected: true,
+        data: busPayload
+      };
+      setPackageData((prev) => ({
+        ...prev,
+        days: prev.days.map((d) =>
+          d.id === dayId ? { ...d, services: [...(d.services || []), newService] } : d
+        )
+      }));
+    }
+    setModalState((prev) => ({ ...prev, bus: { isOpen: false, dayId: null, serviceId: null, initialData: {} } }));
+    showToast(`Saved bus journey!`, 'success');
+  };
+
+  // Callback for saving Sightseeing item
+  const handleSaveSightseeing = (sightData) => {
+    const dayId = modalState.sightseeing.dayId;
+    const serviceId = modalState.sightseeing.serviceId;
+    if (!dayId) return;
+
+    setPackageData((prev) => {
+      const day = prev.days.find((d) => d.id === dayId);
+      if (!day) return prev;
+
+      let updatedServices = [...(day.services || [])];
+      let existingSvc = serviceId
+        ? updatedServices.find((s) => s.id === serviceId)
+        : updatedServices.find((s) => s.type === 'sightseeing');
+
+      if (existingSvc) {
+        const existingItems = existingSvc.data?.items || [];
+        const itemIdx = existingItems.findIndex((i) => i.id === sightData.id);
+        let newItems;
+        if (itemIdx >= 0) {
+          newItems = existingItems.map((item, idx) => (idx === itemIdx ? { ...item, ...sightData } : item));
+        } else {
+          newItems = [...existingItems, sightData];
+        }
+        updatedServices = updatedServices.map((s) =>
+          s.id === existingSvc.id
+            ? { ...s, selected: true, data: { ...s.data, items: newItems } }
+            : s
+        );
+      } else {
+        const newSvc = {
+          id: `svc-${Date.now()}-sightseeing`,
+          type: 'sightseeing',
+          selected: true,
+          customizable: true,
+          data: {
+            items: [sightData]
+          }
+        };
+        updatedServices.push(newSvc);
+      }
+
+      return {
+        ...prev,
+        days: prev.days.map((d) => (d.id === dayId ? { ...d, services: updatedServices } : d))
+      };
+    });
+
+    setModalState((prev) => ({ ...prev, sightseeing: { isOpen: false, dayId: null, serviceId: null, item: null } }));
+    showToast(`Sightseeing spot saved to Day!`, 'success');
+  };
+
+  // Callback for saving Adventure / Activity item
+  const handleSaveActivity = (activityData) => {
+    const dayId = modalState.activity.dayId;
+    const serviceId = modalState.activity.serviceId;
+    if (!dayId) return;
+
+    setPackageData((prev) => {
+      const day = prev.days.find((d) => d.id === dayId);
+      if (!day) return prev;
+
+      let updatedServices = [...(day.services || [])];
+      let existingSvc = serviceId
+        ? updatedServices.find((s) => s.id === serviceId)
+        : updatedServices.find((s) => s.type === 'activity');
+
+      if (existingSvc) {
+        const existingItems = existingSvc.data?.items || [];
+        const itemIdx = existingItems.findIndex((i) => i.id === activityData.id);
+        let newItems;
+        if (itemIdx >= 0) {
+          newItems = existingItems.map((item, idx) => (idx === itemIdx ? { ...item, ...activityData } : item));
+        } else {
+          newItems = [...existingItems, activityData];
+        }
+        updatedServices = updatedServices.map((s) =>
+          s.id === existingSvc.id
+            ? { ...s, selected: true, data: { ...s.data, items: newItems } }
+            : s
+        );
+      } else {
+        const newSvc = {
+          id: `svc-${Date.now()}-activity`,
+          type: 'activity',
+          selected: true,
+          customizable: true,
+          data: {
+            items: [activityData]
+          }
+        };
+        updatedServices.push(newSvc);
+      }
+
+      return {
+        ...prev,
+        days: prev.days.map((d) => (d.id === dayId ? { ...d, services: updatedServices } : d))
+      };
+    });
+
+    setModalState((prev) => ({ ...prev, activity: { isOpen: false, dayId: null, serviceId: null, item: null } }));
+    showToast(`Activity saved to Day!`, 'success');
+  };
+
+  // Callback for saving Meal item
+  const handleSaveMeal = (mealData) => {
+    const dayId = modalState.meal.dayId;
+    const serviceId = modalState.meal.serviceId;
+    if (!dayId) return;
+
+    setPackageData((prev) => {
+      const day = prev.days.find((d) => d.id === dayId);
+      if (!day) return prev;
+
+      let updatedServices = [...(day.services || [])];
+      let existingSvc = serviceId
+        ? updatedServices.find((s) => s.id === serviceId)
+        : updatedServices.find((s) => s.type === 'meal');
+
+      if (existingSvc) {
+        const existingItems = existingSvc.data?.items || [];
+        const itemIdx = existingItems.findIndex((i) => i.id === mealData.id);
+        let newItems;
+        if (itemIdx >= 0) {
+          newItems = existingItems.map((item, idx) => (idx === itemIdx ? { ...item, ...mealData } : item));
+        } else {
+          newItems = [...existingItems, mealData];
+        }
+        updatedServices = updatedServices.map((s) =>
+          s.id === existingSvc.id
+            ? { ...s, selected: true, data: { ...s.data, items: newItems } }
+            : s
+        );
+      } else {
+        const newSvc = {
+          id: `svc-${Date.now()}-meal`,
+          type: 'meal',
+          selected: true,
+          customizable: true,
+          data: {
+            items: [mealData]
+          }
+        };
+        updatedServices.push(newSvc);
+      }
+
+      return {
+        ...prev,
+        days: prev.days.map((d) => (d.id === dayId ? { ...d, services: updatedServices } : d))
+      };
+    });
+
+    setModalState((prev) => ({ ...prev, meal: { isOpen: false, dayId: null, serviceId: null, item: null } }));
+    showToast(`Meal plan saved to Day!`, 'success');
   };
 
   /* =========================================================================
      SERVICE MANAGEMENT ACTIONS
      ========================================================================= */
+  // Direct entry trigger for adding services (Opens search/entry modal without hardcoded mock records)
   const handleAddServiceToDay = (dayId, serviceType) => {
-    let initialSvcData = {};
-    if (serviceType === 'flight') {
-      initialSvcData = {
-        from: 'DEL',
-        fromName: 'Delhi',
-        to: 'KUU',
-        toName: 'Bhuntar / Kullu',
-        departure: '09:20',
-        arrival: '11:35',
-        duration: '2h 15m',
-        airline: 'IndiGo',
-        flightNumber: '6E 1234',
-        cabin: 'Economy',
-        fare: 5500,
-        tax: 650,
-        apiSelected: true
-      };
-    } else if (serviceType === 'hotel') {
-      initialSvcData = {
-        name: 'Snow Valley Resort',
-        stars: 4,
-        room: 'Deluxe Room',
-        meal: 'Breakfast Included',
-        price: 4500,
-        rating: 4.2,
-        reviews: 1420,
-        image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=400&auto=format&fit=crop',
-        location: packageData.destination || 'Manali',
-        nights: 1
-      };
-    } else if (serviceType === 'cab') {
-      initialSvcData = {
-        vehicle: 'Toyota Etios',
-        category: 'Sedan',
-        seats: 4,
-        ac: true,
-        pickup: 'Airport / Station',
-        drop: 'Hotel',
-        date: '12 Oct 2026',
-        time: '12:30 PM',
-        price: 2500
-      };
-    } else if (serviceType === 'bus') {
-      initialSvcData = {
-        operator: 'HRTC Volvo Luxury',
-        busType: 'AC Sleeper',
-        from: 'Delhi ISBT',
-        to: 'Manali Bus Stand',
-        departure: '21:00',
-        arrival: '06:30 AM',
-        price: 1400
-      };
-    } else if (serviceType === 'sightseeing') {
-      initialSvcData = {
-        items: [
-          {
-            id: `ss-${Date.now()}`,
-            name: 'Local Scenic Viewpoint',
-            location: packageData.destination || 'Manali',
-            description: 'Visit panoramic Himalayan valley viewpoints.',
-            image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=400&auto=format&fit=crop',
-            duration: '3 hours',
-            price: 500
-          }
-        ]
-      };
-    } else if (serviceType === 'activity') {
-      initialSvcData = {
-        items: [
-          {
-            id: `act-${Date.now()}`,
-            name: 'Guided Valley Trek',
-            duration: '2 hours',
-            price: 750
-          }
-        ]
-      };
-    } else if (serviceType === 'meal') {
-      initialSvcData = {
-        items: [
-          {
-            id: `m-${Date.now()}`,
-            name: 'Buffet Breakfast',
-            description: 'Included resort breakfast buffet',
-            price: 0,
-            enabled: true
-          }
-        ]
-      };
-    }
-
-    const newService = {
-      id: `svc-${Date.now()}-${serviceType}`,
-      type: serviceType,
-      customizable: true,
-      selected: true,
-      data: initialSvcData
-    };
-
-    setPackageData((prev) => ({
-      ...prev,
-      days: prev.days.map((d) => (d.id === dayId ? { ...d, services: [...(d.services || []), newService] } : d))
-    }));
-
-    setModalState((prev) => ({ ...prev, addService: { isOpen: false, dayId: null } }));
-    showToast(`Added ${serviceType.toUpperCase()} service to day.`, 'success');
+    handleOpenSearchModal(dayId, serviceType);
   };
 
   const handleUpdateServiceData = (dayId, serviceId, updatedData) => {
@@ -832,11 +1074,15 @@ export default function TravelProPackageBuilder({
         inclusions: packageData.inclusions || [],
         exclusions: packageData.exclusions || [],
         terms: packageData.terms || [],
+        cancellationPolicy: packageData.cancellationPolicy,
+        dateChangePolicy: packageData.dateChangePolicy,
         status,
         itineraryData: {
           days: packageData.days,
           customization: packageData.customization,
-          travelers: packageData.travelers
+          travelers: packageData.travelers,
+          cancellationPolicy: packageData.cancellationPolicy,
+          dateChangePolicy: packageData.dateChangePolicy
         },
         pricingRules: packageData.pricing,
         pricingBreakdown: pricingBreakdown
@@ -1217,6 +1463,7 @@ export default function TravelProPackageBuilder({
                     onDragStart={(e) => handleDragStart(e, dayIndex)}
                     onDragOver={(e) => handleDragOver(e, dayIndex)}
                     onDrop={(e) => handleDrop(e, dayIndex)}
+                    onDragEnd={handleDragEnd}
                     className={`day-card bg-white border rounded-xl overflow-hidden shadow-xs transition duration-150 ${
                       draggedDayIndex === dayIndex
                         ? 'opacity-40 border-orange-500 ring-2 ring-orange-400 scale-[0.99]'

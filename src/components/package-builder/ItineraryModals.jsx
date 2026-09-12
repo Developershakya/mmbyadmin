@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Check,
@@ -10,7 +10,9 @@ import {
   MapPin,
   Image as ImageIcon,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  Trash2
 } from 'lucide-react';
 
 const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
@@ -287,6 +289,19 @@ export function SightseeingModal({
   const [isIncluded, setIsIncluded] = useState(true);
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
+  const [imageName, setImageName] = useState('');
+  const fileInputRef = useRef(null);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageName(file.name);
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      setImage(uploadEvent.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (initialData) {
@@ -434,16 +449,54 @@ export function SightseeingModal({
             </div>
           </div>
 
-          {/* Image URL */}
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">Cover Photo URL</label>
-            <input
-              type="url"
-              value={image}
-              onChange={(e) => setImage(e.target.value)}
-              placeholder="https://images.unsplash.com/..."
-              className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none"
-            />
+          {/* Image & Photo Upload */}
+          <div className="space-y-2">
+            <label className="font-semibold text-slate-700 block">Sightseeing Photo</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 font-semibold cursor-pointer text-xs transition"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload Photo</span>
+              </button>
+              <input
+                type="text"
+                value={image && !image.startsWith('data:') ? image : ''}
+                onChange={(e) => setImage(e.target.value)}
+                placeholder="Or paste image URL (https://...)"
+                className="flex-1 min-w-[180px] border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none"
+              />
+            </div>
+
+            {image && (
+              <div className="relative inline-block mt-1 border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white p-1">
+                <img
+                  src={image}
+                  alt="Sightseeing Preview"
+                  className="h-24 w-auto object-cover rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={() => { setImage(''); setImageName(''); }}
+                  className="absolute top-2 right-2 p-1 rounded-full bg-red-600 text-white hover:bg-red-700 transition cursor-pointer shadow-xs"
+                  title="Remove image"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+                {imageName && (
+                  <p className="text-[10px] text-slate-500 px-1 pt-0.5 truncate max-w-xs">{imageName}</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Description */}
@@ -498,6 +551,20 @@ export function ActivityModal({
   const [price, setPrice] = useState(1500);
   const [difficulty, setDifficulty] = useState('Moderate');
   const [description, setDescription] = useState('');
+  const [image, setImage] = useState('');
+  const [imageName, setImageName] = useState('');
+  const fileInputRef = useRef(null);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageName(file.name);
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      setImage(uploadEvent.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (initialData) {
@@ -507,6 +574,7 @@ export function ActivityModal({
       setPrice(initialData.price || 0);
       setDifficulty(initialData.difficulty || 'Moderate');
       setDescription(initialData.description || '');
+      setImage(initialData.image || '');
     } else {
       setName('');
       setCategory('Adventure Sports');
@@ -514,6 +582,7 @@ export function ActivityModal({
       setPrice(1500);
       setDifficulty('Moderate');
       setDescription('Exciting outdoor adventure activity with certified instructors and safety gear.');
+      setImage('');
     }
   }, [initialData, isOpen]);
 
@@ -530,7 +599,8 @@ export function ActivityModal({
       duration,
       price: Number(price) || 0,
       difficulty,
-      description: description.trim()
+      description: description.trim(),
+      image: image.trim()
     });
     onClose();
   };
@@ -637,6 +707,56 @@ export function ActivityModal({
             </div>
           </div>
 
+          {/* Activity Photo Upload */}
+          <div className="space-y-2">
+            <label className="font-semibold text-slate-700 block">Activity Photo</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 font-semibold cursor-pointer text-xs transition"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload Photo</span>
+              </button>
+              <input
+                type="text"
+                value={image && !image.startsWith('data:') ? image : ''}
+                onChange={(e) => setImage(e.target.value)}
+                placeholder="Or paste image URL (https://...)"
+                className="flex-1 min-w-[180px] border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
+              />
+            </div>
+
+            {image && (
+              <div className="relative inline-block mt-1 border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white p-1">
+                <img
+                  src={image}
+                  alt="Activity Preview"
+                  className="h-24 w-auto object-cover rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={() => { setImage(''); setImageName(''); }}
+                  className="absolute top-2 right-2 p-1 rounded-full bg-red-600 text-white hover:bg-red-700 transition cursor-pointer shadow-xs"
+                  title="Remove image"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+                {imageName && (
+                  <p className="text-[10px] text-slate-500 px-1 pt-0.5 truncate max-w-xs">{imageName}</p>
+                )}
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="font-semibold text-slate-700 block mb-1">Description &amp; Safety Inclusions</label>
             <textarea
@@ -711,7 +831,7 @@ export function UnsavedChangesModal({
             onClick={onDiscard}
             className="px-3.5 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold transition cursor-pointer text-center"
           >
-            Discard Changes
+            Discard Changes &amp; Next
           </button>
           <button
             type="button"

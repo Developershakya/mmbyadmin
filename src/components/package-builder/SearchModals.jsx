@@ -657,8 +657,27 @@ export function HotelSearchModal({
   const [manualImage, setManualImage] = useState(
     initialData.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=600&auto=format&fit=crop'
   );
+  const [hotelImageName, setHotelImageName] = useState('');
+  const hotelFileInputRef = useRef(null);
 
   if (!isOpen) return null;
+
+  const handleHotelImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        if (showToast) showToast('Image file size must be under 5MB', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setManualImage(reader.result);
+        setHotelImageName(file.name);
+        if (showToast) showToast('Hotel photo attached!', 'success');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSearch = async () => {
     if (!destination.trim()) {
@@ -1059,17 +1078,55 @@ export function HotelSearchModal({
                   />
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-                    Hotel Photo URL
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="text-xs font-semibold text-slate-700 block">
+                    Hotel Photo (Upload File or Enter URL)
                   </label>
-                  <input
-                    type="text"
-                    value={manualImage}
-                    onChange={(e) => setManualImage(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      ref={hotelFileInputRef}
+                      onChange={handleHotelImageFileChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => hotelFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold cursor-pointer text-xs transition"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Photo</span>
+                    </button>
+                    <input
+                      type="text"
+                      value={manualImage && !manualImage.startsWith('data:') ? manualImage : ''}
+                      onChange={(e) => setManualImage(e.target.value)}
+                      placeholder="Or paste image URL (https://...)"
+                      className="flex-1 min-w-[200px] border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                    />
+                  </div>
+
+                  {manualImage && (
+                    <div className="relative inline-block mt-1.5 border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white p-1">
+                      <img
+                        src={manualImage}
+                        alt="Hotel Preview"
+                        className="h-24 w-auto object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setManualImage(''); setHotelImageName(''); }}
+                        className="absolute top-2 right-2 p-1 rounded-full bg-red-600 text-white hover:bg-red-700 transition cursor-pointer shadow-xs"
+                        title="Remove photo"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                      {hotelImageName && (
+                        <p className="text-[10px] text-slate-500 px-1 pt-0.5 truncate max-w-xs">{hotelImageName}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1121,8 +1178,28 @@ export function CabSearchModal({
   const [manualPickup, setManualPickup] = useState(initialData.pickup || 'Mussoorie / Delhi');
   const [manualDrop, setManualDrop] = useState(initialData.drop || 'Khajjiar / Manali');
   const [manualPrice, setManualPrice] = useState(initialData.price || 1500);
+  const [manualImage, setManualImage] = useState(initialData.image || initialData.voucherImage || '');
+  const [cabImageName, setCabImageName] = useState('');
+  const cabFileInputRef = useRef(null);
 
   if (!isOpen) return null;
+
+  const handleCabImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        if (showToast) showToast('Image file size must be under 5MB', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setManualImage(reader.result);
+        setCabImageName(file.name);
+        if (showToast) showToast('Cab voucher/photo attached!', 'success');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSearch = async () => {
     if (!pickup.trim()) {
@@ -1171,6 +1248,8 @@ export function CabSearchModal({
       date,
       time,
       price: Number(manualPrice) || 1500,
+      image: manualImage || '',
+      voucherImage: manualImage || '',
       isManual: true,
       apiSelected: false
     };
@@ -1489,6 +1568,57 @@ export function CabSearchModal({
                     Air Conditioned (AC Vehicle)
                   </label>
                 </div>
+
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="text-xs font-semibold text-slate-700 block">
+                    Cab Photo / Voucher Ticket (Optional)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      ref={cabFileInputRef}
+                      onChange={handleCabImageFileChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => cabFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold cursor-pointer text-xs transition"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Photo / Voucher</span>
+                    </button>
+                    <input
+                      type="text"
+                      value={manualImage && !manualImage.startsWith('data:') ? manualImage : ''}
+                      onChange={(e) => setManualImage(e.target.value)}
+                      placeholder="Or paste photo/ticket URL (https://...)"
+                      className="flex-1 min-w-[200px] border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                    />
+                  </div>
+
+                  {manualImage && (
+                    <div className="relative inline-block mt-1.5 border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white p-1">
+                      <img
+                        src={manualImage}
+                        alt="Cab Preview"
+                        className="h-24 w-auto object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setManualImage(''); setCabImageName(''); }}
+                        className="absolute top-2 right-2 p-1 rounded-full bg-red-600 text-white hover:bg-red-700 transition cursor-pointer shadow-xs"
+                        title="Remove photo"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                      {cabImageName && (
+                        <p className="text-[10px] text-slate-500 px-1 pt-0.5 truncate max-w-xs">{cabImageName}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <button
@@ -1538,8 +1668,28 @@ export function BusSearchModal({
   const [manualDeparture, setManualDeparture] = useState(initialData.departure || '21:30');
   const [manualArrival, setManualArrival] = useState(initialData.arrival || '08:00');
   const [manualPrice, setManualPrice] = useState(initialData.price || 1200);
+  const [manualImage, setManualImage] = useState(initialData.image || initialData.voucherImage || '');
+  const [busImageName, setBusImageName] = useState('');
+  const busFileInputRef = useRef(null);
 
   if (!isOpen) return null;
+
+  const handleBusImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        if (showToast) showToast('Image file size must be under 5MB', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setManualImage(reader.result);
+        setBusImageName(file.name);
+        if (showToast) showToast('Bus ticket/photo attached!', 'success');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSearch = async () => {
     if (!from.trim()) {
@@ -1590,6 +1740,8 @@ export function BusSearchModal({
       arrival: manualArrival,
       price: Number(manualPrice) || 1200,
       date,
+      image: manualImage || '',
+      voucherImage: manualImage || '',
       isManual: true,
       apiSelected: false
     };
@@ -1891,6 +2043,57 @@ export function BusSearchModal({
                     onChange={(e) => setManualPrice(Number(e.target.value) || 0)}
                     className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
                   />
+                </div>
+
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="text-xs font-semibold text-slate-700 block">
+                    Bus Photo / Ticket Voucher (Optional)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      ref={busFileInputRef}
+                      onChange={handleBusImageFileChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => busFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 font-semibold cursor-pointer text-xs transition"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Photo / Ticket</span>
+                    </button>
+                    <input
+                      type="text"
+                      value={manualImage && !manualImage.startsWith('data:') ? manualImage : ''}
+                      onChange={(e) => setManualImage(e.target.value)}
+                      placeholder="Or paste photo/ticket URL (https://...)"
+                      className="flex-1 min-w-[200px] border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
+                    />
+                  </div>
+
+                  {manualImage && (
+                    <div className="relative inline-block mt-1.5 border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white p-1">
+                      <img
+                        src={manualImage}
+                        alt="Bus Preview"
+                        className="h-24 w-auto object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setManualImage(''); setBusImageName(''); }}
+                        className="absolute top-2 right-2 p-1 rounded-full bg-red-600 text-white hover:bg-red-700 transition cursor-pointer shadow-xs"
+                        title="Remove photo"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                      {busImageName && (
+                        <p className="text-[10px] text-slate-500 px-1 pt-0.5 truncate max-w-xs">{busImageName}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
