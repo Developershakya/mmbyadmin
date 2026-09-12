@@ -1,17 +1,27 @@
 "use client";
 import Header from "@/components/Header";
 import {
+  ArrowBigRightDash,
+  ArrowBigRightIcon,
   ArrowLeft,
+  ArrowRightCircle,
+  ArrowRightCircleIcon,
+  ArrowRightLeft,
   Bed,
   CalendarDays,
   CarFrontIcon,
   MapPin,
+  Plane,
+  PlaneIcon,
   Search,
   SoupIcon,
   StarIcon,
 } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { FaPlane } from "react-icons/fa";
+import { FiArrowRight } from "react-icons/fi";
+import { RiFlightLandLine } from "react-icons/ri";
 
 const SearchBox = forwardRef(
   ({ searchOpen, value, onValueChange, setSearchOpen }, ref) => {
@@ -245,14 +255,22 @@ export default function Packages() {
   const currentBudget = budget ?? maxOfferPrice;
   const filterData = pack
     .filter((item) => {
-      const destinationName = String(destination || "").trim().toLowerCase();
-      const itemCity = String(item.city || "").trim().toLowerCase();
-      const itemState = String(item.state || "").trim().toLowerCase();
+      const destinationName = String(destination || "")
+        .trim()
+        .toLowerCase();
+      const itemCity = String(item.city || "")
+        .trim()
+        .toLowerCase();
+      const itemState = String(item.state || "")
+        .trim()
+        .toLowerCase();
       const itemMatchDestination =
         !destinationName ||
         itemCity.includes(destinationName) ||
         itemState.includes(destinationName) ||
-        String(item.packageName || "").toLowerCase().includes(destinationName);
+        String(item.packageName || "")
+          .toLowerCase()
+          .includes(destinationName);
       const itemDays = Number(item.days || 0);
       const matchesDays = !duration || itemDays <= Number(duration);
       const matchesSelectedDays =
@@ -363,6 +381,17 @@ export default function Packages() {
       return [...prev, day];
     });
   };
+  const handleOptionSearch = async (p,i)=>{
+    setSelect((prev) => (prev === i ? null : i))
+    // try {
+      
+
+      
+    // }catch(error){
+    //   console.log(error.mesasge)
+    // }
+    
+  }
 
   useEffect(() => {
     function handleOutClick(e) {
@@ -775,7 +804,9 @@ export default function Packages() {
               ) : filterData.length === 0 ? (
                 <div className="col-span-full flex justify-center items-center py-16">
                   <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-8 py-10 text-center shadow-sm">
-                    <p className="text-lg font-semibold text-gray-700">No packages found</p>
+                    <p className="text-lg font-semibold text-gray-700">
+                      No packages found
+                    </p>
                     <p className="mt-2 text-sm text-gray-500">
                       Try a different destination or trip duration.
                     </p>
@@ -787,8 +818,8 @@ export default function Packages() {
                   return (
                     <div
                       key={`${p.packageName}-${i}`}
-                      onClick={() =>
-                        setSelect((prev) => (prev === i ? null : i))
+                      onClick={(p) =>
+                        handleOptionSearch(p,i)
                       }
                       className={` bg-white min-w-[350px]  relative rounded-xl  shadow-md overflow-hidden`}
                     >
@@ -811,12 +842,82 @@ export default function Packages() {
                         </h3>
                         <div className="gap-4 flex flex-col">
                           <div className="p-4 border rounded-xl">
-                            <h2>With Flight</h2>
-                            <p>Starting from </p>
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="">
+                                <h2 className="font-bold">With Flight</h2>
+                                <p className="flex items-center gap-1 text-sm text-gray-500 font-mono">
+                                  Starting from <span className="w-0.5 h-0.5 rounded-full bg-gray-500"></span><span>{p.coverLocation[0]}</span>
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-sm text-gray-500 line-through">
+                                  ₹{p.totalPrice.toLocaleString("en")}
+                                </div>
+                                <div className="font-bold text-xl">
+                                  ₹{p.offerPrice.toLocaleString("en")}
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                  per person
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex text-sm justify-between items-center capitalize font-mono">
+                              <p className="whitespace-nowrap">
+                                {searchParams.get("origin")}
+                              </p>
+                              <div className="flex  justify-between  w-full mx-4 items-center">
+                                <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                                <div className="w-full border-dashed border-t-2 relative">
+                                  <FaPlane
+                                    className="absolute left-[50%] top-[50%] transform translate-[-50%] text-gray-500"
+                                    size={16}
+                                  />
+                                </div>
+                                <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                              </div>
+                              <p className="whitespace-nowrap ">
+                                {searchParams.get("destination")}
+                              </p>
+                            </div>
                           </div>
                           <div className="p-4 border rounded-xl">
-                            <h2>Without Flight</h2>
-                            <p>Starting from </p>
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="">
+                                <h2 className="font-bold">Without Flight</h2>
+                                <p className="flex items-center gap-1 text-sm text-gray-500 font-mono">
+                                  Starting from <span className="w-0.5 h-0.5 rounded-full bg-gray-500"></span><span>{p.coverLocation[0]}</span>
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-sm text-gray-500 line-through">
+                                  ₹{p.totalPrice.toLocaleString("en")}
+                                </div>
+                                <div className="font-bold text-xl">
+                                  ₹{p.offerPrice.toLocaleString("en")}
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                  per person
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex text-sm justify-between items-center capitalize font-mono">
+                              <p className="whitespace-nowrap">
+                                {searchParams.get("origin")}
+                              </p>
+                              <div className="flex  justify-between  w-full mx-4 items-center">
+                                <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                                <div className="w-full border-dashed border-t-2 relative">
+                                  <FaPlane
+                                    className="absolute left-[50%] top-[50%] transform translate-[-50%] text-gray-500"
+                                    size={16}
+                                  />
+                                </div>
+                                <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                              </div>
+                              <p className="whitespace-nowrap">
+                                {searchParams.get("destination")}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
