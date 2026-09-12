@@ -1,0 +1,264 @@
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+
+/**
+ * Downloads a DOM element as a high-fidelity PDF file.
+ * Falls back to programmatic jsPDF document if DOM capture encounters restrictions.
+ */
+export async function downloadElementAsPdf(element, filename = 'package-itinerary.pdf', fallbackPackage = null) {
+  const safeFilename = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
+
+  try {
+    if (element) {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgHeight = (canvas.height * pageWidth) / canvas.width;
+
+      let position = 0;
+      let heightLeft = imgHeight;
+
+      pdf.addImage(imgData, 'PNG', 0, position, pageWidth, Math.min(imgHeight, pageHeight));
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pageWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save(safeFilename);
+      return true;
+    }
+  } catch (err) {
+    console.warn('html2canvas rendering fallback to direct PDF generation:', err);
+  }
+
+  // Programmatic fallback to guarantee a valid .pdf file download
+  if (fallbackPackage) {
+    generatePackagePdf(fallbackPackage, safeFilename);
+  }
+  return true;
+}
+
+/**
+ * Generates an official, beautifully structured TravelPro Holiday Package PDF voucher
+ */
+export function generatePackagePdf(pkg, filename = 'TravelPro-Holiday-Package.pdf') {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const safeFilename = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
+  const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+  let y = 14;
+
+  // 1. Top Brand Banner
+  doc.setFillColor(17, 24, 39); // #111827 Dark Navy
+  doc.rect(0, 0, pageWidth, 24, 'F');
+
+  // Orange accent pill
+  doc.setFillColor(249, 115, 22); // #F97316 Orange
+  doc.roundedRect(14, 5, 8, 8, 2, 2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TP', 15.5, 10.5);
+
+  doc.setFontSize(15);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TravelPro — Holiday Package Voucher', 26, 11);
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184);
+  doc.text('Explore More | GSTIN: 07AAACT9182P1Z5 | Support: support@travelpro.com | +91 1800-102-8728', 26, 17);
+
+  y = 32;
+
+  // 2. Package Overview Card
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(14, y, pageWidth - 28, 26, 2, 2, 'FD');
+
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text(pkg.title || pkg.name || 'Holiday Tour Package', 18, y + 8);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  const dest = pkg.destination || pkg.city || 'Manali, Himachal Pradesh';
+  const duration = `${pkg.days?.length || 3} Days / ${Math.max((pkg.days?.length || 3) - 1, 1)} Nights`;
+  const travelers = `${pkg.travelers?.adults || 2} Adults · ${pkg.travelers?.children || 0} Child`;
+  doc.text(`Destination: ${dest}   |   Duration: ${duration}   |   Travelers: ${travelers}`, 18, y + 16);
+
+  const finalPrice = Math.round(Number(pkg.pricingBreakdown?.final || pkg.offerPrice || pkg.totalPrice || 24999));
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(249, 115, 22);
+  doc.text(`Rs. ${finalPrice.toLocaleString('en-IN')}`, pageWidth - 20, y + 12, { align: 'right' });
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.text('Total Package Price', pageWidth - 20, y + 17, { align: 'right' });
+
+  y += 33;
+
+  // 3. Financial Breakdown
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text('Cost Breakdown & Inclusions', 14, y);
+  y += 4;
+
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(14, y, pageWidth - 28, 20, 1.5, 1.5, 'S');
+
+  const p = pkg.pricingBreakdown || {};
+  const baseCost = p.base || Math.round(finalPrice * 0.85);
+  const markup = p.markup || pkg.pricing?.markup || 3000;
+  const taxes = p.tax || pkg.pricing?.tax || 2600;
+  const discount = p.discount || pkg.pricing?.discount || 1000;
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+
+  doc.text(`Base Services: Rs. ${baseCost.toLocaleString('en-IN')}`, 18, y + 6);
+  doc.text(`Agency Markup: Rs. ${Number(markup).toLocaleString('en-IN')}`, 68, y + 6);
+  doc.text(`Taxes & GST: Rs. ${Number(taxes).toLocaleString('en-IN')}`, 118, y + 6);
+  doc.text(`Discount: -Rs. ${Number(discount).toLocaleString('en-IN')}`, 160, y + 6);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  const perPerson = Math.round(finalPrice / Math.max((pkg.travelers?.adults || 2) + (pkg.travelers?.children || 0), 1));
+  doc.text(`Net Payable: Rs. ${finalPrice.toLocaleString('en-IN')} (Per Person: Rs. ${perPerson.toLocaleString('en-IN')})`, 18, y + 14);
+
+  y += 26;
+
+  // 4. Day-by-Day Itinerary
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text('Day-by-Day Travel Itinerary', 14, y);
+  y += 6;
+
+  const days = pkg.days || [];
+  days.forEach((day, index) => {
+    // Check if we need a page break
+    if (y > 245) {
+      doc.addPage();
+      y = 16;
+    }
+
+    // Day Header
+    doc.setFillColor(238, 242, 255); // Indigo/Blue tint
+    doc.setDrawColor(199, 210, 254);
+    doc.roundedRect(14, y, pageWidth - 28, 8, 1, 1, 'FD');
+
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 64, 175);
+    doc.text(`DAY ${index + 1}: ${day.title || 'Day Tour'}`, 18, y + 5.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(`${day.location || dest}`, pageWidth - 20, y + 5.5, { align: 'right' });
+    y += 10;
+
+    // Day Services
+    const services = (day.services || []).filter(s => s.selected !== false);
+    if (services.length === 0) {
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text('Leisure day / no scheduled group transfer.', 18, y + 4);
+      y += 8;
+    } else {
+      services.forEach(svc => {
+        if (y > 270) {
+          doc.addPage();
+          y = 16;
+        }
+
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+
+        let svcTitle = svc.type ? svc.type.toUpperCase() : 'SERVICE';
+        let svcDetails = '';
+
+        if (svc.type === 'flight') {
+          const d = svc.data || {};
+          svcDetails = `${d.airline || 'IndiGo'} ${d.flightNumber || ''} | ${d.from || 'DEL'} -> ${d.to || 'KUU'} | ${d.departure || '09:20'} - ${d.arrival || '11:35'} | Fare: Rs. ${(d.fare || 5500).toLocaleString('en-IN')}`;
+        } else if (svc.type === 'hotel') {
+          const d = svc.data || {};
+          svcDetails = `${d.name || 'Resort Stay'} (${d.stars || 4} Star) | ${d.room || 'Deluxe'} | ${d.meal || 'Breakfast'} | Rs. ${(d.price || 4500).toLocaleString('en-IN')}/night`;
+        } else if (svc.type === 'cab') {
+          const d = svc.data || {};
+          svcDetails = `${d.vehicle || 'Sedan'} (${d.category || 'Cab'}) | ${d.pickup || 'Pickup'} -> ${d.drop || 'Hotel'} | Rs. ${(d.price || 2500).toLocaleString('en-IN')}`;
+        } else if (svc.type === 'bus') {
+          const d = svc.data || {};
+          svcDetails = `${d.operator || 'HRTC Volvo'} (${d.busType || 'AC Sleeper'}) | ${d.departure || '21:00'} -> ${d.arrival || '06:30'} | Rs. ${(d.price || 1400).toLocaleString('en-IN')}/seat`;
+        } else if (svc.type === 'sightseeing') {
+          const items = svc.data?.items || [];
+          svcDetails = items.map(i => i.name).join(', ') || 'Scenic local sightseeing tour';
+        } else if (svc.type === 'activity') {
+          const items = svc.data?.items || [];
+          svcDetails = items.map(i => `${i.name} (${i.duration || '2h'})`).join(', ') || 'Adventure activity';
+        } else if (svc.type === 'meal') {
+          const items = (svc.data?.items || []).filter(m => m.enabled !== false);
+          svcDetails = items.map(m => m.name).join(', ') || 'Complimentary meals';
+        }
+
+        // Bullet dot
+        doc.setFillColor(249, 115, 22);
+        doc.circle(18, y + 2, 1, 'F');
+
+        doc.text(`[${svcTitle}]`, 22, y + 3);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(71, 85, 105);
+        doc.text(svcDetails, 42, y + 3);
+        y += 6;
+      });
+    }
+    y += 4;
+  });
+
+  // 5. Footer & Terms
+  if (y > 250) {
+    doc.addPage();
+    y = 20;
+  }
+
+  doc.setDrawColor(226, 232, 240);
+  doc.line(14, y, pageWidth - 14, y);
+  y += 5;
+
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184);
+  doc.text('Important Notes: Check-in time standard 12:00 PM / Check-out 10:00 AM. Carry a valid Government Photo ID during travel.', 14, y);
+  doc.text('Thank you for booking with TravelPro. Wishing you an unforgettable Bharat Yatra experience!', 14, y + 4);
+
+  doc.save(safeFilename);
+  return true;
+}

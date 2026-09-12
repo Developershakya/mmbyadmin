@@ -1,0 +1,6 @@
+{
+  "name": "TravelPro — Holiday Package Builder",
+  "description": "Enterprise Holiday Package Builder with real-time SRDV travel APIs for Flights, Hotels, Cabs, and Buses, DB-backed autocomplete suggestions, and PDF export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
