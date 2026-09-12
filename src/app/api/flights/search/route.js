@@ -126,7 +126,7 @@ export async function POST(request) {
       flatResults = extractResults(data, 0);
 
     } else {
-      console.log(`${journeyType === '2' ? 'RoundTrip' : 'MultiCity'}: ${segments.length} legs ko ek-ek karke search kar rahe hain`);
+      console.log(`${journeyType === '2' ? 'RoundTrip' : 'MultiCity'}: ${segments.length} We are searching each leg independently...`);
 
       const legResults = [];
       for (let idx = 0; idx < segments.length; idx++) {
@@ -147,7 +147,7 @@ export async function POST(request) {
       return NextResponse.json({ success: true, results: flatResults });
     }
 
-    return NextResponse.json({ success: false, message: 'Is route ke liye koi flight nahi mili.' });
+    return NextResponse.json({ success: false, message: 'No flights available for the selected route.' });
 
   } catch (error) {
     console.error('Flight search error:', error.message);

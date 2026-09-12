@@ -113,7 +113,7 @@ export default function FlightsPage() {
         const data = await res.json();
  
         if (!data.success) {
-          setError(data.message || 'Flights fetch nahi ho paaye. Baad me try karo.');
+          setError(data.message || 'Flights fetch failed, please try again.');
           setFlights([]);
           return;
         }
@@ -121,7 +121,7 @@ export default function FlightsPage() {
         setFlights(data.results || []);
       } catch (err) {
         console.error('fetchFlights error:', err);
-        setError('Flights fetch nahi ho paaye. Baad me try karo.');
+        setError('Flights fetch failed, please try again.');
       } finally {
         setLoading(false);
       }
@@ -321,7 +321,7 @@ export default function FlightsPage() {
 
   // ⭐ NEW: date-strip ke har date ka cheapest price fetch karo
 useEffect(() => {
-  if (!router.isReady || trip === 'multicity' || dateStrip.length === 0) return;
+  if (trip === 'multicity' || dateStrip.length === 0) return;
 
   let cancelled = false;
 
@@ -807,7 +807,7 @@ useEffect(() => {
           {/* ONE WAY: flat list */}
           {!loading && !error && trip !== 'roundtrip' && trip !== 'multicity' && visibleFlights.length === 0 && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-10 text-center text-gray-500">
-              Is route ke liye koi flight nahi mili.
+              No flights found.
             </div>
           )}
  
@@ -869,7 +869,7 @@ useEffect(() => {
 
         {legFlights.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 text-center text-gray-500">
-            Is leg ke liye koi flight nahi mili.
+            No flights found.
           </div>
         ) : (
           (isCollapsed ? legFlights.filter(f => f.id === selectedLegs[idx].id) : legFlights).map(flight => (
@@ -951,10 +951,10 @@ async function loadFareRules() {
     if (data.success) {
       setFareRuleText(data.fareRuleText);
     } else {
-      setFareRuleError(data.message || 'Fare rules load nahi ho paayi.');
+      setFareRuleError(data.message || 'Fare rules fetch failed.');
     }
   } catch (err) {
-    setFareRuleError('Fare rules fetch karte waqt error aaya.');
+    setFareRuleError('Fare rules fetch failed.');
   } finally {
     setFareRuleLoading(false);
   }

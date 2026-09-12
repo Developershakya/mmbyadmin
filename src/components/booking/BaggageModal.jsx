@@ -25,7 +25,7 @@ export default function BaggageModal({ flight, onClose, onConfirm }) {
         console.log("BAGGAGE RESULT:", data);
 
         if (!res.ok || data.success === false) {
-          setError(data.message || "Baggage options fetch nahi ho paye.");
+          setError(data.message || "Baggage options could not be fetched.");
           setOptions([]);
         } else {
           const raw = data.data?.Baggage || [];
@@ -34,7 +34,7 @@ export default function BaggageModal({ flight, onClose, onConfirm }) {
         }
       } catch (err) {
         console.error(err);
-        setError("Baggage options load nahi ho paye.");
+        setError("Baggage options could not be loaded.");
       } finally {
         setLoading(false);
       }

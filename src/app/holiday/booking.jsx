@@ -70,7 +70,7 @@ export default function HolidayBookingPage() {
     });
     const data = await res.json();
     if (!data.success) {
-      alert(data.message || 'Booking save nahi ho paayi.');
+      alert(data.message || 'Booking could not be saved.');
       return;
     }
     sessionStorage.removeItem('selectedHolidayPackage');
@@ -105,14 +105,14 @@ export default function HolidayBookingPage() {
           });
           const verifyData = await verifyRes.json();
           if (!verifyData.success) {
-            alert('Payment verify nahi hua. Agar paise kate hain to support se contact karo.');
+            alert('Payment could not be verified, if money has been deducted, please contact support.');
             setSubmitting(false);
             return;
           }
           await finalizeBooking(response.razorpay_payment_id);
         } catch (err) {
           console.error(err);
-          alert('Payment verify karte waqt error aaya.');
+          alert('An error occurred while processing the payment.');
         } finally {
           setSubmitting(false);
         }
@@ -140,14 +140,14 @@ const orderRes = await fetch('/api/holidays/create-order', {
       });
       const orderData = await orderRes.json();
       if (!orderData.success) {
-        alert(orderData.message || 'Payment order create nahi ho paya.');
+        alert(orderData.message || 'Payment order creation failed.');
         setSubmitting(false);
         return;
       }
       openRazorpayCheckout(orderData);
     } catch (err) {
       console.error(err);
-      alert('Kuch galat ho gaya, dobara try karo.');
+      alert('Something went wrong, please try again.');
       setSubmitting(false);
     }
   }

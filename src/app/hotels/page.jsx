@@ -388,7 +388,7 @@ export default function HotelsPage() {
 
   async function handleHeaderSearch() {
     if (!headerCity || !headerCheckIn || !headerCheckOut) {
-      alert('कृपया सभी विवरण भरें');
+      alert('Please fill in all required fields.');
       return;
     }
 
@@ -404,7 +404,7 @@ export default function HotelsPage() {
     }
 
     if (!resolvedCityId) {
-      alert('कृपया सही शहर चुनें.');
+      alert('Please select a valid city.');
       return;
     }
 

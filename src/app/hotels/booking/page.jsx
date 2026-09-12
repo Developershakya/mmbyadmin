@@ -26,7 +26,7 @@ export default function HotelBookingPage() {
   useEffect(() => {
     const stored = sessionStorage.getItem('selectedHotelRoom');
     if (!stored) {
-      setError('Koi room select nahi kiya gaya. Please dobara try karo.');
+      setError('No room selected, please go back and select a room.');
       setLoading(false);
       return;
     }
@@ -53,13 +53,13 @@ export default function HotelBookingPage() {
         });
         const data = await res.json();
         if (!data.success) {
-          setError(data.message || 'Room ab available nahi hai.');
+          setError(data.message || 'Room not available.');
           return;
         }
         setBlockDetails(data.blockDetails);
       } catch (err) {
         console.error(err);
-        setError('Room price confirm nahi ho paayi.');
+        setError('Room price could not be confirmed.');
       } finally {
         setLoading(false);
       }
@@ -107,16 +107,16 @@ export default function HotelBookingPage() {
   function validatePassengers() {
     for (const p of passengers) {
       if (!p.FirstName || !p.LastName || !p.Email || !p.Phoneno) {
-        alert('Please sabhi passengers ki First Name, Last Name, Email, Phone bharo.');
+        alert('Please fill in all required fields for each passenger.');
         return false;
       }
     }
     if (roomDetail?.IsPANMandatory && !passengers[0].PAN) {
-      alert('Is room ke liye PAN number zaroori hai.');
+      alert('PAN number is required for this room.');
       return false;
     }
     if (roomDetail?.IsPassportMandatory && !passengers[0].PassportNo) {
-      alert('Is room ke liye Passport number zaroori hai.');
+      alert('Passport number is required for this room.');
       return false;
     }
     return true;
@@ -141,7 +141,7 @@ export default function HotelBookingPage() {
     });
     const data = await res.json();
     if (!data.success) {
-      alert(data.message || 'Booking fail ho gayi.');
+      alert(data.message || 'Booking failed.');
       return;
     }
     sessionStorage.removeItem('selectedHotelRoom');
@@ -176,14 +176,14 @@ export default function HotelBookingPage() {
           });
           const verifyData = await verifyRes.json();
           if (!verifyData.success) {
-            alert('Payment verify nahi hua. Agar paise kate hain to support se contact karo.');
+            alert('Payment verification failed, money will be refunded.');
             setSubmitting(false);
             return;
           }
           await finalizeBooking();
         } catch (err) {
           console.error(err);
-          alert('Payment verify karte waqt error aaya.');
+          alert('Error occurred while verifying payment.');
         } finally {
           setSubmitting(false);
         }
@@ -220,14 +220,14 @@ export default function HotelBookingPage() {
       });
       const orderData = await orderRes.json();
       if (!orderData.success) {
-        alert(orderData.message || 'Payment order create nahi ho paya.');
+        alert(orderData.message || 'Payment order creation failed.');
         setSubmitting(false);
         return;
       }
       openRazorpayCheckout(orderData);
     } catch (err) {
       console.error(err);
-      alert('Kuch galat ho gaya, dobara try karo.');
+      alert('Something went wrong, please try again.');
       setSubmitting(false);
     }
   }

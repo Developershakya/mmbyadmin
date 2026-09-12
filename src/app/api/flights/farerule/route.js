@@ -30,7 +30,7 @@ export async function POST(request) {
   const { traceId, resultIndex, srdvType, srdvIndex } = await request.json();
 
   if (!traceId || !resultIndex) {
-    return NextResponse.json({ success: false, message: 'traceId ya resultIndex missing hai.' }, { status: 400 });
+    return NextResponse.json({ success: false, message: 'traceId and resultIndex are required.' }, { status: 400 });
   }
 
   try {
@@ -46,7 +46,7 @@ export async function POST(request) {
     const fareRuleText = findFareRuleHtml(data);
 
     if (!fareRuleText) {
-      return NextResponse.json({ success: false, message: 'Fare rules is flight ke liye available nahi hain.' });
+      return NextResponse.json({ success: false, message: 'Fare rules are not available for the selected flight.' });
     }
 
     return NextResponse.json({ success: true, fareRuleText });

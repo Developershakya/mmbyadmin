@@ -1,8 +1,7 @@
-"use client"
-import { callSrdvApi } from '../../../lib/srdvApi.js';
-import sequelize from '../../../../config/sequelize.js';
-import BusBooking from '../../../../models/BusBooking.js';
-import BusBookingPassenger from '../../../../models/BusBookingPassenger.js';
+import { callSrdvApi } from '../../lib/srdvApi';
+import sequelize from '../../../config/sequelize.js';
+import BusBooking from '../../../models/BusBooking.js';
+import BusBookingPassenger from '../../../models/BusBookingPassenger.js';
 
 function generateBookingRef() {
   const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -30,7 +29,7 @@ export default async function handler(req, res) {
   const { bus, passengers, contact, boardingPoint, droppingPoint, totalPrice } = req.body;
 
   if (!bus || !bus.traceId || !bus.resultIndex || !Array.isArray(passengers) || passengers.length === 0) {
-    return res.status(400).json({ success: false, message: 'Bus aur passengers required hain.' });
+    return res.status(400).json({ success: false, message: 'Bus and passengers are required.' });
   }
 
   const srdvPassengers = toSrdvPassengers(passengers, contact);
@@ -46,7 +45,7 @@ export default async function handler(req, res) {
     });
 
     if (blockData?.Error?.ErrorCode && Number(blockData.Error.ErrorCode) !== 0) {
-      throw new Error(blockData.Error.ErrorMessage || 'Seat block fail ho gaya.');
+      throw new Error(blockData.Error.ErrorMessage || 'Seat block failed.');
     }
 
     const bookData = await callSrdvApi(process.env.BUS_API_URL, 'SaveTicket', {
@@ -55,7 +54,7 @@ export default async function handler(req, res) {
     });
 
     if (bookData?.Error?.ErrorCode && Number(bookData.Error.ErrorCode) !== 0) {
-      throw new Error(bookData.Error.ErrorMessage || 'Booking confirm nahi ho payi.');
+      throw new Error(bookData.Error.ErrorMessage || 'Booking confirmation failed.');
     }
 
     const pnr = bookData?.Response?.PNR || bookData?.PNR || blockData?.Response?.PNR || null;

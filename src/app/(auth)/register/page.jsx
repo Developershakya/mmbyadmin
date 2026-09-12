@@ -31,7 +31,7 @@ export default function RegisterPage() {
       }
       router.push(redirectTo);
     } catch (err) {
-      setError("Kuch galat ho gaya, dobara try karo");
+      setError("Something went wrong. Please try again.");
       setLoading(false);
     }
   };
@@ -75,9 +75,9 @@ export default function RegisterPage() {
         </button>
       </form>
       <p className="text-sm text-gray-500 mt-4">
-        Pehle se account hai?{" "}
+        I already have an account?{" "}
         <Link href={`/login?redirect=${redirectTo}`} className="text-blue-900 font-semibold">
-          Login karo
+          Login
         </Link>
       </p>
     </div>

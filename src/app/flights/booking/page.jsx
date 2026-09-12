@@ -29,7 +29,7 @@ export default function BookingPage() {
   useEffect(() => {
     const stored = sessionStorage.getItem('selectedFlights');
     if (!stored) {
-      setError('Koi flight select nahi ki gayi. Please dobara search karo.');
+      setError('No flights selected, please select flights to proceed.');
       setLoading(false);
       return;
     }
@@ -59,7 +59,7 @@ export default function BookingPage() {
           });
           const data = await res.json();
           if (!data.success) {
-            setError(data.message || 'Flight ab available nahi hai.');
+            setError(data.message || 'Flight not available.');
             return;
           }
           verifiedMap = Object.fromEntries(data.legs.map((l) => [l.legIndex, l]));
@@ -195,14 +195,14 @@ export default function BookingPage() {
           });
           const verifyData = await verifyRes.json();
           if (!verifyData.success) {
-            alert('Payment verify nahi hua. Agar paise kate hain to support se contact karo.');
+            alert('Payment verification failed, please try again.');
             setSubmitting(false);
             return;
           }
           await finalizeBooking();
         } catch (err) {
           console.error(err);
-          alert('Payment verify karte waqt error aaya.');
+          alert('Payment verification failed, please try again.');
         } finally {
           setSubmitting(false);
         }
@@ -239,14 +239,14 @@ const orderRes = await fetch('/api/holidays/create-order', {
       });
       const orderData = await orderRes.json();
       if (!orderData.success) {
-        alert(orderData.message || 'Payment order create nahi ho paya.');
+        alert(orderData.message || 'Payment order creation failed.');
         setSubmitting(false);
         return;
       }
       openRazorpayCheckout(orderData);
     } catch (err) {
       console.error(err);
-      alert('Kuch galat ho gaya, dobara try karo.');
+      alert('Something went wrong, please try again.');
       setSubmitting(false);
     }
   }

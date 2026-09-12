@@ -26,7 +26,7 @@ export default function MealModal({ flight, onClose, onConfirm }) {
         console.log("MEAL RESULT:", data);
 
         if (!res.ok || data.success === false) {
-          setError(data.message || "Meal options fetch nahi ho paye.");
+          setError(data.message || "Meal options could not be fetched.");
           setMeals([]);
         } else {
           const raw = data.data?.MealDynamic || [];
@@ -35,7 +35,7 @@ export default function MealModal({ flight, onClose, onConfirm }) {
         }
       } catch (err) {
         console.error(err);
-        setError("Meal options load nahi ho paye.");
+        setError("Meal options could not be loaded.");
       } finally {
         setLoading(false);
       }
