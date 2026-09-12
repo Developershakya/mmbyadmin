@@ -25,14 +25,14 @@ export default function SeatMapModal({ flight, onClose, onConfirm }) {
         console.log("SEATMAP RESULT:", data);
 
         if (!res.ok || data.success === false) {
-          setError(data.message || "Seat map fetch nahi ho paya.");
+          setError(data.message || "Seat map could not be fetched.");
           setSeatData(null);
         } else {
           setSeatData(data.data);
         }
       } catch (err) {
         console.error(err);
-        setError("Seat map load nahi ho paya.");
+        setError("Seat map could not be loaded.");
       } finally {
         setLoading(false);
       }

@@ -57,11 +57,11 @@ function extractAmenities(rawAmenities) {
   return Array.from(new Set(list)).filter(Boolean);
 }
 
-const indianCities = [
-  'Delhi', 'Mumbai', 'Bengaluru', 'Chennai', 'Kolkata', 'Hyderabad',
-  'Pune', 'Jaipur', 'Ahmedabad', 'Lucknow', 'Chandigarh', 'Goa', 'Agra',
-  'Varanasi', 'Patna', 'Bhopal', 'Indore', 'Nagpur', 'Surat', 'Amritsar',
-];
+// const indianCities = [
+//   'Delhi', 'Mumbai', 'Bengaluru', 'Chennai', 'Kolkata', 'Hyderabad',
+//   'Pune', 'Jaipur', 'Ahmedabad', 'Lucknow', 'Chandigarh', 'Goa', 'Agra',
+//   'Varanasi', 'Patna', 'Bhopal', 'Indore', 'Nagpur', 'Surat', 'Amritsar',
+// ];
 
 function HotelCard({ hotel, traceId, srdvType }) {
   const router = useRouter();
@@ -388,7 +388,7 @@ export default function HotelsPage() {
 
   async function handleHeaderSearch() {
     if (!headerCity || !headerCheckIn || !headerCheckOut) {
-      alert('कृपया सभी विवरण भरें');
+      alert('Please fill in all required fields.');
       return;
     }
 
@@ -404,7 +404,7 @@ export default function HotelsPage() {
     }
 
     if (!resolvedCityId) {
-      alert('कृपया सही शहर चुनें.');
+      alert('Please select a valid city.');
       return;
     }
 

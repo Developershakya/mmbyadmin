@@ -29,7 +29,7 @@ export default function BookingPage() {
   useEffect(() => {
     const stored = sessionStorage.getItem('selectedFlights');
     if (!stored) {
-      setError('Koi flight select nahi ki gayi. Please dobara search karo.');
+      setError('No flights selected, please select flights to proceed.');
       setLoading(false);
       return;
     }
@@ -59,7 +59,7 @@ export default function BookingPage() {
           });
           const data = await res.json();
           if (!data.success) {
-            setError(data.message || 'Flight ab available nahi hai.');
+            setError(data.message || 'Flight not available.');
             return;
           }
           verifiedMap = Object.fromEntries(data.legs.map((l) => [l.legIndex, l]));

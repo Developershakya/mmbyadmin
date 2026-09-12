@@ -66,7 +66,7 @@ export default function HolidayPage() {
       try {
         await navigator.share({
           title: "Check this out!",
-          text: "Mujhe laga tumhe pasand aayega 👇",
+          text: "I think you'll like this 👇",
           url: shareUrl,
         });
       } catch (err) {

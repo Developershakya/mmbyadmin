@@ -56,7 +56,7 @@ export default function HolidayPage() {
         const res = await fetch(`/api/holidays/${slug}`);
         const data = await res.json();
         if (!data.success) {
-          setError(data.message || 'Package nahi mila.');
+          setError(data.message || 'Package not found.');
           return;
         }
         setPkg(data.package);
@@ -64,7 +64,7 @@ export default function HolidayPage() {
         setItinerary(data.itinerary || []);
       } catch (err) {
         console.error('fetchPackage error:', err);
-        setError('Package fetch nahi ho paaya.');
+        setError('Package fetch failed.');
       } finally {
         setLoading(false);
       }
@@ -79,7 +79,7 @@ export default function HolidayPage() {
       try {
         await navigator.share({
           title: pkg?.package_name || "Check this out!",
-          text: "Mujhe laga tumhe pasand aayega 👇",
+          text: "I think you'll like this 👇",
           url: shareUrl,
         });
       } catch (err) {
@@ -118,7 +118,7 @@ export default function HolidayPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-600 font-semibold">
-        Package load ho raha hai...
+        loading Package...
       </div>
     );
   }
@@ -126,7 +126,7 @@ export default function HolidayPage() {
   if (error || !pkg) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-red-500 font-semibold gap-3">
-        <p>{error || 'Package nahi mila.'}</p>
+        <p>{error || 'Package not found.'}</p>
         <button onClick={() => router.push('/')} className="text-blue-600 underline text-sm">
           Home pe wapas jao
         </button>

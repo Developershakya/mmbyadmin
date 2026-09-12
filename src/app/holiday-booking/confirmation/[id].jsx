@@ -18,7 +18,7 @@ export default function HolidayBookingConfirmation() {
           <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
           <h1 className="text-xl font-bold text-gray-900 mb-2">Booking Confirmed!</h1>
           <p className="text-sm text-gray-500 mb-6">
-            Aapki holiday package booking safaltapoorvak ho gayi hai.
+            Your booking has been confirmed successfully.
           </p>
 
           <div className="bg-gray-50 rounded-lg p-4 text-left text-sm mb-6 flex justify-between">

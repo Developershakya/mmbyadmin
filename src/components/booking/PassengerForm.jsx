@@ -111,7 +111,7 @@ export default function PassengerForm({ label, passenger, onChange, flight, inde
 
       <div className="border-t border-gray-100 pt-4">
         <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">
-          Passport Details <span className="text-gray-400 font-normal normal-case">(International ke liye)</span>
+          Passport Details <span className="text-gray-400 font-normal normal-case">(For International Travel)</span>
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
