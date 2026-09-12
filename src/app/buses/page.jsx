@@ -226,7 +226,7 @@ function SeatMapModal({ bus, onClose }) {
         <h2 className="text-lg font-bold text-center mb-1">{bus.operator_name}</h2>
         <p className="text-xs text-gray-500 text-center mb-5">{bus.bus_type} — Select Seats</p>
 
-        {loading && <div className="text-center text-gray-500 py-10">Seats load ho rahe hain...</div>}
+        {loading && <div className="text-center text-gray-500 py-10">Seats loading...</div>}
         {!loading && error && <div className="text-center text-red-500 py-10">{error}</div>}
 
         {!loading && !error && (
@@ -332,11 +332,11 @@ const [openToList, setOpenToList] = useState(false);
   const [sortBy, setSortBy] = useState('recommended');
 
   // Cities list
-  const indianCities = [
-    "Delhi", "Mumbai", "Bengaluru", "Chennai", "Kolkata", "Hyderabad",
-    "Pune", "Jaipur", "Ahmedabad", "Lucknow", "Chandigarh", "Goa", "Agra",
-    "Varanasi", "Patna", "Bhopal", "Indore", "Nagpur", "Surat", "Amritsar",
-  ];
+  // const indianCities = [
+  //   "Delhi", "Mumbai", "Bengaluru", "Chennai", "Kolkata", "Hyderabad",
+  //   "Pune", "Jaipur", "Ahmedabad", "Lucknow", "Chandigarh", "Goa", "Agra",
+  //   "Varanasi", "Patna", "Bhopal", "Indore", "Nagpur", "Surat", "Amritsar",
+  // ];
 
   useEffect(() => {
     if (from) setSearchFrom(from);

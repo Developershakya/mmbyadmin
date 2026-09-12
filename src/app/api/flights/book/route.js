@@ -31,7 +31,7 @@ export async function POST(request) {
   // legs: [{ legIndex, traceId, resultIndex, price, airline_name, flight_number, origin_code, destination_code }]
 
   if (!Array.isArray(legs) || legs.length === 0 || !Array.isArray(passengers) || passengers.length === 0) {
-    return NextResponse.json({ success: false, message: 'Legs aur passengers required hain.' }, { status: 400 });
+    return NextResponse.json({ success: false, message: 'Legs and passengers are required.' }, { status: 400 });
   }
 const srdvPassengers = toSrdvPassengers(passengers, contact);
   const bookedLegs = [];
@@ -106,6 +106,6 @@ const data = await callSrdvApi(process.env.FLIGHT_API_URL, endpointName, {
     return NextResponse.json({ success: true, bookingRef, totalPrice, legs: bookedLegs });
   } catch (err) {
     console.error('book error:', err.message);
-    return NextResponse.json({ success: false, message: err.message || 'Booking fail ho gayi, dobara try karo.' }, { status: 500 });
+    return NextResponse.json({ success: false, message: err.message || 'Booking failed, please try again.' }, { status: 500 });
   }
 }

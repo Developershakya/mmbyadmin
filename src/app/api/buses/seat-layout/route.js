@@ -5,7 +5,7 @@ export async function POST(request) {
   const { traceId, resultIndex } = await request.json();
 
   if (!traceId || !resultIndex) {
-    return NextResponse.json({ success: false, message: 'traceId aur resultIndex zaroori hain' }, { status: 400 });
+    return NextResponse.json({ success: false, message: 'traceid and resultIndex are required' }, { status: 400 });
   }
 
   try {
@@ -40,7 +40,7 @@ function findSeatArray(obj) {
 const seatList = findSeatArray(data) || [];
 
 if (seatList.length === 0) {
-  return NextResponse.json({ success: false, message: 'Seat data available nahi hai.' });
+  return NextResponse.json({ success: false, message: 'No seat data available.' });
 }
 
     // Clean formatting for React UI

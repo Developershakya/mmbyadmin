@@ -31,7 +31,7 @@ export default function BusBookingPage() {
   useEffect(() => {
     const stored = sessionStorage.getItem('selectedBusBooking');
     if (!stored) {
-      setError('Koi seat select nahi ki gayi. Please dobara search karo.');
+      setError('No seats selected. Please search again.');
       setLoading(false);
       return;
     }
@@ -68,7 +68,7 @@ export default function BusBookingPage() {
         );
       }
     } catch (e) {
-      setError('Booking data load nahi ho paaya.');
+      setError('Booking data could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -82,20 +82,20 @@ export default function BusBookingPage() {
 
   function validateForm() {
     if (!contact.name || !contact.email || !contact.phone) {
-      alert('Please contact details bharo.');
+      alert('Please fill in all contact details.');
       return false;
     }
     const incomplete = passengers.some((p) => !p.firstName || !p.lastName || !p.gender || !p.age);
     if (incomplete) {
-      alert('Please sabhi passengers ki details bharo.');
+      alert('Please fill in details for all passengers.');
       return false;
     }
     if (bus?.boarding_points?.length > 0 && !boardingPoint) {
-      alert('Please boarding point select karo.');
+      alert('Please select a boarding point.');
       return false;
     }
     if (bus?.dropping_points?.length > 0 && !droppingPoint) {
-      alert('Please dropping point select karo.');
+      alert('Please select a dropping point.');
       return false;
     }
     return true;
@@ -111,7 +111,7 @@ export default function BusBookingPage() {
     });
     const data = await res.json();
     if (!data.success) {
-      alert(data.message || 'Booking fail ho gayi.');
+      alert(data.message || 'Booking failed, please try again.');
       return;
     }
     sessionStorage.removeItem('selectedBusBooking');
@@ -142,14 +142,14 @@ export default function BusBookingPage() {
           });
           const verifyData = await verifyRes.json();
           if (!verifyData.success) {
-            alert('Payment verify nahi hua. Agar paise kate hain to support se contact karo.');
+            alert('Payment verification failed, please try again.');
             setSubmitting(false);
             return;
           }
           await finalizeBooking();
         } catch (err) {
           console.error(err);
-          alert('Payment verify karte waqt error aaya.');
+          alert('Payment verification failed, please try again.');
         } finally {
           setSubmitting(false);
         }
@@ -184,14 +184,14 @@ export default function BusBookingPage() {
       });
       const orderData = await orderRes.json();
       if (!orderData.success) {
-        alert(orderData.message || 'Payment order create nahi ho paya.');
+        alert(orderData.message || 'Payment order creation failed.');
         setSubmitting(false);
         return;
       }
       openRazorpayCheckout(orderData);
     } catch (err) {
       console.error(err);
-      alert('Kuch galat ho gaya, dobara try karo.');
+      alert('Something went wrong, please try again.');
       setSubmitting(false);
     }
   }
