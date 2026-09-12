@@ -321,7 +321,7 @@ export default function FlightsPage() {
 
   // ⭐ NEW: date-strip ke har date ka cheapest price fetch karo
 useEffect(() => {
-  if (!router.isReady || trip === 'multicity' || dateStrip.length === 0) return;
+  if (trip === 'multicity' || dateStrip.length === 0) return;
 
   let cancelled = false;
 

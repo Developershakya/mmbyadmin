@@ -332,11 +332,11 @@ const [openToList, setOpenToList] = useState(false);
   const [sortBy, setSortBy] = useState('recommended');
 
   // Cities list
-  // const indianCities = [
-  //   "Delhi", "Mumbai", "Bengaluru", "Chennai", "Kolkata", "Hyderabad",
-  //   "Pune", "Jaipur", "Ahmedabad", "Lucknow", "Chandigarh", "Goa", "Agra",
-  //   "Varanasi", "Patna", "Bhopal", "Indore", "Nagpur", "Surat", "Amritsar",
-  // ];
+  const indianCities = [
+    "Delhi", "Mumbai", "Bengaluru", "Chennai", "Kolkata", "Hyderabad",
+    "Pune", "Jaipur", "Ahmedabad", "Lucknow", "Chandigarh", "Goa", "Agra",
+    "Varanasi", "Patna", "Bhopal", "Indore", "Nagpur", "Surat", "Amritsar",
+  ];
 
   useEffect(() => {
     if (from) setSearchFrom(from);
