@@ -4,10 +4,10 @@
  * { vehicle, category, seats, ac, price } as expected by the Package Builder UI.
  */
 
-const CAR_API_URL = process.env.CAR_API_URL || 'https://car.srdvtest.com/v4/rest';
-const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || 'SRDV_DEMO_CLIENT';
-const SRDV_USERNAME = process.env.SRDV_USERNAME || 'srdv_agent';
-const SRDV_PASSWORD = process.env.SRDV_PASSWORD || 'srdv_secret';
+const CAR_API_URL = process.env.SRDV_CAR_URL || process.env.CAR_API_URL || 'https://car.srdvapi.com/v4/rest';
+const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || '';
+const SRDV_USERNAME = process.env.SRDV_USERNAME || '';
+const SRDV_PASSWORD = process.env.SRDV_PASSWORD || '';
 const SRDV_API_TOKEN = process.env.SRDV_API_TOKEN || '';
 
 export function buildCarSearchPayload(params = {}, endUserIp = '127.0.0.1') {
@@ -105,81 +105,16 @@ export function mapCarSearchResults(raw, searchContext = {}) {
     });
   }
 
-  // Realistic fallback when live SRDV API endpoint is not connected
-  if (results.length === 0) {
-    const pickup = searchContext.pickup || 'Kullu Airport';
-    const drop = searchContext.drop || 'Manali Hotel';
-    const date = searchContext.date || '12 Oct 2026';
-    const time = searchContext.time || '12:30 PM';
-
-    return [
-      {
-        id: 'CAB-ETIOS-01',
-        carId: 'CAB-201',
-        resultIndex: '0',
-        traceId: 'TR-CAB-DEMO-01',
-        vehicle: 'Toyota Etios',
-        category: 'Sedan',
-        seats: 4,
-        ac: true,
-        price: 2500,
-        pickup,
-        drop,
-        date,
-        time,
-        fuelType: 'Petrol / CNG',
-        tollCharges: 'Included'
-      },
-      {
-        id: 'CAB-DZIRE-02',
-        carId: 'CAB-202',
-        resultIndex: '1',
-        traceId: 'TR-CAB-DEMO-02',
-        vehicle: 'Swift Dzire',
-        category: 'Sedan',
-        seats: 4,
-        ac: true,
-        price: 2200,
-        pickup,
-        drop,
-        date,
-        time,
-        fuelType: 'Petrol / CNG',
-        tollCharges: 'Included'
-      },
-      {
-        id: 'CAB-INNOVA-03',
-        carId: 'CAB-203',
-        resultIndex: '2',
-        traceId: 'TR-CAB-DEMO-03',
-        vehicle: 'Innova Crysta',
-        category: 'SUV',
-        seats: 6,
-        ac: true,
-        price: 4500,
-        pickup,
-        drop,
-        date,
-        time,
-        fuelType: 'Diesel',
-        tollCharges: 'Included'
-      }
-    ];
-  }
-
+  // Pure zero-fallback: empty array if no live results from upstream
   return results;
 }
 
 export async function searchCars(params = {}, endUserIp = '127.0.0.1') {
-  // If no external live base URL or token is provided, respond instantly with local engine
-  if (!process.env.CAR_API_URL && !process.env.SRDV_API_TOKEN) {
-    return mapCarSearchResults(null, params);
+  if (!SRDV_CLIENT_ID || !SRDV_USERNAME || !SRDV_PASSWORD) {
+    throw new Error('SRDV credentials are not configured in the server environment (missing SRDV_CLIENT_ID, SRDV_USERNAME, or SRDV_PASSWORD).');
   }
+
   const payload = buildCarSearchPayload(params, endUserIp);
-  try {
-    const raw = await callCarSearch(payload);
-    return mapCarSearchResults(raw, params);
-  } catch (err) {
-    return mapCarSearchResults(null, params);
-  }
+  const raw = await callCarSearch(payload);
+  return mapCarSearchResults(raw, params);
 }

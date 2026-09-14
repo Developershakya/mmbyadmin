@@ -208,16 +208,30 @@ export function generatePackagePdf(pkg, filename = 'TravelPro-Holiday-Package.pd
 
         if (svc.type === 'flight') {
           const d = svc.data || {};
-          svcDetails = `${d.airline || 'IndiGo'} ${d.flightNumber || ''} | ${d.from || 'DEL'} -> ${d.to || 'KUU'} | ${d.departure || '09:20'} - ${d.arrival || '11:35'} | Fare: Rs. ${(d.fare || 5500).toLocaleString('en-IN')}`;
+          const route = d.from && d.to ? ` | ${d.from} -> ${d.to}` : '';
+          const timing = d.departure || d.arrival ? ` | ${d.departure || ''} - ${d.arrival || ''}` : '';
+          const fareStr = d.fare ? ` | Fare: Rs. ${Number(d.fare).toLocaleString('en-IN')}` : '';
+          svcDetails = `${d.airline || 'Flight'} ${d.flightNumber || ''}${route}${timing}${fareStr}`.trim();
         } else if (svc.type === 'hotel') {
           const d = svc.data || {};
-          svcDetails = `${d.name || 'Resort Stay'} (${d.stars || 4} Star) | ${d.room || 'Deluxe'} | ${d.meal || 'Breakfast'} | Rs. ${(d.price || 4500).toLocaleString('en-IN')}/night`;
+          const starStr = d.stars ? ` (${d.stars} Star)` : '';
+          const roomStr = d.room ? ` | ${d.room}` : '';
+          const mealStr = d.meal ? ` | ${d.meal}` : '';
+          const priceStr = d.price ? ` | Rs. ${Number(d.price).toLocaleString('en-IN')}/night` : '';
+          svcDetails = `${d.name || 'Hotel Stay'}${starStr}${roomStr}${mealStr}${priceStr}`.trim();
         } else if (svc.type === 'cab') {
           const d = svc.data || {};
-          svcDetails = `${d.vehicle || 'Sedan'} (${d.category || 'Cab'}) | ${d.pickup || 'Pickup'} -> ${d.drop || 'Hotel'} | Rs. ${(d.price || 2500).toLocaleString('en-IN')}`;
+          const catStr = d.category ? ` (${d.category})` : '';
+          const routeStr = d.pickup && d.drop ? ` | ${d.pickup} -> ${d.drop}` : '';
+          const priceStr = d.price ? ` | Rs. ${Number(d.price).toLocaleString('en-IN')}` : '';
+          svcDetails = `${d.vehicle || 'Cab'}${catStr}${routeStr}${priceStr}`.trim();
         } else if (svc.type === 'bus') {
           const d = svc.data || {};
-          svcDetails = `${d.operator || 'HRTC Volvo'} (${d.busType || 'AC Sleeper'}) | ${d.departure || '21:00'} -> ${d.arrival || '06:30'} | Rs. ${(d.price || 1400).toLocaleString('en-IN')}/seat`;
+          const typeStr = d.busType ? ` (${d.busType})` : '';
+          const routeStr = d.from && d.to ? ` | ${d.from} -> ${d.to}` : '';
+          const timeStr = d.departure || d.arrival ? ` | ${d.departure || ''} - ${d.arrival || ''}` : '';
+          const priceStr = d.price ? ` | Rs. ${Number(d.price).toLocaleString('en-IN')}/seat` : '';
+          svcDetails = `${d.operator || 'Bus'}${typeStr}${routeStr}${timeStr}${priceStr}`.trim();
         } else if (svc.type === 'sightseeing') {
           const items = svc.data?.items || [];
           svcDetails = items.map(i => i.name).join(', ') || 'Scenic local sightseeing tour';

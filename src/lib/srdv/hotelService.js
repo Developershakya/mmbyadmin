@@ -3,10 +3,10 @@
  * Follows Hotel v8 specification with destination/cityid mapping.
  */
 
-const HOTEL_API_URL = process.env.HOTEL_API_URL || 'https://hotel.srdvtest.com/v8/rest';
-const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || 'SRDV_DEMO_CLIENT';
-const SRDV_USERNAME = process.env.SRDV_USERNAME || 'srdv_agent';
-const SRDV_PASSWORD = process.env.SRDV_PASSWORD || 'srdv_secret';
+const HOTEL_API_URL = process.env.SRDV_HOTEL_URL || process.env.HOTEL_API_URL || 'https://hotel.srdvapi.com/v8/rest';
+const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || '';
+const SRDV_USERNAME = process.env.SRDV_USERNAME || '';
+const SRDV_PASSWORD = process.env.SRDV_PASSWORD || '';
 const SRDV_API_TOKEN = process.env.SRDV_API_TOKEN || '';
 
 export function buildHotelSearchPayload(params = {}, endUserIp = '127.0.0.1') {
@@ -111,76 +111,16 @@ export function mapHotelSearchResults(raw, searchContext = {}) {
     });
   }
 
-  // Realistic fallback when live SRDV API endpoint is not connected
-  if (results.length === 0) {
-    const dest = searchContext.destination || 'Manali';
-    const nights = Number(searchContext.nights) || 1;
-
-    return [
-      {
-        id: 'HT-SVR-01',
-        hotelId: 'HT-301',
-        resultIndex: '0',
-        traceId: 'TR-HT-DEMO-01',
-        name: 'Snow Valley Resort',
-        stars: 4,
-        room: 'Deluxe Room',
-        meal: 'Breakfast Included',
-        price: 4500,
-        rating: 4.0,
-        reviews: 2348,
-        image: 'https://images.unsplash.com/photo-1601918774946-25832a4be0d6?q=80&w=400&auto=format&fit=crop',
-        location: dest,
-        nights
-      },
-      {
-        id: 'HT-THM-02',
-        hotelId: 'HT-302',
-        resultIndex: '1',
-        traceId: 'TR-HT-DEMO-02',
-        name: 'The Himalayan',
-        stars: 5,
-        room: 'Premium Room',
-        meal: 'Breakfast Included',
-        price: 6500,
-        rating: 4.6,
-        reviews: 1802,
-        image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=400&auto=format&fit=crop',
-        location: dest,
-        nights
-      },
-      {
-        id: 'HT-MNH-03',
-        hotelId: 'HT-303',
-        resultIndex: '2',
-        traceId: 'TR-HT-DEMO-03',
-        name: 'Manali Heights',
-        stars: 4,
-        room: 'Standard Room',
-        meal: 'Breakfast Included',
-        price: 3800,
-        rating: 4.1,
-        reviews: 987,
-        image: 'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?q=80&w=400&auto=format&fit=crop',
-        location: dest,
-        nights
-      }
-    ];
-  }
-
+  // Pure zero-fallback: empty array if no live results from upstream
   return results;
 }
 
 export async function searchHotels(params = {}, endUserIp = '127.0.0.1') {
-  // If no external live base URL or token is provided, respond instantly with local engine
-  if (!process.env.HOTEL_API_URL && !process.env.SRDV_API_TOKEN) {
-    return mapHotelSearchResults(null, params);
+  if (!SRDV_CLIENT_ID || !SRDV_USERNAME || !SRDV_PASSWORD) {
+    throw new Error('SRDV credentials are not configured in the server environment (missing SRDV_CLIENT_ID, SRDV_USERNAME, or SRDV_PASSWORD).');
   }
+
   const payload = buildHotelSearchPayload(params, endUserIp);
-  try {
-    const raw = await callHotelSearch(payload);
-    return mapHotelSearchResults(raw, params);
-  } catch (err) {
-    return mapHotelSearchResults(null, params);
-  }
+  const raw = await callHotelSearch(payload);
+  return mapHotelSearchResults(raw, params);
 }

@@ -3,10 +3,10 @@
  * Follows Bus v8 specification with SourceId & DestinationId mapping.
  */
 
-const BUS_API_URL = process.env.BUS_API_URL || 'https://bus.srdvtest.com/v8/rest';
-const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || 'SRDV_DEMO_CLIENT';
-const SRDV_USERNAME = process.env.SRDV_USERNAME || 'srdv_agent';
-const SRDV_PASSWORD = process.env.SRDV_PASSWORD || 'srdv_secret';
+const BUS_API_URL = process.env.SRDV_BUS_URL || process.env.BUS_API_URL || 'https://bus.srdvapi.com/v8/rest';
+const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || '';
+const SRDV_USERNAME = process.env.SRDV_USERNAME || '';
+const SRDV_PASSWORD = process.env.SRDV_PASSWORD || '';
 const SRDV_API_TOKEN = process.env.SRDV_API_TOKEN || '';
 
 export function buildBusSearchPayload(params = {}, endUserIp = '127.0.0.1') {
@@ -100,82 +100,16 @@ export function mapBusSearchResults(raw, searchContext = {}) {
     });
   }
 
-  // Realistic fallback results when live SRDV API endpoint is not connected
-  if (results.length === 0) {
-    const from = searchContext.from || searchContext.fromCity || 'Delhi';
-    const to = searchContext.to || searchContext.toCity || 'Manali';
-
-    return [
-      {
-        id: 'BUS-HRTC-01',
-        busId: 'BUS-101',
-        resultIndex: '0',
-        traceId: 'TR-BUS-DEMO-01',
-        operator: 'HRTC Volvo',
-        busType: 'AC Sleeper',
-        departure: '21:00',
-        arrival: '06:30',
-        duration: '9h 30m',
-        from,
-        to,
-        price: 1400,
-        seatsAvailable: 22,
-        rating: 4.6,
-        boardingPoints: ['ISBT Kashmiri Gate', 'Majnu Ka Tilla'],
-        droppingPoints: ['Manali Private Bus Stand', 'Mall Road']
-      },
-      {
-        id: 'BUS-HPTDC-02',
-        busId: 'BUS-102',
-        resultIndex: '1',
-        traceId: 'TR-BUS-DEMO-02',
-        operator: 'Himachal Tourism (HPTDC)',
-        busType: 'AC Semi-Sleeper',
-        departure: '20:00',
-        arrival: '05:45',
-        duration: '9h 45m',
-        from,
-        to,
-        price: 1100,
-        seatsAvailable: 15,
-        rating: 4.4,
-        boardingPoints: ['Himachal Bhavan, Mandi House', 'Kashmiri Gate'],
-        droppingPoints: ['HPTDC Club House', 'Manali Bus Stand']
-      },
-      {
-        id: 'BUS-ZING-03',
-        busId: 'BUS-103',
-        resultIndex: '2',
-        traceId: 'TR-BUS-DEMO-03',
-        operator: 'Zing Bus',
-        busType: 'Non-AC Seater',
-        departure: '22:15',
-        arrival: '08:00',
-        duration: '9h 45m',
-        from,
-        to,
-        price: 850,
-        seatsAvailable: 28,
-        rating: 4.2,
-        boardingPoints: ['Akshardham Metro Station', 'Kashmiri Gate'],
-        droppingPoints: ['Patlikuhal', 'Manali Private Parking']
-      }
-    ];
-  }
-
+  // Pure zero-fallback: empty array if no live results from upstream
   return results;
 }
 
 export async function searchBuses(params = {}, endUserIp = '127.0.0.1') {
-  // If no external live base URL or token is provided, respond instantly with local engine
-  if (!process.env.BUS_API_URL && !process.env.SRDV_API_TOKEN) {
-    return mapBusSearchResults(null, params);
+  if (!SRDV_CLIENT_ID || !SRDV_USERNAME || !SRDV_PASSWORD) {
+    throw new Error('SRDV credentials are not configured in the server environment (missing SRDV_CLIENT_ID, SRDV_USERNAME, or SRDV_PASSWORD).');
   }
+
   const payload = buildBusSearchPayload(params, endUserIp);
-  try {
-    const raw = await callBusSearch(payload);
-    return mapBusSearchResults(raw, params);
-  } catch (err) {
-    return mapBusSearchResults(null, params);
-  }
+  const raw = await callBusSearch(payload);
+  return mapBusSearchResults(raw, params);
 }

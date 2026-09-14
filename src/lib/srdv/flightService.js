@@ -1,18 +1,20 @@
 /**
  * SRDV Flight Service (Flight API v8 REST)
+ * Strictly connects to SRDV live/test endpoints.
+ * ZERO mock or static fallback data.
  */
 
-const FLIGHT_API_URL = process.env.FLIGHT_API_URL || 'https://flight.srdvtest.com/v8/rest';
-const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || 'SRDV_DEMO_CLIENT';
-const SRDV_USERNAME = process.env.SRDV_USERNAME || 'srdv_agent';
-const SRDV_PASSWORD = process.env.SRDV_PASSWORD || 'srdv_secret';
+const FLIGHT_API_URL = process.env.SRDV_FLIGHT_URL || process.env.FLIGHT_API_URL || 'https://flight.srdvapi.com/v8/rest';
+const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || '';
+const SRDV_USERNAME = process.env.SRDV_USERNAME || '';
+const SRDV_PASSWORD = process.env.SRDV_PASSWORD || '';
 const SRDV_API_TOKEN = process.env.SRDV_API_TOKEN || '';
 
 export function buildFlightSearchPayload(params = {}, endUserIp = '127.0.0.1') {
   const {
     origin = 'DEL',
     destination = 'KUU',
-    departureDate = '2025-12-25',
+    departureDate = '',
     returnDate = '',
     adultCount = 1,
     childCount = 0,
@@ -22,7 +24,15 @@ export function buildFlightSearchPayload(params = {}, endUserIp = '127.0.0.1') {
     directFlight = false
   } = params;
 
-  const prefDepTime = departureDate.includes('T') ? departureDate : `${departureDate}T00:00:00`;
+  // Format date to ISO without timezone shift if date string provided
+  let formattedDate = departureDate;
+  if (!formattedDate) {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    formattedDate = d.toISOString().split('T')[0];
+  }
+  const prefDepTime = formattedDate.includes('T') ? formattedDate : `${formattedDate}T00:00:00`;
+
   const segments = [
     {
       Origin: String(origin).toUpperCase().trim(),
@@ -43,7 +53,7 @@ export function buildFlightSearchPayload(params = {}, endUserIp = '127.0.0.1') {
   }
 
   return {
-    EndUserIp: endUserIp,
+    EndUserIp: process.env.SRDV_END_USER_IP || endUserIp || '127.0.0.1',
     ClientId: SRDV_CLIENT_ID,
     UserName: SRDV_USERNAME,
     Password: SRDV_PASSWORD,
@@ -57,9 +67,13 @@ export function buildFlightSearchPayload(params = {}, endUserIp = '127.0.0.1') {
 }
 
 export async function callFlightSearch(payload) {
-  const endpoint = `${FLIGHT_API_URL.replace(/\/$/, '')}/Search`;
+  let endpoint = FLIGHT_API_URL.trim();
+  if (!endpoint.toLowerCase().endsWith('/search')) {
+    endpoint = `${endpoint.replace(/\/$/, '')}/Search`;
+  }
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
 
   try {
     const headers = {
@@ -80,12 +94,19 @@ export async function callFlightSearch(payload) {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`Upstream SRDV Flight API returned HTTP ${response.status}`);
+      throw new Error(`SRDV Flight API returned HTTP ${response.status} (${response.statusText})`);
     }
 
     const data = await response.json();
-    if (data && data.Response && data.Response.Error && data.Response.Error.ErrorCode !== 0) {
-      throw new Error(data.Response.Error.ErrorMessage || 'SRDV Flight Search API Error');
+
+    // Check top-level Error object
+    if (data?.Error && data.Error.ErrorCode && data.Error.ErrorCode !== '0' && data.Error.ErrorCode !== 0) {
+      throw new Error(`SRDV Flight API [Error ${data.Error.ErrorCode}]: ${data.Error.ErrorMessage || 'Search failed'}`);
+    }
+
+    // Check nested Response.Error object
+    if (data?.Response?.Error && data.Response.Error.ErrorCode && data.Response.Error.ErrorCode !== '0' && data.Response.Error.ErrorCode !== 0) {
+      throw new Error(`SRDV Flight API [Error ${data.Response.Error.ErrorCode}]: ${data.Response.Error.ErrorMessage || 'Search failed'}`);
     }
 
     return data;
@@ -102,113 +123,51 @@ export function mapFlightSearchResults(raw, searchContext = {}) {
   if (Array.isArray(rawList)) {
     const flattened = Array.isArray(rawList[0]) ? rawList[0] : rawList;
     flattened.forEach((item, idx) => {
-      const seg = item.Segments?.[0]?.[0] || item.Segments?.[0] || {};
+      const segGroup = Array.isArray(item.Segments) ? (Array.isArray(item.Segments[0]) ? item.Segments[0] : item.Segments) : [];
+      const seg = segGroup[0] || {};
       const fare = item.Fare || {};
+      const airlineCode = seg.Airline?.AirlineCode || item.AirlineCode || '';
+      const flightNum = seg.Airline?.FlightNumber || item.FlightNumber || '';
+      const fullFlightNumber = flightNum ? `${airlineCode} ${flightNum}`.trim() : airlineCode;
+
       results.push({
         id: `FL-${item.ResultIndex || idx}`,
-        resultIndex: item.ResultIndex || String(idx),
-        traceId: raw?.Response?.TraceId || raw?.TraceId || 'TR-FLIGHT',
-        airline: seg.Airline?.AirlineName || item.AirlineName || 'IndiGo',
-        airlineCode: seg.Airline?.AirlineCode || '6E',
-        flightNumber: seg.Airline?.FlightNumber || `${seg.Airline?.AirlineCode || '6E'} ${1000 + idx}`,
-        from: seg.Origin?.Airport?.AirportCode || searchContext.origin || 'DEL',
-        fromName: seg.Origin?.Airport?.CityName || 'Delhi',
-        to: seg.Destination?.Airport?.AirportCode || searchContext.destination || 'KUU',
-        toName: seg.Destination?.Airport?.CityName || 'Kullu',
-        departure: seg.Origin?.DepTime ? seg.Origin.DepTime.split('T')[1]?.slice(0, 5) : '09:20',
-        arrival: seg.Destination?.ArrTime ? seg.Destination.ArrTime.split('T')[1]?.slice(0, 5) : '11:35',
-        duration: seg.Duration ? `${Math.floor(seg.Duration / 60)}h ${seg.Duration % 60}m` : '2h 15m',
+        resultIndex: String(item.ResultIndex ?? idx),
+        traceId: raw?.Response?.TraceId || raw?.TraceId || '',
+        srdvType: 'flight',
+        srdvIndex: item.ResultIndex ?? idx,
+        isLCC: Boolean(item.IsLCC),
+        airline: seg.Airline?.AirlineName || item.AirlineName || airlineCode || 'Airline',
+        airlineCode: airlineCode,
+        flightNumber: fullFlightNumber || 'Flight',
+        from: seg.Origin?.Airport?.AirportCode || searchContext.origin || '',
+        fromName: seg.Origin?.Airport?.CityName || seg.Origin?.Airport?.AirportName || searchContext.fromName || searchContext.origin || '',
+        to: seg.Destination?.Airport?.AirportCode || searchContext.destination || '',
+        toName: seg.Destination?.Airport?.CityName || seg.Destination?.Airport?.AirportName || searchContext.toName || searchContext.destination || '',
+        departure: seg.Origin?.DepTime ? seg.Origin.DepTime.split('T')[1]?.slice(0, 5) : '',
+        arrival: seg.Destination?.ArrTime ? seg.Destination.ArrTime.split('T')[1]?.slice(0, 5) : '',
+        duration: seg.Duration ? `${Math.floor(seg.Duration / 60)}h ${seg.Duration % 60}m` : '',
         cabin: seg.CabinClass === 4 ? 'Business' : seg.CabinClass === 3 ? 'Premium Economy' : 'Economy',
-        fare: Math.round(fare.PublishedPrice || fare.OfferedFare || item.Price || 5500),
-        tax: Math.round(fare.Tax || 650),
+        fare: Math.round(fare.PublishedPrice || fare.OfferedFare || item.Price || 0),
+        tax: Math.round(fare.Tax || 0),
+        baseFare: Math.round(fare.BaseFare || 0),
         baggage: seg.IncludedBaggage || '15 Kg',
-        refundable: item.IsRefundable !== false
+        refundable: item.IsRefundable !== false,
+        apiSelected: true
       });
     });
   }
 
-  // Fallback high-fidelity dataset if live upstream is unreachable/demo mode
-  if (results.length === 0) {
-    const orig = searchContext.origin || 'DEL';
-    const dest = searchContext.destination || 'KUU';
-    return [
-      {
-        id: 'FL-6E-101',
-        resultIndex: '0',
-        traceId: 'TR-DEMO-FLIGHT-1',
-        airline: 'IndiGo',
-        airlineCode: '6E',
-        flightNumber: '6E 1234',
-        from: orig,
-        fromName: orig === 'DEL' ? 'Delhi' : orig,
-        to: dest,
-        toName: dest === 'KUU' ? 'Bhuntar / Kullu' : dest,
-        departure: '09:20',
-        arrival: '11:35',
-        duration: '2h 15m',
-        cabin: 'Economy',
-        fare: 5500,
-        tax: 650,
-        baggage: '15 Kg',
-        refundable: true
-      },
-      {
-        id: 'FL-AI-980',
-        resultIndex: '1',
-        traceId: 'TR-DEMO-FLIGHT-2',
-        airline: 'Air India',
-        airlineCode: 'AI',
-        flightNumber: 'AI 980',
-        from: orig,
-        fromName: orig === 'DEL' ? 'Delhi' : orig,
-        to: dest,
-        toName: dest === 'KUU' ? 'Bhuntar / Kullu' : dest,
-        departure: '10:15',
-        arrival: '12:40',
-        duration: '2h 25m',
-        cabin: 'Economy',
-        fare: 6200,
-        tax: 720,
-        baggage: '20 Kg',
-        refundable: true
-      },
-      {
-        id: 'FL-UK-765',
-        resultIndex: '2',
-        traceId: 'TR-DEMO-FLIGHT-3',
-        airline: 'Vistara',
-        airlineCode: 'UK',
-        flightNumber: 'UK 765',
-        from: orig,
-        fromName: orig === 'DEL' ? 'Delhi' : orig,
-        to: dest,
-        toName: dest === 'KUU' ? 'Bhuntar / Kullu' : dest,
-        departure: '13:10',
-        arrival: '15:30',
-        duration: '2h 20m',
-        cabin: 'Economy',
-        fare: 5900,
-        tax: 680,
-        baggage: '15 Kg',
-        refundable: false
-      }
-    ];
-  }
-
+  // Pure zero-fallback: empty array if no live results from upstream
   return results;
 }
 
 export async function searchFlights(params = {}, endUserIp = '127.0.0.1') {
-  // If no external live base URL or token is provided, respond instantly with local engine
-  if (!process.env.FLIGHT_API_URL && !process.env.SRDV_API_TOKEN) {
-    return mapFlightSearchResults(null, params);
+  if (!SRDV_CLIENT_ID || !SRDV_USERNAME || !SRDV_PASSWORD) {
+    throw new Error('SRDV credentials are not configured in the server environment (missing SRDV_CLIENT_ID, SRDV_USERNAME, or SRDV_PASSWORD).');
   }
+
   const payload = buildFlightSearchPayload(params, endUserIp);
-  try {
-    const raw = await callFlightSearch(payload);
-    return mapFlightSearchResults(raw, params);
-  } catch (err) {
-    // Graceful fallback for demo/sandbox environments
-    return mapFlightSearchResults(null, params);
-  }
+  const raw = await callFlightSearch(payload);
+  return mapFlightSearchResults(raw, params);
 }

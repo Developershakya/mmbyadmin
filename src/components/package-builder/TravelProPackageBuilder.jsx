@@ -2602,28 +2602,21 @@ export default function TravelProPackageBuilder({
               </div>
             </div>
 
-            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setUnsavedModalState({ isOpen: false, targetStep: null })}
-                className="px-3.5 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-medium hover:bg-slate-50 transition cursor-pointer text-center"
-              >
-                Stay Here
-              </button>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={handleDiscardAndProceed}
-                className="px-3.5 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold transition cursor-pointer text-center"
+                className="flex-1 sm:flex-none px-4 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold transition cursor-pointer text-center"
               >
-                Discard &amp; Leave
+                Discard Changes &amp; Next
               </button>
               <button
                 type="button"
                 disabled={isSaving}
                 onClick={handleSaveAndProceed}
-                className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition cursor-pointer shadow-xs disabled:opacity-50 text-center"
+                className="flex-1 sm:flex-none px-5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition cursor-pointer shadow-xs disabled:opacity-50 text-center"
               >
-                {isSaving ? 'Saving Draft...' : 'Save Draft & Proceed'}
+                {isSaving ? 'Saving...' : 'Save & Next'}
               </button>
             </div>
           </div>
