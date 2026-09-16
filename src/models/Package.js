@@ -195,6 +195,30 @@ const Package = sequelize.define(
       allowNull: true,
       defaultValue: [],
     },
+    policyVisibility: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: { terms: true, cancellation: true, dateChange: true },
+    },
+    priceBreakdownVisibility: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: {
+        hotel: true,
+        flight: true,
+        cab: true,
+        bus: true,
+        sightseeing: true,
+        activity: true,
+        meal: true,
+        base: true,
+        markup: true,
+        tax: true,
+        discount: true,
+        final: true,
+        perPerson: true
+      },
+    },
     customization: {
       type: DataTypes.JSON,
       allowNull: true,
