@@ -11,7 +11,11 @@ export async function searchFlightsApi(params = {}) {
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Flight search failed with status ${res.status}`);
+    const err = new Error(errorData.error || `Flight search failed with status ${res.status}`);
+    err.isIpError = Boolean(errorData.isIpError);
+    err.serverOutboundIp = errorData.serverOutboundIp || '34.34.254.22';
+    err.whitelistedIp = errorData.whitelistedIp || '122.161.76.198';
+    throw err;
   }
   const data = await res.json();
   return data.results || data.flights || [];

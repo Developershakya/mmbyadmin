@@ -6,6 +6,7 @@ import Bus from "./Bus.js";
 import Cities from "./Cities.js";
 import User from "./User.js";
 import Sightseeing from "./Sightseeing.js";
+import { SRDV_BUS_CITIES, SRDV_HOTEL_CITIES } from "../lib/srdv/cityMappings.js";
 
 export {
   sequelize,
@@ -138,66 +139,34 @@ export async function initDb() {
       ]);
     }
 
-    // Seed Bus Cities
+    // Seed or update Bus Cities with authentic SRDV city codes
     const busCount = await Bus.count();
-    if (busCount === 0) {
-      await Bus.bulkCreate([
-        { CityId: 1, CityName: "Delhi (ISBT Kashmiri Gate / Majnu Ka Tila)" },
-        { CityId: 2, CityName: "Manali (Private Bus Stand / Mall Road)" },
-        { CityId: 3, CityName: "Shimla (ISBT Tutikandi)" },
-        { CityId: 4, CityName: "Chandigarh (Sector 43 ISBT)" },
-        { CityId: 5, CityName: "Jaipur (Sindhi Camp)" },
-        { CityId: 6, CityName: "Amritsar (ISBT Railway Link)" },
-        { CityId: 7, CityName: "Dharamshala (McLeodGanj)" },
-        { CityId: 8, CityName: "Haridwar / Rishikesh" },
-      ]);
+    const existingBus = await Bus.findOne({ where: { CityId: 230 } });
+    if (busCount === 0 || !existingBus) {
+      await Bus.destroy({ where: {} });
+      await Bus.bulkCreate(
+        SRDV_BUS_CITIES.map((c) => ({
+          CityId: c.CityId,
+          CityName: `${c.CityName} (${c.state})`,
+        }))
+      );
     }
 
-    // Seed Hotels
+    // Seed or update Hotels with authentic SRDV city IDs
     const hotelCount = await Hotel.count();
-    if (hotelCount === 0) {
-      await Hotel.bulkCreate([
-        {
-          Destination: "Manali",
-          cityid: "725862",
+    const existingHotel = await Hotel.findOne({ where: { cityid: "130443" } });
+    if (hotelCount === 0 || !existingHotel) {
+      await Hotel.destroy({ where: {} });
+      await Hotel.bulkCreate(
+        SRDV_HOTEL_CITIES.map((h) => ({
+          Destination: h.Destination,
+          cityid: h.cityid,
           country: "India",
           countrycode: "IN",
-          stateprovince: "Himachal Pradesh",
+          stateprovince: h.stateprovince,
           status: "Active",
-        },
-        {
-          Destination: "Shimla",
-          cityid: "725863",
-          country: "India",
-          countrycode: "IN",
-          stateprovince: "Himachal Pradesh",
-          status: "Active",
-        },
-        {
-          Destination: "Delhi",
-          cityid: "725864",
-          country: "India",
-          countrycode: "IN",
-          stateprovince: "Delhi",
-          status: "Active",
-        },
-        {
-          Destination: "Jaipur",
-          cityid: "725865",
-          country: "India",
-          countrycode: "IN",
-          stateprovince: "Rajasthan",
-          status: "Active",
-        },
-        {
-          Destination: "Goa",
-          cityid: "725866",
-          country: "India",
-          countrycode: "IN",
-          stateprovince: "Goa",
-          status: "Active",
-        },
-      ]);
+        }))
+      );
     }
 
     // Seed Sightseeing Master

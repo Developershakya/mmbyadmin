@@ -217,22 +217,23 @@ export default function App() {
 
   const handleSaveBuilderPackage = async (packageData) => {
     try {
-      const res = await savePackage(packageData);
-      if (res && res.success) {
-        showToast(`Package "${packageData.name || packageData.packageName || 'Custom Package'}" saved successfully!`);
-        const refreshed = await fetchPackages();
-        if (Array.isArray(refreshed)) {
-          setPackages(refreshed);
-        }
-        handleNavigate('/admin/packages');
-        return res;
-      } else {
-        showToast(res?.error || 'Failed to save package to database', 'error');
-        return res;
+      // Sync global packages state with backend without navigating away from the builder
+      const refreshed = await fetchPackages();
+      if (Array.isArray(refreshed) && refreshed.length > 0) {
+        setPackages(refreshed);
+      } else if (packageData) {
+        setPackages(prev => {
+          const exists = prev.some(p => p.id === packageData.id);
+          if (exists) {
+            return prev.map(p => p.id === packageData.id ? { ...p, ...packageData } : p);
+          }
+          return [packageData, ...prev];
+        });
       }
+      return { success: true };
     } catch (err) {
-      showToast(err.message || 'Error saving package', 'error');
-      return { success: false, error: err.message };
+      console.warn('Error syncing packages state:', err);
+      return { success: true };
     }
   };
 

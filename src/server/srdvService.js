@@ -181,7 +181,7 @@ function normalizeFlightResponse(srdvData, searchMeta) {
   };
 }
 
-function generateNormalizedFallbackFlights(meta) {
+export function generateNormalizedFallbackFlights(meta) {
   const { origin = 'DEL', destination = 'KUU', departureDate = '2025-12-25' } = meta;
   const carriers = [
     { code: '6E', name: 'IndiGo', dep: '06:15', arr: '07:45', dur: '1h 30m', stops: 'Direct', fare: 4250 },

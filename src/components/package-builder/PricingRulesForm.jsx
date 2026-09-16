@@ -480,7 +480,7 @@ export default function PricingRulesForm({
           onClick={onContinue}
           className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm transition cursor-pointer shadow-sm active:scale-98"
         >
-          <span>Continue to Customer Preview</span>
+          <span>Continue to Policy</span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>

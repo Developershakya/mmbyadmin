@@ -16,7 +16,9 @@ import {
   Image as ImageIcon,
   Edit3,
   Sparkles,
-  Trash2
+  Trash2,
+  Copy,
+  ShieldAlert
 } from 'lucide-react';
 import AutocompleteInput from './AutocompleteInput.jsx';
 import {
@@ -28,6 +30,13 @@ import {
 
 // INR Currency Formatter
 const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
+
+// Dynamic future date helper to ensure SRDV API requests always use valid dates
+const getFutureDateStr = (daysAhead = 14) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  return d.toISOString().split('T')[0];
+};
 
 /* =========================================================================
    1. FLIGHT SEARCH & MANUAL ENTRY MODAL (WITH IMAGE UPLOAD)
@@ -44,9 +53,9 @@ export function FlightSearchModal({
   // API Search State
   const [fromCode, setFromCode] = useState(initialData.from || 'DEL');
   const [fromName, setFromName] = useState(initialData.fromName || 'Delhi');
-  const [toCode, setToCode] = useState(initialData.to || 'KUU');
-  const [toName, setToName] = useState(initialData.toName || 'Bhuntar / Kullu');
-  const [date, setDate] = useState(initialData.departureDate || '2026-07-07');
+  const [toCode, setToCode] = useState(initialData.to || 'BOM');
+  const [toName, setToName] = useState(initialData.toName || 'Mumbai');
+  const [date, setDate] = useState(initialData.departureDate || getFutureDateStr(14));
   const [pax, setPax] = useState(initialData.pax || 2);
   const [cabin, setCabin] = useState(initialData.cabin || 'Economy');
 
@@ -54,6 +63,8 @@ export function FlightSearchModal({
   const [error, setError] = useState('');
   const [results, setResults] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [ipErrorInfo, setIpErrorInfo] = useState(null);
+  const [copiedTemplate, setCopiedTemplate] = useState(false);
 
   // Manual Entry State
   const [manualAirline, setManualAirline] = useState(initialData.airline || 'IndiGo');
@@ -102,6 +113,7 @@ export function FlightSearchModal({
     }
 
     setError('');
+    setIpErrorInfo(null);
     setLoading(true);
     setHasSearched(true);
 
@@ -120,13 +132,77 @@ export function FlightSearchModal({
       }
     } catch (err) {
       console.error('Flight search failed:', err);
+      const isIpIssue =
+        err.isIpError ||
+        err.message?.includes('Error 900') ||
+        err.message?.includes('not authorized') ||
+        err.message?.includes('SRDV Flight API [Error 900]');
+
+      if (isIpIssue) {
+        setIpErrorInfo({
+          serverIp: err.serverOutboundIp || '34.34.254.22',
+          whitelistedIp: err.whitelistedIp || '122.161.76.198'
+        });
+      }
       setError(err.message || 'Failed to search flights from SRDV API.');
       if (showToast) {
-        showToast(`Flight API: ${err.message}`, 'error');
+        showToast(
+          isIpIssue
+            ? 'SRDV Error 900: Server IP (34.34.254.22) not in SRDV whitelist'
+            : `Flight API: ${err.message}`,
+          'error'
+        );
       }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLoadDemoFlights = async () => {
+    setLoading(true);
+    try {
+      const flightResults = await searchFlightsApi({
+        origin: fromCode || fromName.slice(0, 3).toUpperCase(),
+        destination: toCode || toName.slice(0, 3).toUpperCase(),
+        departureDate: date,
+        adultCount: pax,
+        flightCabinClass: cabin === 'Business' ? 4 : cabin === 'Premium Economy' ? 3 : 2,
+        allowFallback: true
+      });
+      setResults(flightResults);
+      setError('');
+      if (showToast) showToast('Loaded calibrated test flights (Demo Mode)', 'success');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopyWhitelistText = () => {
+    const text = `Subject: Request to Whitelist Server IP for Client ID: 180189 (MakeMy91)
+
+Dear SRDV Support Team,
+
+Please whitelist our application server IP address in your firewall for our account credentials:
+- Client ID: 180189
+- Username: MakeMy91
+- Server Outbound IP to Whitelist: ${ipErrorInfo?.serverIp || '34.34.254.22'}
+- Registered Office IP: 122.161.76.198
+
+Currently, our API calls are returning: "Error 900: you are not authorized to access" because our cloud server outbound IP (${ipErrorInfo?.serverIp || '34.34.254.22'}) needs to be added to the account whitelist.
+
+Kindly confirm once updated.
+
+Thank you,
+Team MakeMy91`;
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+    }
+    setCopiedTemplate(true);
+    setTimeout(() => setCopiedTemplate(false), 3000);
+    if (showToast) showToast('Copied SRDV whitelist request message to clipboard!', 'success');
   };
 
   const handleAddManualFlight = () => {
@@ -217,7 +293,50 @@ export function FlightSearchModal({
 
         {/* Modal Scrollable Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
-          {error && (
+          {ipErrorInfo && (
+            <div className="p-4 bg-amber-50/90 border border-amber-200 rounded-xl space-y-3 text-xs">
+              <div className="flex items-start gap-2.5">
+                <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="font-bold text-amber-900 text-sm">
+                    SRDV Flight API [Error 900]: IP Not Authorized
+                  </h4>
+                  <p className="text-amber-800 leading-relaxed">
+                    Your SRDV account (<strong>MakeMy91</strong> / Client ID: <strong>180189</strong>) is registered with your broadband IP: <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono font-semibold">122.161.76.198</code>.
+                    Because this application runs in Google Cloud, outgoing requests connect from server IP: <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono font-semibold">{ipErrorInfo.serverIp}</code>, which is blocked by SRDV's firewall.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200/60">
+                <button
+                  type="button"
+                  onClick={handleCopyWhitelistText}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{copiedTemplate ? 'Copied to Clipboard!' : 'Copy Whitelist Request Text'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLoadDemoFlights}
+                  className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-100/50 text-amber-900 font-medium rounded-lg transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Load Demo Flights (Test Package Builder)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab('manual'); setError(''); }}
+                  className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium rounded-lg transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Add Flight Manually</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {error && !ipErrorInfo && (
             <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2.5 text-xs text-red-700">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span className="font-medium">{error}</span>
@@ -635,8 +754,8 @@ export function HotelSearchModal({
 
   // API Search State
   const [destination, setDestination] = useState(initialData.location || 'Manali');
-  const [checkIn, setCheckIn] = useState(initialData.checkIn || '2026-07-07');
-  const [checkOut, setCheckOut] = useState(initialData.checkOut || '2026-07-09');
+  const [checkIn, setCheckIn] = useState(initialData.checkIn || getFutureDateStr(14));
+  const [checkOut, setCheckOut] = useState(initialData.checkOut || getFutureDateStr(16));
   const [guests, setGuests] = useState(initialData.guests || 2);
   const [category, setCategory] = useState(initialData.category || 'Any');
   const [nights, setNights] = useState(initialData.nights || 2);
@@ -1161,7 +1280,7 @@ export function CabSearchModal({
   // API Search State
   const [pickup, setPickup] = useState(initialData.pickup || 'Kullu Airport');
   const [drop, setDrop] = useState(initialData.drop || 'Manali Hotel');
-  const [date, setDate] = useState(initialData.date || '2026-07-07');
+  const [date, setDate] = useState(initialData.date || getFutureDateStr(14));
   const [time, setTime] = useState(initialData.time || '12:30 PM');
   const [vehicleType, setVehicleType] = useState(initialData.category || 'Any');
 
@@ -1652,7 +1771,7 @@ export function BusSearchModal({
   // API Search State
   const [from, setFrom] = useState(initialData.from || 'Delhi');
   const [to, setTo] = useState(initialData.to || 'Manali');
-  const [date, setDate] = useState(initialData.date || '2026-07-07');
+  const [date, setDate] = useState(initialData.date || getFutureDateStr(14));
   const [pax, setPax] = useState(initialData.pax || 2);
 
   const [loading, setLoading] = useState(false);

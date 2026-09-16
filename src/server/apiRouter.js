@@ -14,8 +14,37 @@ import { searchFlights } from '../lib/srdv/flightService.js';
 import { searchBuses } from '../lib/srdv/busService.js';
 import { searchCars } from '../lib/srdv/carService.js';
 import { searchHotels } from '../lib/srdv/hotelService.js';
+import { generateNormalizedFallbackFlights } from './srdvService.js';
 
 const router = express.Router();
+
+// Outbound IP cache to prevent redundant external calls
+let cachedOutboundIp = '34.34.254.22';
+let lastOutboundIpCheck = 0;
+
+async function getOutboundIp() {
+  const now = Date.now();
+  if (now - lastOutboundIpCheck < 60000 && cachedOutboundIp) {
+    return cachedOutboundIp;
+  }
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+    clearTimeout(timeout);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.ip) {
+        cachedOutboundIp = data.ip;
+        lastOutboundIpCheck = now;
+        return cachedOutboundIp;
+      }
+    }
+  } catch (e) {
+    // fallback to cached
+  }
+  return cachedOutboundIp;
+}
 
 // Ensure in-memory database is initialized
 let dbInitialized = false;
@@ -244,10 +273,62 @@ router.get(['/cities/cab', '/cars/suggest'], async (req, res) => {
    SEARCH ROUTE HANDLERS
    ========================================================================= */
 
+// SRDV Diagnostics and IP Status
+router.get(['/srdv/status', '/srdv/diagnostics', '/srdv/ip-check'], async (req, res) => {
+  try {
+    const outboundIp = await getOutboundIp();
+    const forwarded = req.headers['x-forwarded-for'];
+    const clientIp = (forwarded ? forwarded.split(',')[0].trim() : req.ip) || '122.161.76.198';
+    const whitelistedIp = '122.161.76.198';
+    const srdvHost = 'flight.srdvapi.com';
+    const srdvHostIp = '13.233.211.114';
+    const clientId = process.env.SRDV_CLIENT_ID || '180189';
+    const userName = process.env.SRDV_USERNAME || 'MakeMy91';
+    const isIpWhitelistedOnServer = outboundIp === whitelistedIp;
+
+    const emailTemplate = `Subject: Request to Whitelist Server IP for Client ID: ${clientId} (${userName})
+
+Dear SRDV Support Team,
+
+Please whitelist our application server IP address in your firewall for our account credentials:
+- Client ID: ${clientId}
+- Username: ${userName}
+- Server Outbound IP to Whitelist: ${outboundIp}
+- Registered Office IP: ${whitelistedIp}
+
+Currently, our API calls are returning: "Error 900: you are not authorized to access" because our cloud server outbound IP (${outboundIp}) needs to be added to the account whitelist.
+
+Kindly confirm once updated.
+
+Thank you,
+Team ${userName}`;
+
+    res.json({
+      success: true,
+      data: {
+        serverOutboundIp: outboundIp,
+        clientIp,
+        whitelistedIp,
+        srdvHost,
+        srdvHostIp,
+        clientId,
+        userName,
+        isIpAuthorized: isIpWhitelistedOnServer,
+        srdvError: isIpWhitelistedOnServer
+          ? null
+          : `SRDV API Error 900: Server IP ${outboundIp} is not in SRDV account whitelist (registered IP: ${whitelistedIp})`,
+        emailTemplate
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Flights Search
 router.post(['/flights/search', '/package-services/flights/search'], async (req, res) => {
   try {
-    const { origin, destination } = req.body || {};
+    const { origin, destination, allowFallback } = req.body || {};
     if (!origin || !destination) {
       return res.status(400).json({
         success: false,
@@ -255,18 +336,58 @@ router.post(['/flights/search', '/package-services/flights/search'], async (req,
       });
     }
 
-    const endUserIp = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
-    const results = await searchFlights(req.body, endUserIp);
+    const forwarded = req.headers['x-forwarded-for'];
+    const endUserIp = (forwarded ? forwarded.split(',')[0].trim() : req.ip) || '122.161.76.198';
 
-    res.json({
-      success: true,
-      total: results.length,
-      results,
-      flights: results
-    });
+    try {
+      const results = await searchFlights(req.body, endUserIp);
+      return res.json({
+        success: true,
+        total: results.length,
+        results,
+        flights: results,
+        source: 'SRDV_LIVE_API'
+      });
+    } catch (liveErr) {
+      const isIpError =
+        liveErr.isIpError ||
+        liveErr.message?.includes('Error 900') ||
+        liveErr.message?.includes('not authorized');
+
+      // If client explicitly permitted fallback when live API is blocked by IP whitelist:
+      if (allowFallback) {
+        const fallback = generateNormalizedFallbackFlights({
+          origin,
+          destination,
+          departureDate: req.body.departureDate,
+          cabinClass: req.body.flightCabinClass,
+          adults: req.body.adultCount
+        });
+        return res.json({
+          success: true,
+          isFallback: true,
+          fallbackReason: liveErr.message,
+          total: fallback.flights?.length || 0,
+          results: fallback.flights || [],
+          flights: fallback.flights || []
+        });
+      }
+
+      // Re-throw to be caught and formatted
+      const errorToThrow = new Error(liveErr.message);
+      errorToThrow.isIpError = isIpError;
+      throw errorToThrow;
+    }
   } catch (err) {
     console.error('Flight search error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    const outboundIp = await getOutboundIp();
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      isIpError: Boolean(err.isIpError || err.message?.includes('Error 900')),
+      whitelistedIp: '122.161.76.198',
+      serverOutboundIp: outboundIp
+    });
   }
 });
 
@@ -275,8 +396,8 @@ router.post(['/buses/search', '/package-services/buses/search'], async (req, res
   try {
     await ensureDb();
     const body = req.body || {};
-    const from = body.from || body.fromCity;
-    const to = body.to || body.toCity;
+    const from = body.from || body.fromCity || body.sourceCity;
+    const to = body.to || body.toCity || body.destinationCity;
 
     if (!from || !to) {
       return res.status(400).json({
@@ -285,34 +406,36 @@ router.post(['/buses/search', '/package-services/buses/search'], async (req, res
       });
     }
 
-    // Resolve city names to CityId via Bus model if not already numeric
-    let sourceId = body.sourceId;
-    let destinationId = body.destinationId;
+    // Resolve city names to CityId via Bus model if not already provided
+    let sourceCode = body.sourceCode || body.sourceId;
+    let destinationCode = body.destinationCode || body.destinationId;
 
-    if (!sourceId) {
+    if (!sourceCode) {
       const busFrom = await Bus.findOne({
         where: { CityName: { [Op.like]: `%${from}%` } }
       });
-      sourceId = busFrom ? busFrom.CityId : 1;
+      if (busFrom) sourceCode = busFrom.CityId;
     }
 
-    if (!destinationId) {
+    if (!destinationCode) {
       const busTo = await Bus.findOne({
         where: { CityName: { [Op.like]: `%${to}%` } }
       });
-      destinationId = busTo ? busTo.CityId : 2;
+      if (busTo) destinationCode = busTo.CityId;
     }
 
-    const endUserIp = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
     const params = {
       ...body,
-      sourceId,
-      destinationId,
+      sourceCode,
+      destinationCode,
+      sourceCity: from,
+      destinationCity: to,
       fromCity: from,
-      toCity: to
+      toCity: to,
+      date: body.date || body.dateOfJourney || body.departDate
     };
 
-    const results = await searchBuses(params, endUserIp);
+    const results = await searchBuses(params);
 
     res.json({
       success: true,
@@ -398,21 +521,24 @@ router.post(['/hotels/search', '/package-services/hotels/search'], async (req, r
 
     // Resolve destination via Hotel model where status = 'Active'
     let cityId = body.cityId;
-    const hotelMatch = await Hotel.findOne({
-      where: {
-        Destination: { [Op.like]: `%${destination}%` },
-        status: 'Active'
-      }
-    });
+    if (!cityId) {
+      const hotelMatch = await Hotel.findOne({
+        where: {
+          Destination: { [Op.like]: `%${destination}%` },
+          status: 'Active'
+        }
+      });
 
-    if (hotelMatch) {
-      cityId = hotelMatch.cityid;
+      if (hotelMatch) {
+        cityId = hotelMatch.cityid;
+      }
     }
 
-    const endUserIp = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
+    const forwarded = req.headers['x-forwarded-for'];
+    const endUserIp = (forwarded ? forwarded.split(',')[0].trim() : req.ip) || '122.161.76.198';
     const params = {
       ...body,
-      cityId: cityId || '130443',
+      cityId: cityId || body.cityId,
       destination
     };
 
@@ -633,9 +759,10 @@ router.post('/packages', async (req, res) => {
       sightseeingList: (Array.isArray(data.sightseeingList) && data.sightseeingList.length > 0) ? data.sightseeingList : extracted.sightseeing,
       inclusions: data.inclusions || [],
       exclusions: data.exclusions || [],
-      termsAndConditions: data.termsAndConditions || [],
+      termsAndConditions: data.termsAndConditions || data.terms || [],
       cancellationPolicy: data.cancellationPolicy || null,
       dateChangePolicy: data.dateChangePolicy || null,
+      otherPolicies: data.otherPolicies || data.policies || [],
       customization: data.customization || null,
       tags: data.tags || [],
       galleryImages: data.galleryImages || []
@@ -739,9 +866,10 @@ router.put('/packages/:id', async (req, res) => {
       sightseeingList: (Array.isArray(data.sightseeingList) && data.sightseeingList.length > 0) ? data.sightseeingList : extracted.sightseeing,
       inclusions: data.inclusions || [],
       exclusions: data.exclusions || [],
-      termsAndConditions: data.termsAndConditions || [],
+      termsAndConditions: data.termsAndConditions || data.terms || [],
       cancellationPolicy: data.cancellationPolicy || null,
       dateChangePolicy: data.dateChangePolicy || null,
+      otherPolicies: data.otherPolicies || data.policies || [],
       customization: data.customization || null,
       tags: data.tags || [],
       galleryImages: data.galleryImages || []

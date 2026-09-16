@@ -27,7 +27,7 @@ import {
   ChevronRight,
   Eye
 } from 'lucide-react';
-import { downloadElementAsPdf, generatePackagePdf } from '../../lib/pdfGenerator.js';
+import { downloadCustomerPreviewAsPdf } from '../../lib/pdfGenerator.js';
 
 // INR Currency Formatter
 const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
@@ -152,16 +152,19 @@ export default function CustomerPreviewView({
   // Download PDF handler
   const handleDownloadPdf = async () => {
     setDownloading(true);
-    if (showToast) showToast('Preparing high-resolution PDF document...', 'info');
+    if (showToast) showToast('Preparing high-resolution Customer Preview PDF...', 'info');
 
     try {
       const docElement = document.getElementById('pdf-document-root');
-      await downloadElementAsPdf(docElement, `${packageData.title || 'Holiday-Itinerary'}.pdf`, packageData);
-      if (showToast) showToast('PDF downloaded successfully!', 'success');
+      if (!docElement) {
+        throw new Error('Customer Preview element was not found on screen.');
+      }
+      const filename = `${packageData.title || packageData.destination || 'Holiday-Itinerary'}.pdf`;
+      await downloadCustomerPreviewAsPdf(docElement, filename);
+      if (showToast) showToast('Customer Preview PDF downloaded successfully!', 'success');
     } catch (e) {
-      console.error('PDF error:', e);
-      generatePackagePdf(packageData, `${packageData.title || 'Holiday-Itinerary'}.pdf`);
-      if (showToast) showToast('Downloaded PDF voucher using fallback generator.', 'info');
+      console.error('Customer Preview PDF generation error:', e);
+      if (showToast) showToast('Failed to generate PDF: ' + (e.message || 'Error capturing preview'), 'error');
     } finally {
       setDownloading(false);
     }
@@ -173,6 +176,39 @@ export default function CustomerPreviewView({
       if (showToast) showToast('Voucher share link copied to clipboard!', 'success');
     }
   };
+
+  const previewTerms = packageData.terms?.length
+    ? packageData.terms
+    : packageData.termsAndConditions?.length
+    ? packageData.termsAndConditions
+    : [
+        'All package rates are subject to availability at the time of confirmed booking.',
+        'Standard hotel check-in time is 12:00 PM / 02:00 PM and check-out is 10:00 AM / 11:00 AM.',
+        'Valid Government ID proof (Aadhar / Passport / Voter ID) is mandatory for all travelers at check-in.',
+        'AC will not operate in hill stations or when vehicle is parked/idle.',
+        'Any changes or deviations in route requested by the traveler will attract additional charges.'
+      ];
+
+  const previewCancellationRules = packageData.cancellationPolicy?.rules?.length
+    ? packageData.cancellationPolicy.rules
+    : [
+        { timeframe: '30+ Days Before Departure', charge: '10% of Package Value', refund: '90% Refund within 7 working days' },
+        { timeframe: '15 to 29 Days Before Departure', charge: '25% of Package Value', refund: '75% Refund within 7 working days' },
+        { timeframe: '7 to 14 Days Before Departure', charge: '50% of Package Value', refund: '50% Refund within 7 working days' },
+        { timeframe: 'Within 7 Days of Departure / No Show', charge: '100% of Package Value', refund: 'Non-refundable' }
+      ];
+  const previewCancellationNotes = packageData.cancellationPolicy?.notes;
+
+  const previewDateChangeRules = packageData.dateChangePolicy?.rules?.length
+    ? packageData.dateChangePolicy.rules
+    : [
+        { timeframe: 'Up to 15 Days Before Departure', charge: 'Free Date Rescheduling', remark: 'Hotel & airline fare difference applies' },
+        { timeframe: '7 to 14 Days Before Departure', charge: '₹1,500 per person change fee', remark: '+ airline/hotel fare difference' },
+        { timeframe: 'Less than 7 Days Before Departure', charge: 'Subject to Supplier Approval', remark: 'Treated as cancellation if not approved' }
+      ];
+  const previewDateChangeNotes = packageData.dateChangePolicy?.notes;
+
+  const previewOtherPolicies = Array.isArray(packageData.otherPolicies) ? packageData.otherPolicies : [];
 
   const handlePrint = () => {
     window.print();
@@ -189,7 +225,7 @@ export default function CustomerPreviewView({
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Edit Package</span>
+            <span>Back to Policy</span>
           </button>
           <span className="text-xs text-slate-500 hidden md:inline">
             Official PDF Quotation Itinerary Format (Make My Bharat Yatra)
@@ -882,82 +918,190 @@ export default function CustomerPreviewView({
           </div>
 
           {/* =====================================================================
-             10. TERMS AND CONDITIONS (MATCHING PAGE 3)
+             10. TERMS AND CONDITIONS (DYNAMIC FROM PACKAGE DATA)
              ===================================================================== */}
           <div className="space-y-3 pt-4 border-t border-slate-100">
-            <h4 className="font-bold text-sm sm:text-base text-slate-900">
-              Terms &amp; Conditions
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-sm sm:text-base text-slate-900">
+                Terms &amp; Conditions
+              </h4>
+              <span className="text-[11px] font-medium text-slate-400">
+                {previewTerms.length} clauses
+              </span>
+            </div>
             <ul className="space-y-2 text-xs text-slate-600 leading-relaxed list-disc list-inside">
-              <li>All package rates are subject to availability at the time of confirmed booking.</li>
-              <li>Standard hotel check-in time is 12:00 PM / 02:00 PM and check-out is 10:00 AM / 11:00 AM.</li>
-              <li>Valid Government ID proof (Aadhar / Passport / Voter ID) is mandatory for all travelers at the time of check-in.</li>
-              <li>AC will not operate in hill stations or when vehicle is parked/idle.</li>
-              <li>Any changes or deviations in route requested by the traveler will attract additional charges.</li>
+              {previewTerms.map((term, i) => (
+                <li key={i} className="pl-1 text-slate-700">
+                  <span className="font-medium text-slate-800">{term}</span>
+                </li>
+              ))}
             </ul>
           </div>
 
           {/* =====================================================================
-             11. CANCELLATION POLICY & DATE CHANGE POLICY (MATCHING PAGE 3)
+             11. CANCELLATION & DATE CHANGE POLICIES (DYNAMIC SLABS)
              ===================================================================== */}
           <div className="space-y-6 pt-4 border-t border-slate-100">
             {/* Cancellation Policy */}
             <div className="space-y-3">
-              <h4 className="font-bold text-sm sm:text-base text-slate-900">
-                Cancellation &amp; Refund Policy
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="border border-emerald-200 bg-emerald-50/50 rounded-xl p-4 space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
-                    <span className="w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-[10px]">✓</span>
-                    <span>TILL 15 DAYS BEFORE DEPARTURE</span>
-                  </div>
-                  <p className="text-xs text-emerald-950 font-semibold mt-1">
-                    Cancellation fee: ₹2,500 /- or 25% of package value.
-                  </p>
-                  <p className="text-[11px] text-emerald-700">Balance refunded within 7 working days.</p>
-                </div>
-
-                <div className="border border-red-200 bg-red-50/50 rounded-xl p-4 space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-red-800">
-                    <span className="w-4 h-4 rounded-full bg-red-200 text-red-800 flex items-center justify-center text-[10px]">✕</span>
-                    <span>WITHIN 15 DAYS OF DEPARTURE</span>
-                  </div>
-                  <p className="text-xs text-red-950 font-semibold mt-1">
-                    Non-Refundable — 100% cancellation charges apply.
-                  </p>
-                  <p className="text-[11px] text-red-700">No refunds for no-shows or early departures.</p>
-                </div>
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-sm sm:text-base text-slate-900">
+                  Cancellation &amp; Refund Policy
+                </h4>
+                <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                  Tiered Slabs
+                </span>
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {previewCancellationRules.map((rule, idx) => {
+                  const isSevere = (rule.charge || '').includes('100%') || (rule.refund || '').toLowerCase().includes('non-refundable');
+                  return (
+                    <div
+                      key={idx}
+                      className={`border rounded-xl p-3.5 space-y-1 ${
+                        isSevere
+                          ? 'border-red-200 bg-red-50/50'
+                          : 'border-emerald-200 bg-emerald-50/50'
+                      }`}
+                    >
+                      <div
+                        className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${
+                          isSevere ? 'text-red-800' : 'text-emerald-800'
+                        }`}
+                      >
+                        <span
+                          className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                            isSevere ? 'bg-red-200 text-red-800' : 'bg-emerald-200 text-emerald-800'
+                          }`}
+                        >
+                          {isSevere ? '✕' : '✓'}
+                        </span>
+                        <span>{rule.timeframe}</span>
+                      </div>
+                      <p
+                        className={`text-xs font-semibold mt-1 ${
+                          isSevere ? 'text-red-950' : 'text-emerald-950'
+                        }`}
+                      >
+                        Cancellation charge: {rule.charge}
+                      </p>
+                      {rule.refund && (
+                        <p
+                          className={`text-[11px] ${
+                            isSevere ? 'text-red-700' : 'text-emerald-700'
+                          }`}
+                        >
+                          {rule.refund}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {previewCancellationNotes && (
+                <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                  Note: {previewCancellationNotes}
+                </p>
+              )}
             </div>
 
             {/* Date Change Policy */}
             <div className="space-y-3">
-              <h4 className="font-bold text-sm sm:text-base text-slate-900">
-                Date Change Policy
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-sm sm:text-base text-slate-900">
+                  Date Change Policy
+                </h4>
+                <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                  Rescheduling Terms
+                </span>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="border border-emerald-200 bg-emerald-50/50 rounded-xl p-4 space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
-                    <span className="w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-[10px]">✓</span>
-                    <span>TILL 10 DAYS BEFORE DEPARTURE</span>
-                  </div>
-                  <p className="text-xs text-emerald-950 font-semibold mt-1">
-                    Date change fee: ₹1,500 /- + Hotel seasonal fare difference.
-                  </p>
-                </div>
+                {previewDateChangeRules.map((rule, idx) => {
+                  const isRestrictive = (rule.charge || '').toLowerCase().includes('supplier') || (rule.remark || '').toLowerCase().includes('cancellation');
+                  return (
+                    <div
+                      key={idx}
+                      className={`border rounded-xl p-3.5 space-y-1 ${
+                        isRestrictive
+                          ? 'border-amber-200 bg-amber-50/50'
+                          : 'border-blue-200 bg-blue-50/50'
+                      }`}
+                    >
+                      <div
+                        className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${
+                          isRestrictive ? 'text-amber-800' : 'text-blue-800'
+                        }`}
+                      >
+                        <span
+                          className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                            isRestrictive ? 'bg-amber-200 text-amber-800' : 'bg-blue-200 text-blue-800'
+                          }`}
+                        >
+                          {isRestrictive ? '!' : '✓'}
+                        </span>
+                        <span>{rule.timeframe}</span>
+                      </div>
+                      <p
+                        className={`text-xs font-semibold mt-1 ${
+                          isRestrictive ? 'text-amber-950' : 'text-blue-950'
+                        }`}
+                      >
+                        {rule.charge}
+                      </p>
+                      {rule.remark && (
+                        <p
+                          className={`text-[11px] ${
+                            isRestrictive ? 'text-amber-700' : 'text-blue-700'
+                          }`}
+                        >
+                          {rule.remark}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {previewDateChangeNotes && (
+                <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                  Note: {previewDateChangeNotes}
+                </p>
+              )}
+            </div>
 
-                <div className="border border-red-200 bg-red-50/50 rounded-xl p-4 space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-red-800">
-                    <span className="w-4 h-4 rounded-full bg-red-200 text-red-800 flex items-center justify-center text-[10px]">✕</span>
-                    <span>WITHIN 10 DAYS OF DEPARTURE</span>
-                  </div>
-                  <p className="text-xs text-red-950 font-semibold mt-1">
-                    Date change not permitted. Treated as cancellation.
-                  </p>
+            {/* Other Modular Policies (Booking, Payment, Child, Hotel, Transportation, General, Custom) */}
+            {previewOtherPolicies.length > 0 && (
+              <div className="space-y-4 pt-2 border-t border-slate-100">
+                <h4 className="font-bold text-sm sm:text-base text-slate-900">
+                  Additional Policies &amp; Guidelines
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {previewOtherPolicies.map((pol, idx) => (
+                    <div
+                      key={pol.id || idx}
+                      className="border border-slate-200 bg-slate-50/60 rounded-xl p-4 space-y-2"
+                    >
+                      <h5 className="font-bold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" />
+                        <span>{pol.title}</span>
+                      </h5>
+                      <ul className="space-y-1 text-xs text-slate-600 leading-relaxed">
+                        {(pol.points || []).map((pt, pIdx) => (
+                          <li key={pIdx} className="flex items-start gap-1.5">
+                            <span className="text-slate-400 mt-1 shrink-0">•</span>
+                            <span>{pt}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {pol.notes && (
+                        <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-100">
+                          {pol.notes}
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* =====================================================================

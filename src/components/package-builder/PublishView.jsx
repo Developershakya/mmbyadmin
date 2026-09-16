@@ -123,6 +123,19 @@ export default function PublishView({
             </div>
             <span className="text-[11px] font-bold text-emerald-700 uppercase">Ready</span>
           </div>
+
+          <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/60 border border-emerald-100">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-emerald-950">Policies &amp; Booking Terms</p>
+                <p className="text-[11px] text-emerald-700">
+                  {packageData.terms?.length || 0} Terms · {packageData.cancellationPolicy?.rules?.length || 0} Cancellation Tiers · {packageData.otherPolicies?.length || 0} Custom Policies
+                </p>
+              </div>
+            </div>
+            <span className="text-[11px] font-bold text-emerald-700 uppercase">Ready</span>
+          </div>
         </div>
       </div>
 

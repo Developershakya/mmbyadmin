@@ -59,7 +59,7 @@ import PoliciesForm from './PoliciesForm.jsx';
 import CustomerPreviewView from './CustomerPreviewView.jsx';
 import PublishView from './PublishView.jsx';
 import StepperControl from './StepperControl.jsx';
-import { generatePackagePdf, downloadElementAsPdf } from '../../lib/pdfGenerator.js';
+import { downloadCustomerPreviewAsPdf } from '../../lib/pdfGenerator.js';
 import { fetchPackageById, savePackage, deletePackageApi } from '../../lib/api/packages.js';
 
 // Format INR currency
@@ -105,6 +105,9 @@ export default function TravelProPackageBuilder({
           'Any item not specified in package inclusions'
         ],
         terms: [],
+        cancellationPolicy: null,
+        dateChangePolicy: null,
+        otherPolicies: [],
         travelers: {
           adults: 2,
           children: 0,
@@ -181,6 +184,7 @@ export default function TravelProPackageBuilder({
         ],
         notes: 'Date change requests are subject to hotel and transport availability during requested revised dates.'
       },
+      otherPolicies: pkg.otherPolicies || pkg.itineraryData?.otherPolicies || [],
       travelers: pkg.travelers || {
         adults: 2,
         children: 0,
@@ -1025,17 +1029,17 @@ export default function TravelProPackageBuilder({
      ========================================================================= */
   const handleDownloadPdf = async () => {
     try {
-      showToast('Rendering high-resolution package PDF...', 'info');
+      showToast('Rendering high-resolution Customer Preview PDF...', 'info');
       const docElement = document.getElementById('pdf-document-root');
       const titleSlug = (packageData.title || packageData.destination || 'Holiday-Package').replace(/[^a-zA-Z0-9]/g, '-');
-      const filename = `${titleSlug}-Voucher.pdf`;
+      const filename = `${titleSlug}-Itinerary.pdf`;
 
       if (docElement) {
-        await downloadElementAsPdf(docElement, filename, { ...packageData, pricingBreakdown });
+        await downloadCustomerPreviewAsPdf(docElement, filename);
+        showToast('PDF downloaded successfully!', 'success');
       } else {
-        generatePackagePdf({ ...packageData, pricingBreakdown }, filename);
+        showToast('Preview element not available to render PDF.', 'error');
       }
-      showToast('PDF downloaded successfully!', 'success');
     } catch (err) {
       console.error('PDF error:', err);
       showToast('Failed to generate PDF.', 'error');
@@ -1076,13 +1080,15 @@ export default function TravelProPackageBuilder({
         terms: packageData.terms || [],
         cancellationPolicy: packageData.cancellationPolicy,
         dateChangePolicy: packageData.dateChangePolicy,
+        otherPolicies: packageData.otherPolicies || [],
         status,
         itineraryData: {
           days: packageData.days,
           customization: packageData.customization,
           travelers: packageData.travelers,
           cancellationPolicy: packageData.cancellationPolicy,
-          dateChangePolicy: packageData.dateChangePolicy
+          dateChangePolicy: packageData.dateChangePolicy,
+          otherPolicies: packageData.otherPolicies || []
         },
         pricingRules: packageData.pricing,
         pricingBreakdown: pricingBreakdown
@@ -1144,10 +1150,11 @@ export default function TravelProPackageBuilder({
   };
 
   const handleSaveAndProceed = async () => {
+    const nextTargetStep = unsavedModalState.targetStep;
     const res = await handleSavePackage('Draft');
     if (res?.success) {
-      if (unsavedModalState.targetStep) {
-        setActiveStep(unsavedModalState.targetStep);
+      if (nextTargetStep) {
+        setActiveStep(nextTargetStep);
       }
       setUnsavedModalState({ isOpen: false, targetStep: null });
     }
@@ -1254,8 +1261,9 @@ export default function TravelProPackageBuilder({
             { id: 'info', label: 'Package Information', num: '01' },
             { id: 'itinerary', label: 'Itinerary Builder', num: '02' },
             { id: 'pricing', label: 'Pricing & Rules', num: '03' },
-            { id: 'preview', label: 'Customer Preview', num: '04' },
-            { id: 'publish', label: 'Publish', num: '05' }
+            { id: 'policy', label: 'Policy', num: '04' },
+            { id: 'preview', label: 'Customer Preview', num: '05' },
+            { id: 'publish', label: 'Publish', num: '06' }
           ].map((step, idx, arr) => {
             const activeIndex = arr.findIndex((s) => s.id === activeStep);
             const isCompleted = idx < activeIndex;
@@ -1324,22 +1332,34 @@ export default function TravelProPackageBuilder({
               packageData={packageData}
               setPackageData={setPackageData}
               onBack={() => handleStepTransition('itinerary')}
-              onContinue={() => handleStepTransition('preview')}
+              onContinue={() => handleStepTransition('policy')}
               showToast={showToast}
             />
           )}
 
-          {/* TAB 4: CUSTOMER PREVIEW VOUCHER VIEW */}
+          {/* TAB 4: POLICIES FORM */}
+          {activeStep === 'policy' && (
+            <PoliciesForm
+              packageData={packageData}
+              setPackageData={setPackageData}
+              onBack={() => handleStepTransition('pricing')}
+              onContinue={() => handleStepTransition('preview')}
+              onSaveDraft={() => handleSavePackage('Draft')}
+              showToast={showToast}
+            />
+          )}
+
+          {/* TAB 5: CUSTOMER PREVIEW VOUCHER VIEW */}
           {activeStep === 'preview' && (
             <CustomerPreviewView
               packageData={{ ...packageData, pricingBreakdown }}
-              onBack={() => handleStepTransition('pricing')}
+              onBack={() => handleStepTransition('policy')}
               onContinue={() => handleStepTransition('publish')}
               showToast={showToast}
             />
           )}
 
-          {/* TAB 5: PUBLISH VIEW */}
+          {/* TAB 6: PUBLISH VIEW */}
           {activeStep === 'publish' && (
             <PublishView
               packageData={packageData}
@@ -1876,38 +1896,60 @@ export default function TravelProPackageBuilder({
                                   </div>
                                 )}
 
-                                {/* 5. SIGHTSEEING BODY */}
+                                  {/* 5. SIGHTSEEING BODY */}
                                 {svc.type === 'sightseeing' && (
                                   <div className="space-y-3">
                                     {(svc.data?.items || []).map((item) => (
                                       <div
                                         key={item.id}
-                                        className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-slate-50 border border-slate-100"
+                                        className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-slate-50 border border-slate-100 hover:border-teal-200 transition"
                                       >
-                                        <div className="flex items-center gap-3">
+                                        <div
+                                          className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+                                          onClick={() =>
+                                            setModalState((prev) => ({
+                                              ...prev,
+                                              sightseeing: { isOpen: true, dayId: day.id, serviceId: svc.id, item }
+                                            }))
+                                          }
+                                        >
                                           {item.image && (
                                             <img
                                               src={item.image}
                                               alt={item.name}
-                                              className="w-12 h-12 rounded-lg object-cover"
+                                              className="w-12 h-12 rounded-lg object-cover shrink-0"
                                             />
                                           )}
-                                          <div>
-                                            <p className="font-semibold text-xs text-[#0F172A]">{item.name}</p>
-                                            <p className="text-[11px] text-slate-500">{item.location} · {item.duration}</p>
+                                          <div className="min-w-0">
+                                            <p className="font-semibold text-xs text-[#0F172A] hover:text-teal-600 transition truncate">{item.name}</p>
+                                            <p className="text-[11px] text-slate-500 truncate">{item.location} · {item.duration}</p>
                                           </div>
                                         </div>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2 shrink-0">
                                           <span className="text-xs font-bold text-slate-800">
                                             {item.price ? inr(item.price) : 'Free'}
                                           </span>
                                           <button
+                                            type="button"
+                                            onClick={() =>
+                                              setModalState((prev) => ({
+                                                ...prev,
+                                                sightseeing: { isOpen: true, dayId: day.id, serviceId: svc.id, item }
+                                              }))
+                                            }
+                                            aria-label="Edit sightseeing spot"
+                                            className="p-1 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded text-xs cursor-pointer transition"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
                                             onClick={() => {
                                               const updated = (svc.data?.items || []).filter((i) => i.id !== item.id);
                                               handleUpdateServiceData(day.id, svc.id, { items: updated });
                                             }}
                                             aria-label="Remove sight"
-                                            className="text-slate-400 hover:text-red-600 text-xs cursor-pointer"
+                                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded text-xs cursor-pointer transition"
                                           >
                                             <X className="w-3.5 h-3.5" />
                                           </button>
@@ -1921,7 +1963,7 @@ export default function TravelProPackageBuilder({
                                           sightseeing: { isOpen: true, dayId: day.id, serviceId: svc.id, item: null }
                                         }))
                                       }
-                                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-600 hover:text-teal-700 cursor-pointer"
                                     >
                                       <Plus className="w-3.5 h-3.5" /> Add Sightseeing Place
                                     </button>
@@ -1934,24 +1976,46 @@ export default function TravelProPackageBuilder({
                                     {(svc.data?.items || []).map((item) => (
                                       <div
                                         key={item.id}
-                                        className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-slate-50 border border-slate-100"
+                                        className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-slate-50 border border-slate-100 hover:border-purple-200 transition"
                                       >
-                                        <div className="flex items-center gap-2">
-                                          <Compass className="w-4 h-4 text-purple-600" />
-                                          <div>
-                                            <p className="font-semibold text-xs text-[#0F172A]">{item.name}</p>
-                                            <p className="text-[11px] text-slate-500">Duration: {item.duration || '1-2 hrs'}</p>
+                                        <div
+                                          className="flex items-center gap-2 cursor-pointer flex-1 min-w-0"
+                                          onClick={() =>
+                                            setModalState((prev) => ({
+                                              ...prev,
+                                              activity: { isOpen: true, dayId: day.id, serviceId: svc.id, item }
+                                            }))
+                                          }
+                                        >
+                                          <Compass className="w-4 h-4 text-purple-600 shrink-0" />
+                                          <div className="min-w-0">
+                                            <p className="font-semibold text-xs text-[#0F172A] hover:text-purple-600 transition truncate">{item.name}</p>
+                                            <p className="text-[11px] text-slate-500 truncate">Duration: {item.duration || '1-2 hrs'}</p>
                                           </div>
                                         </div>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2 shrink-0">
                                           <span className="text-xs font-bold text-slate-800">{inr(item.price)}</span>
                                           <button
+                                            type="button"
+                                            onClick={() =>
+                                              setModalState((prev) => ({
+                                                ...prev,
+                                                activity: { isOpen: true, dayId: day.id, serviceId: svc.id, item }
+                                              }))
+                                            }
+                                            aria-label="Edit activity"
+                                            className="p-1 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded text-xs cursor-pointer transition"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
                                             onClick={() => {
                                               const updated = (svc.data?.items || []).filter((i) => i.id !== item.id);
                                               handleUpdateServiceData(day.id, svc.id, { items: updated });
                                             }}
                                             aria-label="Remove activity"
-                                            className="text-slate-400 hover:text-red-600 text-xs cursor-pointer"
+                                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded text-xs cursor-pointer transition"
                                           >
                                             <X className="w-3.5 h-3.5" />
                                           </button>
@@ -1978,26 +2042,48 @@ export default function TravelProPackageBuilder({
                                     {(svc.data?.items || []).map((item) => (
                                       <div
                                         key={item.id}
-                                        className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-50"
+                                        className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-50 hover:border-rose-200 transition"
                                       >
-                                        <div className="flex items-center gap-2">
-                                          <Utensils className="w-3.5 h-3.5 text-rose-500" />
-                                          <div>
-                                            <p className="font-medium text-xs text-[#0F172A]">{item.name}</p>
-                                            <p className="text-[11px] text-slate-500">{item.description}</p>
+                                        <div
+                                          className="flex items-center gap-2 cursor-pointer flex-1 min-w-0"
+                                          onClick={() =>
+                                            setModalState((prev) => ({
+                                              ...prev,
+                                              meal: { isOpen: true, dayId: day.id, serviceId: svc.id, item }
+                                            }))
+                                          }
+                                        >
+                                          <Utensils className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                          <div className="min-w-0">
+                                            <p className="font-medium text-xs text-[#0F172A] hover:text-rose-600 transition truncate">{item.name}</p>
+                                            <p className="text-[11px] text-slate-500 truncate">{item.description}</p>
                                           </div>
                                         </div>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2 shrink-0">
                                           <span className="text-xs font-bold text-slate-800">
                                             {item.price > 0 ? inr(item.price) : 'Included'}
                                           </span>
                                           <button
+                                            type="button"
+                                            onClick={() =>
+                                              setModalState((prev) => ({
+                                                ...prev,
+                                                meal: { isOpen: true, dayId: day.id, serviceId: svc.id, item }
+                                              }))
+                                            }
+                                            aria-label="Edit meal plan"
+                                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded text-xs cursor-pointer transition"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
                                             onClick={() => {
                                               const updated = (svc.data?.items || []).filter((i) => i.id !== item.id);
                                               handleUpdateServiceData(day.id, svc.id, { items: updated });
                                             }}
                                             aria-label="Remove meal"
-                                            className="text-slate-400 hover:text-red-600 text-xs cursor-pointer"
+                                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded text-xs cursor-pointer transition"
                                           >
                                             <X className="w-3.5 h-3.5" />
                                           </button>
@@ -2425,6 +2511,33 @@ export default function TravelProPackageBuilder({
           }
         }}
         showToast={showToast}
+      />
+
+      <SightseeingModal
+        isOpen={modalState.sightseeing.isOpen}
+        dayNumber={packageData.days.findIndex((d) => d.id === modalState.sightseeing.dayId) + 1}
+        dayLocation={packageData.days.find((d) => d.id === modalState.sightseeing.dayId)?.location || packageData.destination || ''}
+        initialData={modalState.sightseeing.item}
+        onClose={() => setModalState((prev) => ({ ...prev, sightseeing: { ...prev.sightseeing, isOpen: false } }))}
+        onSaveSightseeing={handleSaveSightseeing}
+      />
+
+      <ActivityModal
+        isOpen={modalState.activity.isOpen}
+        dayNumber={packageData.days.findIndex((d) => d.id === modalState.activity.dayId) + 1}
+        dayLocation={packageData.days.find((d) => d.id === modalState.activity.dayId)?.location || packageData.destination || ''}
+        initialData={modalState.activity.item}
+        onClose={() => setModalState((prev) => ({ ...prev, activity: { ...prev.activity, isOpen: false } }))}
+        onSaveActivity={handleSaveActivity}
+      />
+
+      <MealModal
+        isOpen={modalState.meal.isOpen}
+        dayNumber={packageData.days.findIndex((d) => d.id === modalState.meal.dayId) + 1}
+        dayDate={packageData.days.find((d) => d.id === modalState.meal.dayId)?.date || ''}
+        initialData={modalState.meal.item}
+        onClose={() => setModalState((prev) => ({ ...prev, meal: { ...prev.meal, isOpen: false } }))}
+        onSaveMeal={handleSaveMeal}
       />
 
       {/* =====================================================================

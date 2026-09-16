@@ -190,6 +190,11 @@ const Package = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true,
     },
+    otherPolicies: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: [],
+    },
     customization: {
       type: DataTypes.JSON,
       allowNull: true,

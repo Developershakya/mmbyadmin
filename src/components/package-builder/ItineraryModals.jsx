@@ -290,7 +290,34 @@ export function SightseeingModal({
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
   const [imageName, setImageName] = useState('');
+  const [apiSuggestions, setApiSuggestions] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
   const fileInputRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
+
+  const fetchSuggestions = (queryStr, cityStr) => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        setLoadingSuggestions(true);
+        const params = new URLSearchParams();
+        if (queryStr) params.append('q', queryStr);
+        if (cityStr && cityStr !== 'Local Destination') params.append('city', cityStr);
+        const res = await fetch(`/api/sightseeing/search?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.sightseeing)) {
+            setApiSuggestions(data.sightseeing);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch sightseeing suggestions:', err);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 200);
+  };
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
@@ -322,10 +349,32 @@ export function SightseeingModal({
       setIsIncluded(true);
       setDescription('Guided exploration with scenic viewpoints, iconic photo-stops, and cultural heritage insights.');
       setImage('https://images.unsplash.com/photo-1596895111956-bf1cf0599ce5');
+      // Fetch initial suggestions for destination city
+      if (isOpen) {
+        fetchSuggestions('', dayLocation);
+      }
     }
+    setShowDropdown(false);
   }, [initialData, isOpen, dayLocation]);
 
   if (!isOpen) return null;
+
+  const handleSelectSuggestion = (sugg) => {
+    setName(sugg.name || '');
+    if (sugg.location || sugg.cityName) {
+      setLocation(sugg.cityName ? `${sugg.name}, ${sugg.cityName}` : sugg.location);
+    }
+    if (sugg.masterDescription || sugg.packageDescriptionOverride) {
+      setDescription(sugg.packageDescriptionOverride || sugg.masterDescription);
+    }
+    if (sugg.image) {
+      setImage(sugg.image);
+    }
+    if (sugg.duration) {
+      setDuration(sugg.duration);
+    }
+    setShowDropdown(false);
+  };
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -373,18 +422,74 @@ export function SightseeingModal({
 
         {/* Form Body */}
         <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-4 text-xs">
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">
-              Sightseeing Name <span className="text-teal-600">*</span>
-            </label>
+          <div className="relative">
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-semibold text-slate-700">
+                Sightseeing Name <span className="text-teal-600">*</span>
+              </label>
+              <span className="text-[11px] text-teal-600 font-medium flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> API Search &amp; Custom Entry
+              </span>
+            </div>
             <input
               type="text"
               required
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Solang Valley Snow Point, Hadimba Temple, Rohtang Pass"
+              onFocus={() => {
+                setShowDropdown(true);
+                if (!apiSuggestions.length) fetchSuggestions(name, location);
+              }}
+              onChange={(e) => {
+                const val = e.target.value;
+                setName(val);
+                setShowDropdown(true);
+                fetchSuggestions(val, location);
+              }}
+              placeholder="Type to search or enter custom attraction name..."
               className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none"
             />
+
+            {/* Suggestions Dropdown */}
+            {showDropdown && apiSuggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 z-30 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                <div className="p-2 bg-slate-50 text-[11px] font-semibold text-slate-500 flex items-center justify-between">
+                  <span>Suggested Attractions (Click to fill)</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowDropdown(false)}
+                    className="text-slate-400 hover:text-slate-600"
+                  >
+                    Close
+                  </button>
+                </div>
+                {apiSuggestions.map((sugg) => (
+                  <div
+                    key={sugg.id}
+                    onClick={() => handleSelectSuggestion(sugg)}
+                    className="p-2.5 hover:bg-teal-50/60 cursor-pointer flex items-center gap-3 transition"
+                  >
+                    {sugg.image ? (
+                      <img
+                        src={sugg.image}
+                        alt={sugg.name}
+                        className="w-10 h-10 rounded-lg object-cover shrink-0 border border-slate-200"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-xs shrink-0">
+                        <Mountain className="w-4 h-4" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-slate-900 truncate">{sugg.name}</p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {sugg.cityName ? `${sugg.cityName} · ` : ''}
+                        {sugg.masterDescription || 'Popular scenic tourist spot'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

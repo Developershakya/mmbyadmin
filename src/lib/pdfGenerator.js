@@ -1,58 +1,128 @@
+import { toCanvas } from 'html-to-image';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 /**
- * Downloads a DOM element as a high-fidelity PDF file.
- * Falls back to programmatic jsPDF document if DOM capture encounters restrictions.
+ * Generates a high-fidelity, multi-page A4 PDF directly from the rendered Customer Preview DOM element.
+ * Visually matches the Customer Preview exactly (colors, typography, layout, banner, tables, pricing, itinerary).
  */
-export async function downloadElementAsPdf(element, filename = 'package-itinerary.pdf', fallbackPackage = null) {
+export async function downloadCustomerPreviewAsPdf(element, filename = 'Holiday-Itinerary.pdf') {
+  if (!element) {
+    throw new Error('Customer Preview DOM element was not found.');
+  }
+
   const safeFilename = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
 
+  // Wait for any images inside the preview to complete loading
+  const images = Array.from(element.querySelectorAll('img'));
+  await Promise.all(
+    images.map((img) => {
+      if (img.complete) return Promise.resolve();
+      return new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve;
+        setTimeout(resolve, 2000);
+      });
+    })
+  );
+
+  const placeholderPixel =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAVy38yAAAAAElFTkSuQmCC';
+
+  let canvas;
   try {
-    if (element) {
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgHeight = (canvas.height * pageWidth) / canvas.width;
-
-      let position = 0;
-      let heightLeft = imgHeight;
-
-      pdf.addImage(imgData, 'PNG', 0, position, pageWidth, Math.min(imgHeight, pageHeight));
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, pageWidth, imgHeight);
-        heightLeft -= pageHeight;
+    canvas = await toCanvas(element, {
+      backgroundColor: '#ffffff',
+      pixelRatio: 2,
+      skipFonts: true,
+      cacheBust: false,
+      imagePlaceholder: placeholderPixel,
+      filter: (node) => {
+        if (
+          node.classList &&
+          (node.classList.contains('print:hidden') ||
+            node.id === 'preview-action-bar' ||
+            node.getAttribute?.('aria-hidden') === 'true')
+        ) {
+          return false;
+        }
+        return true;
       }
-
-      pdf.save(safeFilename);
-      return true;
-    }
+    });
   } catch (err) {
-    console.warn('html2canvas rendering fallback to direct PDF generation:', err);
+    console.warn('html-to-image toCanvas failed, attempting html2canvas DOM capture:', err);
+    canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: false,
+      backgroundColor: '#ffffff',
+      logging: false,
+      ignoreElements: (node) =>
+        node.classList && node.classList.contains('print:hidden')
+    });
   }
 
-  // Programmatic fallback to guarantee a valid .pdf file download
-  if (fallbackPackage) {
-    generatePackagePdf(fallbackPackage, safeFilename);
+  if (!canvas || canvas.width === 0 || canvas.height === 0) {
+    throw new Error('Canvas render was empty.');
   }
+
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+    compress: true
+  });
+
+  const pdfPageWidth = 210; // A4 width mm
+  const pdfPageHeight = 297; // A4 height mm
+  const pxPerMm = canvas.width / pdfPageWidth;
+  const pageHeightInPx = Math.floor(pdfPageHeight * pxPerMm);
+  const totalPages = Math.ceil(canvas.height / pageHeightInPx);
+
+  for (let page = 0; page < totalPages; page++) {
+    const sourceY = page * pageHeightInPx;
+    const currentSliceHeightPx = Math.min(pageHeightInPx, canvas.height - sourceY);
+
+    const pageCanvas = document.createElement('canvas');
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = currentSliceHeightPx;
+
+    const ctx = pageCanvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      ctx.drawImage(
+        canvas,
+        0,
+        sourceY,
+        canvas.width,
+        currentSliceHeightPx,
+        0,
+        0,
+        canvas.width,
+        currentSliceHeightPx
+      );
+    }
+
+    const pageImgData = pageCanvas.toDataURL('image/jpeg', 0.95);
+    const sliceHeightInMm = (currentSliceHeightPx / canvas.width) * pdfPageWidth;
+
+    if (page > 0) {
+      pdf.addPage('a4', 'portrait');
+    }
+
+    pdf.addImage(pageImgData, 'JPEG', 0, 0, pdfPageWidth, sliceHeightInMm, undefined, 'FAST');
+  }
+
+  pdf.save(safeFilename);
   return true;
+}
+
+/**
+ * Downloads a DOM element as a high-fidelity PDF file.
+ */
+export async function downloadElementAsPdf(element, filename = 'package-itinerary.pdf') {
+  return downloadCustomerPreviewAsPdf(element, filename);
 }
 
 /**
