@@ -25,8 +25,13 @@ import {
   ChevronDown,
   ChevronUp,
   Save,
-  HelpCircle
+  HelpCircle,
+  ToggleLeft,
+  ToggleRight,
+  Eye,
+  EyeOff
 } from 'lucide-react';
+import { DEFAULT_POLICY_VISIBILITY } from '../../lib/customerPackageData.js';
 
 const DEFAULT_CANCELLATION_RULES = [
   { timeframe: '30+ Days Before Departure', charge: '10% of Package Value', refund: '90% Refund within 7 working days' },
@@ -184,6 +189,40 @@ export default function PoliciesForm({
   const exclusions = packageData.exclusions?.length ? packageData.exclusions : DEFAULT_EXCLUSIONS;
   const terms = (packageData.terms?.length ? packageData.terms : packageData.termsAndConditions?.length ? packageData.termsAndConditions : DEFAULT_TERMS);
   const otherPolicies = packageData.otherPolicies || [];
+
+  const policyVisibility = {
+    ...DEFAULT_POLICY_VISIBILITY,
+    ...(packageData.policyVisibility || {})
+  };
+
+  const handleTogglePolicyVisibility = (key, customPolIdx = null) => {
+    const isCurrentlyVisible = policyVisibility[key] !== false;
+    const nextVal = !isCurrentlyVisible;
+
+    setPackageData((prev) => {
+      const updatedVis = {
+        ...DEFAULT_POLICY_VISIBILITY,
+        ...(prev.policyVisibility || {}),
+        [key]: nextVal
+      };
+
+      let updatedOther = prev.otherPolicies;
+      if (customPolIdx !== null && Array.isArray(prev.otherPolicies)) {
+        updatedOther = prev.otherPolicies.map((pol, idx) => {
+          if (idx === customPolIdx) {
+            return { ...pol, enabled: nextVal, visible: nextVal };
+          }
+          return pol;
+        });
+      }
+
+      return {
+        ...prev,
+        policyVisibility: updatedVis,
+        ...(updatedOther ? { otherPolicies: updatedOther } : {})
+      };
+    });
+  };
 
   // Helper to reorder array
   const moveItem = (arr, fromIndex, toIndex) => {
@@ -588,10 +627,80 @@ export default function PoliciesForm({
       </div>
 
       {/* =====================================================================
+          POLICY VISIBILITY CONTROLS (CUSTOMER PREVIEW & DOWNLOAD PDF)
+          ===================================================================== */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Eye className="w-5 h-5 text-orange-500" />
+            <div>
+              <h2 className="font-bold text-sm text-[#0F172A]">
+                Customer Policy Visibility Settings (Preview &amp; PDF)
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Toggle which policy sections appear in the Customer Preview voucher and Downloaded PDF. When OFF, content remains safely saved.
+              </p>
+            </div>
+          </div>
+          <div className="text-[11px] font-semibold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+            Preview &amp; PDF Single Source of Truth
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-1">
+          {[
+            { key: 'terms', label: 'Terms & Conditions', icon: FileText },
+            { key: 'cancellation', label: 'Cancellation Policy', icon: ShieldAlert },
+            { key: 'dateChange', label: 'Date Change Policy', icon: CalendarClock },
+            { key: 'booking', label: 'Booking Policy', icon: Bookmark },
+            { key: 'payment', label: 'Payment Policy', icon: CreditCard },
+            { key: 'refund', label: 'Refund Policy', icon: RefreshCw },
+            { key: 'child', label: 'Child Policy', icon: Baby },
+            { key: 'hotel', label: 'Hotel Policy', icon: Building },
+            { key: 'transportation', label: 'Transport Policy', icon: Car },
+            ...otherPolicies
+              .filter((p) => !['booking', 'payment', 'refund', 'child', 'hotel', 'transportation'].includes(p.type))
+              .map((p, idx) => ({
+                key: p.key || p.id || `custom-${idx}`,
+                label: p.title,
+                icon: Bookmark,
+                customIdx: idx
+              }))
+          ].map((item) => {
+            const isVisible = policyVisibility[item.key] !== false;
+            const IconComp = item.icon;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => handleTogglePolicyVisibility(item.key, item.customIdx)}
+                className={`flex items-center justify-between p-2.5 rounded-xl border text-left cursor-pointer transition select-none ${
+                  isVisible
+                    ? 'bg-orange-50/40 border-orange-200 text-slate-800 hover:border-orange-300'
+                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100/70'
+                }`}
+                title={`Click to turn ${item.label} ${isVisible ? 'OFF' : 'ON'}`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <IconComp className={`w-3.5 h-3.5 shrink-0 ${isVisible ? 'text-orange-500' : 'text-slate-400'}`} />
+                  <span className="text-xs font-semibold truncate">{item.label}</span>
+                </div>
+                {isVisible ? (
+                  <ToggleRight className="w-5 h-5 text-orange-600 shrink-0 ml-1.5" />
+                ) : (
+                  <ToggleLeft className="w-5 h-5 text-slate-400 shrink-0 ml-1.5" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* =====================================================================
           1. TERMS & CONDITIONS (EDITABLE REPEATER)
           ===================================================================== */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
               <FileText className="w-4 h-4" />
@@ -601,10 +710,44 @@ export default function PoliciesForm({
               <p className="text-[11px] text-slate-500">Legal clauses and operational requirements shown on booking confirmation.</p>
             </div>
           </div>
-          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-            {terms.length} Clauses
-          </span>
+          <div className="flex items-center gap-2.5 self-end sm:self-auto">
+            {/* Visibility Toggle */}
+            <button
+              type="button"
+              onClick={() => handleTogglePolicyVisibility('terms')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                policyVisibility.terms !== false
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                  : 'bg-slate-100 border-slate-300 text-slate-500'
+              }`}
+              title="Toggle visibility in Customer Preview and PDF"
+            >
+              {policyVisibility.terms !== false ? (
+                <>
+                  <ToggleRight className="w-4 h-4 text-emerald-600" />
+                  <span>ON (Shown in Preview &amp; PDF)</span>
+                </>
+              ) : (
+                <>
+                  <ToggleLeft className="w-4 h-4 text-slate-400" />
+                  <span>OFF (Hidden from Preview &amp; PDF)</span>
+                </>
+              )}
+            </button>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200">
+              {terms.length} Clauses
+            </span>
+          </div>
         </div>
+
+        {policyVisibility.terms === false && (
+          <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+            <EyeOff className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              Terms &amp; Conditions is currently turned <strong>OFF</strong>. This section will NOT appear in the Customer Preview voucher or downloaded PDF. Your clauses remain saved below.
+            </span>
+          </div>
+        )}
 
         {/* Add Term Input */}
         <div className="flex gap-2">
@@ -723,7 +866,7 @@ export default function PoliciesForm({
           2. CANCELLATION & REFUND POLICY (SLABS & CUSTOM NOTES)
           ===================================================================== */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
               <ShieldAlert className="w-4 h-4" />
@@ -733,15 +876,49 @@ export default function PoliciesForm({
               <p className="text-[11px] text-slate-500">Tiered cancellation slabs based on days remaining before travel departure date.</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleAddCancellationRule}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Slab</span>
-          </button>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            {/* Visibility Toggle */}
+            <button
+              type="button"
+              onClick={() => handleTogglePolicyVisibility('cancellation')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                policyVisibility.cancellation !== false
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                  : 'bg-slate-100 border-slate-300 text-slate-500'
+              }`}
+              title="Toggle visibility in Customer Preview and PDF"
+            >
+              {policyVisibility.cancellation !== false ? (
+                <>
+                  <ToggleRight className="w-4 h-4 text-emerald-600" />
+                  <span>ON (Shown in Preview &amp; PDF)</span>
+                </>
+              ) : (
+                <>
+                  <ToggleLeft className="w-4 h-4 text-slate-400" />
+                  <span>OFF (Hidden from Preview &amp; PDF)</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleAddCancellationRule}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Slab</span>
+            </button>
+          </div>
         </div>
+
+        {policyVisibility.cancellation === false && (
+          <div className="p-3 bg-rose-50/70 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-center gap-2">
+            <EyeOff className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>
+              Cancellation &amp; Refund Policy is currently turned <strong>OFF</strong>. This section will NOT appear in the Customer Preview voucher or downloaded PDF. All slabs remain saved below.
+            </span>
+          </div>
+        )}
 
         {/* Table / Grid for Slabs */}
         <div className="border border-slate-200 rounded-xl overflow-x-auto">
@@ -839,7 +1016,7 @@ export default function PoliciesForm({
           3. DATE CHANGE POLICY (RULES & CUSTOM NOTES)
           ===================================================================== */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
               <CalendarClock className="w-4 h-4" />
@@ -849,15 +1026,49 @@ export default function PoliciesForm({
               <p className="text-[11px] text-slate-500">Rescheduling terms, modification fees, and advance notice requirements.</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleAddDateChangeRule}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Rule</span>
-          </button>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            {/* Visibility Toggle */}
+            <button
+              type="button"
+              onClick={() => handleTogglePolicyVisibility('dateChange')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                policyVisibility.dateChange !== false
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                  : 'bg-slate-100 border-slate-300 text-slate-500'
+              }`}
+              title="Toggle visibility in Customer Preview and PDF"
+            >
+              {policyVisibility.dateChange !== false ? (
+                <>
+                  <ToggleRight className="w-4 h-4 text-emerald-600" />
+                  <span>ON (Shown in Preview &amp; PDF)</span>
+                </>
+              ) : (
+                <>
+                  <ToggleLeft className="w-4 h-4 text-slate-400" />
+                  <span>OFF (Hidden from Preview &amp; PDF)</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleAddDateChangeRule}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Rule</span>
+            </button>
+          </div>
         </div>
+
+        {policyVisibility.dateChange === false && (
+          <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center gap-2">
+            <EyeOff className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>
+              Date Change Policy is currently turned <strong>OFF</strong>. This section will NOT appear in the Customer Preview voucher or downloaded PDF. All rules remain saved below.
+            </span>
+          </div>
+        )}
 
         {/* Table / Grid for Date Change */}
         <div className="border border-slate-200 rounded-xl overflow-x-auto">
@@ -1042,6 +1253,12 @@ export default function PoliciesForm({
           otherPolicies.map((policy, pIdx) => {
             const presetInfo = POLICY_PRESETS.find((p) => p.type === policy.type);
             const IconComp = presetInfo?.icon || Bookmark;
+            const policyKey = policy.key || policy.id || policy.type || `custom-${pIdx}`;
+            const isVisible =
+              policy.enabled !== false &&
+              policy.visible !== false &&
+              policyVisibility[policyKey] !== false &&
+              (policy.type ? policyVisibility[policy.type] !== false : true);
 
             return (
               <div
@@ -1066,6 +1283,29 @@ export default function PoliciesForm({
                   </div>
 
                   <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                    {/* Visibility Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePolicyVisibility(policy.type || policyKey, pIdx)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer mr-1 ${
+                        isVisible
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                          : 'bg-slate-100 border-slate-300 text-slate-500'
+                      }`}
+                      title="Toggle visibility in Customer Preview and PDF"
+                    >
+                      {isVisible ? (
+                        <>
+                          <ToggleRight className="w-4 h-4 text-emerald-600" />
+                          <span>ON</span>
+                        </>
+                      ) : (
+                        <>
+                          <ToggleLeft className="w-4 h-4 text-slate-400" />
+                          <span>OFF</span>
+                        </>
+                      )}
+                    </button>
                     {/* Move Up */}
                     <button
                       type="button"
@@ -1098,6 +1338,15 @@ export default function PoliciesForm({
                     </button>
                   </div>
                 </div>
+
+                {!isVisible && (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center gap-2">
+                    <EyeOff className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>
+                      {policy.title} is currently turned <strong>OFF</strong>. This section will NOT appear in the Customer Preview voucher or downloaded PDF. Your clauses remain saved below.
+                    </span>
+                  </div>
+                )}
 
                 {/* Add Clause to this section */}
                 <div className="flex gap-2">

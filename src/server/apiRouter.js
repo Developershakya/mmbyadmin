@@ -764,6 +764,8 @@ router.post('/packages', async (req, res) => {
       dateChangePolicy: data.dateChangePolicy || null,
       otherPolicies: data.otherPolicies || data.policies || [],
       customization: data.customization || null,
+      policyVisibility: data.policyVisibility || null,
+      priceBreakdownVisibility: data.priceBreakdownVisibility || null,
       tags: data.tags || [],
       galleryImages: data.galleryImages || []
     };
@@ -871,6 +873,8 @@ router.put('/packages/:id', async (req, res) => {
       dateChangePolicy: data.dateChangePolicy || null,
       otherPolicies: data.otherPolicies || data.policies || [],
       customization: data.customization || null,
+      policyVisibility: data.policyVisibility || null,
+      priceBreakdownVisibility: data.priceBreakdownVisibility || null,
       tags: data.tags || [],
       galleryImages: data.galleryImages || []
     };

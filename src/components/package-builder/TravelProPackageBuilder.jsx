@@ -61,6 +61,10 @@ import PublishView from './PublishView.jsx';
 import StepperControl from './StepperControl.jsx';
 import { downloadCustomerPreviewAsPdf } from '../../lib/pdfGenerator.js';
 import { fetchPackageById, savePackage, deletePackageApi } from '../../lib/api/packages.js';
+import {
+  DEFAULT_POLICY_VISIBILITY,
+  DEFAULT_PRICE_BREAKDOWN_VISIBILITY
+} from '../../lib/customerPackageData.js';
 
 // Format INR currency
 const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
@@ -127,6 +131,8 @@ export default function TravelProPackageBuilder({
           activity: true,
           meal: true
         },
+        policyVisibility: { ...DEFAULT_POLICY_VISIBILITY },
+        priceBreakdownVisibility: { ...DEFAULT_PRICE_BREAKDOWN_VISIBILITY },
         days: []
       };
     }
@@ -204,6 +210,14 @@ export default function TravelProPackageBuilder({
         activity: true,
         meal: true
       },
+      policyVisibility: {
+        ...DEFAULT_POLICY_VISIBILITY,
+        ...(pkg.policyVisibility || pkg.itineraryData?.policyVisibility || {})
+      },
+      priceBreakdownVisibility: {
+        ...DEFAULT_PRICE_BREAKDOWN_VISIBILITY,
+        ...(pkg.priceBreakdownVisibility || pkg.itineraryData?.priceBreakdownVisibility || {})
+      },
       days: Array.isArray(days) ? days : []
     };
   };
@@ -238,25 +252,30 @@ export default function TravelProPackageBuilder({
   };
 
   // Synchronize when initialPackage prop updates or loads from DB
+  const loadedPkgIdRef = useRef(initialPackage?.id || null);
   useEffect(() => {
     if (initialPackage) {
-      const parsed = parsePackageIntoState(initialPackage);
-      setPackageData(parsed);
-      setLastSavedData(JSON.parse(JSON.stringify(parsed)));
+      if (loadedPkgIdRef.current !== initialPackage.id) {
+        const parsed = parsePackageIntoState(initialPackage);
+        setPackageData(parsed);
+        setLastSavedData(JSON.parse(JSON.stringify(parsed)));
+        loadedPkgIdRef.current = initialPackage.id;
+      }
     } else {
       const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
       const urlId = searchParams.get('id');
-      if (urlId) {
+      if (urlId && loadedPkgIdRef.current !== urlId) {
         fetchPackageById(urlId).then((dbPkg) => {
           if (dbPkg) {
             const parsed = parsePackageIntoState(dbPkg);
             setPackageData(parsed);
             setLastSavedData(JSON.parse(JSON.stringify(parsed)));
+            loadedPkgIdRef.current = urlId;
           }
         }).catch((err) => console.warn('Could not fetch package for edit:', err));
       }
     }
-  }, [initialPackage]);
+  }, [initialPackage?.id]);
 
   // Modal States
   const [modalState, setModalState] = useState({
@@ -1081,6 +1100,8 @@ export default function TravelProPackageBuilder({
         cancellationPolicy: packageData.cancellationPolicy,
         dateChangePolicy: packageData.dateChangePolicy,
         otherPolicies: packageData.otherPolicies || [],
+        policyVisibility: packageData.policyVisibility || null,
+        priceBreakdownVisibility: packageData.priceBreakdownVisibility || null,
         status,
         itineraryData: {
           days: packageData.days,
@@ -1088,7 +1109,9 @@ export default function TravelProPackageBuilder({
           travelers: packageData.travelers,
           cancellationPolicy: packageData.cancellationPolicy,
           dateChangePolicy: packageData.dateChangePolicy,
-          otherPolicies: packageData.otherPolicies || []
+          otherPolicies: packageData.otherPolicies || [],
+          policyVisibility: packageData.policyVisibility || null,
+          priceBreakdownVisibility: packageData.priceBreakdownVisibility || null
         },
         pricingRules: packageData.pricing,
         pricingBreakdown: pricingBreakdown
@@ -1143,15 +1166,22 @@ export default function TravelProPackageBuilder({
   };
 
   const handleDiscardAndProceed = () => {
+    // 1. Completely revert form state to the baseline last saved data
+    const reverted = JSON.parse(JSON.stringify(lastSavedData));
+    setPackageData(reverted);
+    // 2. Move to the target stage
     if (unsavedModalState.targetStep) {
       setActiveStep(unsavedModalState.targetStep);
     }
     setUnsavedModalState({ isOpen: false, targetStep: null });
+    showToast('Unsaved changes discarded. Form reverted to last saved state.', 'info');
   };
 
   const handleSaveAndProceed = async () => {
     const nextTargetStep = unsavedModalState.targetStep;
+    // 1. Save current stage data & updates baseline saved data
     const res = await handleSavePackage('Draft');
+    // 2. Advance to the next builder stage WITHOUT navigating to package listing
     if (res?.success) {
       if (nextTargetStep) {
         setActiveStep(nextTargetStep);

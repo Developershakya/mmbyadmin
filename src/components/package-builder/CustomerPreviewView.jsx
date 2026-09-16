@@ -25,9 +25,13 @@ import {
   Mail,
   ExternalLink,
   ChevronRight,
-  Eye
+  Eye,
+  Copy,
+  Check,
+  Receipt
 } from 'lucide-react';
 import { downloadCustomerPreviewAsPdf } from '../../lib/pdfGenerator.js';
+import { getCustomerFacingPackageData } from '../../lib/customerPackageData.js';
 
 // INR Currency Formatter
 const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
@@ -66,6 +70,18 @@ export default function CustomerPreviewView({
 }) {
   const [downloading, setDownloading] = useState(false);
   const [previewImage, setPreviewImage] = useState(null); // For flight ticket/image modal
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  // Single Source of Truth for customer-facing data (visibility filtering for preview & PDF)
+  const customerFacingData = getCustomerFacingPackageData(packageData);
+  const { visiblePolicies, showPriceBreakdown, visibleBreakdownItems } = customerFacingData;
+
+  const termsPolicy = visiblePolicies.find((p) => p.key === 'terms');
+  const cancellationPolicy = visiblePolicies.find((p) => p.key === 'cancellation');
+  const dateChangePolicy = visiblePolicies.find((p) => p.key === 'dateChange');
+  const otherVisiblePolicies = visiblePolicies.filter(
+    (p) => !['terms', 'cancellation', 'dateChange'].includes(p.key)
+  );
 
   const travelers = packageData.travelers || { adults: 2, children: 0 };
   const totalTravelers = Math.max((travelers.adults || 0) + (travelers.children || 0), 1);
@@ -177,6 +193,30 @@ export default function CustomerPreviewView({
     }
   };
 
+  // Copy Clean Sanitized JSON (No passwords, tokens, API credentials, or secrets)
+  const handleCopyJson = async () => {
+    try {
+      const dataToExport = customerFacingData.sanitizedForExport;
+      const jsonText = JSON.stringify(dataToExport, null, 2);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(jsonText);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = jsonText;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopiedJson(true);
+      if (showToast) showToast('Sanitized Package JSON copied to clipboard!', 'success');
+      setTimeout(() => setCopiedJson(false), 2500);
+    } catch (err) {
+      console.error('Failed to copy JSON:', err);
+      if (showToast) showToast('Could not copy JSON to clipboard.', 'error');
+    }
+  };
+
   const previewTerms = packageData.terms?.length
     ? packageData.terms
     : packageData.termsAndConditions?.length
@@ -233,6 +273,28 @@ export default function CustomerPreviewView({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCopyJson}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+              copiedJson
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+            }`}
+            title="Copy clean package JSON without sensitive keys"
+          >
+            {copiedJson ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Copied JSON!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 text-slate-600" />
+                <span className="hidden sm:inline">Copy JSON</span>
+              </>
+            )}
+          </button>
           <button
             type="button"
             onClick={handleShare}
@@ -423,6 +485,49 @@ export default function CustomerPreviewView({
                 )}
               </div>
             </div>
+
+            {/* Itemized Price Breakdown Table (Single Source of Truth for Preview & PDF) */}
+            {showPriceBreakdown && visibleBreakdownItems.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-orange-200/80 space-y-2.5">
+                <div className="flex items-center justify-between text-xs font-bold text-orange-950">
+                  <div className="flex items-center gap-1.5">
+                    <Receipt className="w-3.5 h-3.5 text-orange-600" />
+                    <span>Itemized Price Breakdown</span>
+                  </div>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-orange-700 bg-orange-100/70 px-2 py-0.5 rounded-full border border-orange-200">
+                    Commercial Quotation
+                  </span>
+                </div>
+
+                <div className="bg-white/95 rounded-xl border border-orange-200/90 divide-y divide-orange-100/80 text-xs overflow-hidden shadow-2xs">
+                  {visibleBreakdownItems.map((item) => (
+                    <div
+                      key={item.key}
+                      className={`flex items-center justify-between px-3.5 py-2.5 ${
+                        item.key === 'grandTotal'
+                          ? 'bg-orange-50/90 font-bold text-slate-900 border-t border-orange-200'
+                          : 'text-slate-700 hover:bg-orange-50/30'
+                      }`}
+                    >
+                      <span className={item.key === 'grandTotal' ? 'font-bold text-slate-900' : 'font-medium'}>
+                        {item.label} {item.count ? `(${item.count})` : ''}
+                      </span>
+                      <span
+                        className={`font-mono ${
+                          item.key === 'grandTotal'
+                            ? 'text-orange-700 font-black text-sm'
+                            : item.amount < 0
+                            ? 'text-emerald-600 font-semibold'
+                            : 'font-semibold text-slate-800'
+                        }`}
+                      >
+                        {item.amount < 0 ? `- ${inr(Math.abs(item.amount))}` : inr(item.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* =====================================================================
@@ -918,191 +1023,210 @@ export default function CustomerPreviewView({
           </div>
 
           {/* =====================================================================
-             10. TERMS AND CONDITIONS (DYNAMIC FROM PACKAGE DATA)
+             10. TERMS AND CONDITIONS (FILTERED BY POLICY VISIBILITY)
              ===================================================================== */}
-          <div className="space-y-3 pt-4 border-t border-slate-100">
-            <div className="flex items-center justify-between">
-              <h4 className="font-bold text-sm sm:text-base text-slate-900">
-                Terms &amp; Conditions
-              </h4>
-              <span className="text-[11px] font-medium text-slate-400">
-                {previewTerms.length} clauses
-              </span>
+          {termsPolicy && Array.isArray(termsPolicy.items) && termsPolicy.items.length > 0 && (
+            <div className="space-y-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-sm sm:text-base text-slate-900">
+                  Terms &amp; Conditions
+                </h4>
+                <span className="text-[11px] font-medium text-slate-400">
+                  {termsPolicy.items.length} clauses
+                </span>
+              </div>
+              <ul className="space-y-2 text-xs text-slate-600 leading-relaxed list-disc list-inside">
+                {termsPolicy.items.map((term, i) => (
+                  <li key={i} className="pl-1 text-slate-700">
+                    <span className="font-medium text-slate-800">{term}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="space-y-2 text-xs text-slate-600 leading-relaxed list-disc list-inside">
-              {previewTerms.map((term, i) => (
-                <li key={i} className="pl-1 text-slate-700">
-                  <span className="font-medium text-slate-800">{term}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          )}
 
           {/* =====================================================================
-             11. CANCELLATION & DATE CHANGE POLICIES (DYNAMIC SLABS)
+             11. CANCELLATION, DATE CHANGE & OTHER POLICIES (FILTERED BY VISIBILITY)
              ===================================================================== */}
-          <div className="space-y-6 pt-4 border-t border-slate-100">
-            {/* Cancellation Policy */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-sm sm:text-base text-slate-900">
-                  Cancellation &amp; Refund Policy
-                </h4>
-                <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
-                  Tiered Slabs
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {previewCancellationRules.map((rule, idx) => {
-                  const isSevere = (rule.charge || '').includes('100%') || (rule.refund || '').toLowerCase().includes('non-refundable');
-                  return (
-                    <div
-                      key={idx}
-                      className={`border rounded-xl p-3.5 space-y-1 ${
-                        isSevere
-                          ? 'border-red-200 bg-red-50/50'
-                          : 'border-emerald-200 bg-emerald-50/50'
-                      }`}
-                    >
-                      <div
-                        className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${
-                          isSevere ? 'text-red-800' : 'text-emerald-800'
-                        }`}
-                      >
-                        <span
-                          className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                            isSevere ? 'bg-red-200 text-red-800' : 'bg-emerald-200 text-emerald-800'
+          {(cancellationPolicy || dateChangePolicy || otherVisiblePolicies.length > 0) && (
+            <div className="space-y-6 pt-4 border-t border-slate-100">
+              {/* Cancellation Policy */}
+              {cancellationPolicy && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-sm sm:text-base text-slate-900">
+                      Cancellation &amp; Refund Policy
+                    </h4>
+                    <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                      Tiered Slabs
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {(cancellationPolicy.rules || []).map((rule, idx) => {
+                      const isSevere =
+                        (rule.charge || '').includes('100%') ||
+                        (rule.refund || '').toLowerCase().includes('non-refundable');
+                      return (
+                        <div
+                          key={idx}
+                          className={`border rounded-xl p-3.5 space-y-1 ${
+                            isSevere
+                              ? 'border-red-200 bg-red-50/50'
+                              : 'border-emerald-200 bg-emerald-50/50'
                           }`}
                         >
-                          {isSevere ? '✕' : '✓'}
-                        </span>
-                        <span>{rule.timeframe}</span>
-                      </div>
-                      <p
-                        className={`text-xs font-semibold mt-1 ${
-                          isSevere ? 'text-red-950' : 'text-emerald-950'
-                        }`}
-                      >
-                        Cancellation charge: {rule.charge}
-                      </p>
-                      {rule.refund && (
-                        <p
-                          className={`text-[11px] ${
-                            isSevere ? 'text-red-700' : 'text-emerald-700'
-                          }`}
-                        >
-                          {rule.refund}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              {previewCancellationNotes && (
-                <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                  Note: {previewCancellationNotes}
-                </p>
-              )}
-            </div>
-
-            {/* Date Change Policy */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-sm sm:text-base text-slate-900">
-                  Date Change Policy
-                </h4>
-                <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                  Rescheduling Terms
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {previewDateChangeRules.map((rule, idx) => {
-                  const isRestrictive = (rule.charge || '').toLowerCase().includes('supplier') || (rule.remark || '').toLowerCase().includes('cancellation');
-                  return (
-                    <div
-                      key={idx}
-                      className={`border rounded-xl p-3.5 space-y-1 ${
-                        isRestrictive
-                          ? 'border-amber-200 bg-amber-50/50'
-                          : 'border-blue-200 bg-blue-50/50'
-                      }`}
-                    >
-                      <div
-                        className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${
-                          isRestrictive ? 'text-amber-800' : 'text-blue-800'
-                        }`}
-                      >
-                        <span
-                          className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                            isRestrictive ? 'bg-amber-200 text-amber-800' : 'bg-blue-200 text-blue-800'
-                          }`}
-                        >
-                          {isRestrictive ? '!' : '✓'}
-                        </span>
-                        <span>{rule.timeframe}</span>
-                      </div>
-                      <p
-                        className={`text-xs font-semibold mt-1 ${
-                          isRestrictive ? 'text-amber-950' : 'text-blue-950'
-                        }`}
-                      >
-                        {rule.charge}
-                      </p>
-                      {rule.remark && (
-                        <p
-                          className={`text-[11px] ${
-                            isRestrictive ? 'text-amber-700' : 'text-blue-700'
-                          }`}
-                        >
-                          {rule.remark}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              {previewDateChangeNotes && (
-                <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                  Note: {previewDateChangeNotes}
-                </p>
-              )}
-            </div>
-
-            {/* Other Modular Policies (Booking, Payment, Child, Hotel, Transportation, General, Custom) */}
-            {previewOtherPolicies.length > 0 && (
-              <div className="space-y-4 pt-2 border-t border-slate-100">
-                <h4 className="font-bold text-sm sm:text-base text-slate-900">
-                  Additional Policies &amp; Guidelines
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {previewOtherPolicies.map((pol, idx) => (
-                    <div
-                      key={pol.id || idx}
-                      className="border border-slate-200 bg-slate-50/60 rounded-xl p-4 space-y-2"
-                    >
-                      <h5 className="font-bold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" />
-                        <span>{pol.title}</span>
-                      </h5>
-                      <ul className="space-y-1 text-xs text-slate-600 leading-relaxed">
-                        {(pol.points || []).map((pt, pIdx) => (
-                          <li key={pIdx} className="flex items-start gap-1.5">
-                            <span className="text-slate-400 mt-1 shrink-0">•</span>
-                            <span>{pt}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      {pol.notes && (
-                        <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-100">
-                          {pol.notes}
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                          <div
+                            className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${
+                              isSevere ? 'text-red-800' : 'text-emerald-800'
+                            }`}
+                          >
+                            <span
+                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                isSevere ? 'bg-red-200 text-red-800' : 'bg-emerald-200 text-emerald-800'
+                              }`}
+                            >
+                              {isSevere ? '✕' : '✓'}
+                            </span>
+                            <span>{rule.timeframe}</span>
+                          </div>
+                          <p
+                            className={`text-xs font-semibold mt-1 ${
+                              isSevere ? 'text-red-950' : 'text-emerald-950'
+                            }`}
+                          >
+                            Cancellation charge: {rule.charge}
+                          </p>
+                          {rule.refund && (
+                            <p
+                              className={`text-[11px] ${
+                                isSevere ? 'text-red-700' : 'text-emerald-700'
+                              }`}
+                            >
+                              {rule.refund}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {cancellationPolicy.notes && (
+                    <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                      Note: {cancellationPolicy.notes}
+                    </p>
+                  )}
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+
+              {/* Date Change Policy */}
+              {dateChangePolicy && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-sm sm:text-base text-slate-900">
+                      Date Change Policy
+                    </h4>
+                    <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                      Rescheduling Terms
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {(dateChangePolicy.rules || []).map((rule, idx) => {
+                      const isRestrictive =
+                        (rule.charge || '').toLowerCase().includes('supplier') ||
+                        (rule.remark || '').toLowerCase().includes('cancellation');
+                      return (
+                        <div
+                          key={idx}
+                          className={`border rounded-xl p-3.5 space-y-1 ${
+                            isRestrictive
+                              ? 'border-amber-200 bg-amber-50/50'
+                              : 'border-blue-200 bg-blue-50/50'
+                          }`}
+                        >
+                          <div
+                            className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${
+                              isRestrictive ? 'text-amber-800' : 'text-blue-800'
+                            }`}
+                          >
+                            <span
+                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                isRestrictive ? 'bg-amber-200 text-amber-800' : 'bg-blue-200 text-blue-800'
+                              }`}
+                            >
+                              {isRestrictive ? '!' : '✓'}
+                            </span>
+                            <span>{rule.timeframe}</span>
+                          </div>
+                          <p
+                            className={`text-xs font-semibold mt-1 ${
+                              isRestrictive ? 'text-amber-950' : 'text-blue-950'
+                            }`}
+                          >
+                            {rule.charge}
+                          </p>
+                          {rule.remark && (
+                            <p
+                              className={`text-[11px] ${
+                                isRestrictive ? 'text-amber-700' : 'text-blue-700'
+                              }`}
+                            >
+                              {rule.remark}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {dateChangePolicy.notes && (
+                    <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                      Note: {dateChangePolicy.notes}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Other Modular Policies (Booking, Payment, Child, Hotel, Transportation, General, Custom) */}
+              {otherVisiblePolicies.length > 0 && (
+                <div className="space-y-4 pt-2 border-t border-slate-100">
+                  <h4 className="font-bold text-sm sm:text-base text-slate-900">
+                    Additional Policies &amp; Guidelines
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {otherVisiblePolicies.map((pol, idx) => (
+                      <div
+                        key={pol.id || pol.key || idx}
+                        className="border border-slate-200 bg-slate-50/60 rounded-xl p-4 space-y-2"
+                      >
+                        <h5 className="font-bold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" />
+                          <span>{pol.title}</span>
+                        </h5>
+                        {Array.isArray(pol.items) && pol.items.length > 0 && (
+                          <ul className="space-y-1 text-xs text-slate-600 leading-relaxed">
+                            {pol.items.map((pt, pIdx) => (
+                              <li key={pIdx} className="flex items-start gap-1.5">
+                                <span className="text-slate-400 mt-1 shrink-0">•</span>
+                                <span>{pt}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {pol.content && (
+                          <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                            {pol.content}
+                          </p>
+                        )}
+                        {pol.notes && (
+                          <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-100">
+                            {pol.notes}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* =====================================================================
              12. DOCUMENT FOOTER (MATCHING PAGE 4)

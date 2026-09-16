@@ -199,6 +199,14 @@ const Package = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true,
     },
+    policyVisibility: {
+      type: DataTypes.JSON,
+      allowNull: true,
+    },
+    priceBreakdownVisibility: {
+      type: DataTypes.JSON,
+      allowNull: true,
+    },
     tags: {
       type: DataTypes.JSON,
       allowNull: true,

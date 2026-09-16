@@ -17,9 +17,12 @@ import {
   Mountain,
   Compass,
   Utensils,
-  HelpCircle
+  HelpCircle,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import StepperControl from './StepperControl.jsx';
+import { DEFAULT_PRICE_BREAKDOWN_VISIBILITY } from '../../lib/customerPackageData.js';
 
 const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
 
@@ -132,6 +135,34 @@ export default function PricingRulesForm({
         gstRate: rate,
         tax: newTax,
         customTax: undefined
+      }
+    }));
+  };
+
+  const priceBreakdownVisibility = {
+    ...DEFAULT_PRICE_BREAKDOWN_VISIBILITY,
+    ...(packageData.priceBreakdownVisibility || {})
+  };
+
+  const toggleBreakdownItem = (key) => {
+    setPackageData((prev) => ({
+      ...prev,
+      priceBreakdownVisibility: {
+        ...DEFAULT_PRICE_BREAKDOWN_VISIBILITY,
+        ...(prev.priceBreakdownVisibility || {}),
+        [key]: priceBreakdownVisibility[key] === false ? true : false
+      }
+    }));
+  };
+
+  const toggleMasterBreakdown = () => {
+    const nextVal = priceBreakdownVisibility.showBreakdown === false ? true : false;
+    setPackageData((prev) => ({
+      ...prev,
+      priceBreakdownVisibility: {
+        ...DEFAULT_PRICE_BREAKDOWN_VISIBILITY,
+        ...(prev.priceBreakdownVisibility || {}),
+        showBreakdown: nextVal
       }
     }));
   };
@@ -414,6 +445,103 @@ export default function PricingRulesForm({
             {inr(finalTotal)}
           </span>
         </div>
+      </div>
+
+      {/* CUSTOMER PRICE BREAKDOWN VISIBILITY (PREVIEW & PDF) */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-indigo-600" />
+            <div>
+              <h3 className="font-bold text-sm text-[#0F172A]">
+                Customer Price Breakdown Visibility (Preview &amp; PDF)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Configure which price line items are displayed to the customer in the Preview voucher and Downloaded PDF.
+              </p>
+            </div>
+          </div>
+
+          {/* Master Toggle */}
+          <button
+            type="button"
+            onClick={toggleMasterBreakdown}
+            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition border cursor-pointer ${
+              priceBreakdownVisibility.showBreakdown !== false
+                ? 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                : 'bg-slate-100 border-slate-200 text-slate-500'
+            }`}
+          >
+            {priceBreakdownVisibility.showBreakdown !== false ? (
+              <>
+                <ToggleRight className="w-4 h-4 text-indigo-600" />
+                <span>Breakdown: ON</span>
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="w-4 h-4 text-slate-400" />
+                <span>Breakdown: OFF (Total Only)</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {priceBreakdownVisibility.showBreakdown === false ? (
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 flex items-center gap-2">
+            <EyeOff className="w-4 h-4 text-slate-400 shrink-0" />
+            <span>
+              Detailed price breakdown is turned <strong>OFF</strong>. Only the total package selling price ({inr(finalTotal)}) will be shown in the Customer Preview and PDF.
+            </span>
+          </div>
+        ) : (
+          <div className="space-y-3 pt-1">
+            <p className="text-[11px] text-slate-500 font-medium">
+              Toggle individual component visibility in the customer-facing breakdown table:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              {[
+                { key: 'flights', label: 'Flights / Airfare', icon: Plane, amount: flightTotal },
+                { key: 'hotels', label: 'Hotel Accommodations', icon: Building2, amount: hotelTotal },
+                { key: 'cabs', label: 'Private Cabs & Transfers', icon: Car, amount: cabTotal },
+                { key: 'buses', label: 'Intercity Buses', icon: Bus, amount: busTotal },
+                { key: 'sightseeing', label: 'Sightseeing Tours', icon: Mountain, amount: sightseeingTotal },
+                { key: 'activities', label: 'Adventure Activities', icon: Compass, amount: activityTotal },
+                { key: 'meals', label: 'Meal Inclusions', icon: Utensils, amount: mealTotal },
+                { key: 'markup', label: 'Agency Margin / Markup', icon: DollarSign, amount: markup },
+                { key: 'tax', label: `Taxes & GST (${gstRate}%)`, icon: Percent, amount: finalTax },
+                { key: 'discount', label: 'Promotional Discount', icon: Tag, amount: discount ? -discount : 0 },
+                { key: 'grandTotal', label: 'Final Package Price', icon: Check, amount: finalTotal }
+              ].map((item) => {
+                const isEnabled = priceBreakdownVisibility[item.key] !== false;
+                const IconComp = item.icon;
+                return (
+                  <div
+                    key={item.key}
+                    onClick={() => toggleBreakdownItem(item.key)}
+                    className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition select-none ${
+                      isEnabled
+                        ? 'bg-white border-indigo-200 hover:border-indigo-300 text-slate-800 shadow-2xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <IconComp className={`w-3.5 h-3.5 shrink-0 ${isEnabled ? 'text-indigo-600' : 'text-slate-400'}`} />
+                      <div className="truncate">
+                        <span className="text-xs font-semibold block truncate">{item.label}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{inr(item.amount)}</span>
+                      </div>
+                    </div>
+                    {isEnabled ? (
+                      <ToggleRight className="w-5 h-5 text-indigo-600 shrink-0" />
+                    ) : (
+                      <ToggleLeft className="w-5 h-5 text-slate-400 shrink-0" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CUSTOMER CUSTOMIZATION PERMISSIONS */}
