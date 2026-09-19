@@ -176,6 +176,23 @@ export const busProvider = {
     return await callSrdvBusEndpoint('GetSeatLayOut', payload, 'GetSeatLayOut', traceId);
   },
 
+  async block(params = {}) {
+    const { traceId, resultIndex = '0', passenger = [], boardId = '', dropId = '' } = params;
+
+    const payload = {
+      ClientId: SRDV_CLIENT_ID,
+      UserName: SRDV_USERNAME,
+      Password: SRDV_PASSWORD,
+      TraceId: String(traceId),
+      ResultIndex: String(resultIndex),
+      BoardId: String(boardId),
+      DropId: String(dropId),
+      Passenger: passenger
+    };
+
+    return await callSrdvBusEndpoint('Block', payload, 'Block', traceId);
+  },
+
   async book(bookingPayload) {
     // REAL BOOKING DISABLED
     return await DummyBusBookingProvider.book(bookingPayload);

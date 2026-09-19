@@ -63,6 +63,132 @@ export async function searchHotelsApi(params = {}) {
   return data.results || data.hotels || [];
 }
 
+export async function fetchFareCalendarApi(params = {}) {
+  const res = await fetch('/api/flights/fare-calendar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch fare calendar');
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
+export async function fetchFareRuleApi(params = {}) {
+  const res = await fetch('/api/flights/fare-rule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch fare rules');
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
+export async function fetchSeatMapApi(params = {}) {
+  const res = await fetch('/api/flights/seat-map', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch seat map');
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
+export async function fetchSSRApi(params = {}) {
+  const res = await fetch('/api/flights/ssr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch baggage & meal SSR');
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
+export async function fetchHotelInfoApi(params = {}) {
+  const res = await fetch('/api/hotels/info', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch hotel info');
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
+export async function fetchHotelRoomApi(params = {}) {
+  const res = await fetch('/api/hotels/room', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch hotel rooms');
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
+export async function fetchBusBoardingDetailsApi(params = {}) {
+  const res = await fetch('/api/buses/boarding-points', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch bus boarding points');
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
+export async function fetchBusSeatLayoutApi(params = {}) {
+  const res = await fetch('/api/buses/seat-layout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch bus seat layout');
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
+export async function blockBusSeatsApi(params = {}) {
+  const res = await fetch('/api/buses/block', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to block bus seats');
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
 // Suggestion items normalizer for Devtunnel + Local DB formats
 export function normalizeSuggestionItems(rawList = []) {
   if (!Array.isArray(rawList)) return [];

@@ -2368,7 +2368,7 @@ router.get('/travel/search/sessions/:id', async (req, res) => {
 });
 
 // 6. Detailed Flight Operations: FareCalendar, FareRule, SeatMap, SSR
-router.post('/travel/flight/fare-calendar', async (req, res) => {
+router.post(['/travel/flight/fare-calendar', '/flights/fare-calendar'], async (req, res) => {
   try {
     const outboundIp = await getOutboundIp();
     const data = await flightProvider.fareCalendar(req.body, outboundIp);
@@ -2378,7 +2378,7 @@ router.post('/travel/flight/fare-calendar', async (req, res) => {
   }
 });
 
-router.post('/travel/flight/fare-rule', async (req, res) => {
+router.post(['/travel/flight/fare-rule', '/flights/fare-rule'], async (req, res) => {
   try {
     const outboundIp = await getOutboundIp();
     const data = await flightProvider.fareRule(req.body, outboundIp);
@@ -2388,7 +2388,7 @@ router.post('/travel/flight/fare-rule', async (req, res) => {
   }
 });
 
-router.post('/travel/flight/fare-quote', async (req, res) => {
+router.post(['/travel/flight/fare-quote', '/flights/fare-quote'], async (req, res) => {
   try {
     const outboundIp = await getOutboundIp();
     const data = await flightProvider.fareQuote(req.body, outboundIp);
@@ -2398,7 +2398,7 @@ router.post('/travel/flight/fare-quote', async (req, res) => {
   }
 });
 
-router.post('/travel/flight/seat-map', async (req, res) => {
+router.post(['/travel/flight/seat-map', '/flights/seat-map'], async (req, res) => {
   try {
     const outboundIp = await getOutboundIp();
     const data = await flightProvider.seatMap(req.body, outboundIp);
@@ -2408,7 +2408,7 @@ router.post('/travel/flight/seat-map', async (req, res) => {
   }
 });
 
-router.post('/travel/flight/ssr', async (req, res) => {
+router.post(['/travel/flight/ssr', '/flights/ssr'], async (req, res) => {
   try {
     const outboundIp = await getOutboundIp();
     const data = await flightProvider.ssr(req.body, outboundIp);
@@ -2419,7 +2419,7 @@ router.post('/travel/flight/ssr', async (req, res) => {
 });
 
 // 7. Detailed Hotel Operations: GetHotelInfo, GetHotelRoom
-router.post('/travel/hotel/info', async (req, res) => {
+router.post(['/travel/hotel/info', '/hotels/info'], async (req, res) => {
   try {
     const outboundIp = await getOutboundIp();
     const data = await hotelProvider.hotelInfo(req.body, outboundIp);
@@ -2429,7 +2429,7 @@ router.post('/travel/hotel/info', async (req, res) => {
   }
 });
 
-router.post('/travel/hotel/room', async (req, res) => {
+router.post(['/travel/hotel/room', '/hotels/room'], async (req, res) => {
   try {
     const outboundIp = await getOutboundIp();
     const data = await hotelProvider.hotelRoom(req.body, outboundIp);
@@ -2439,8 +2439,8 @@ router.post('/travel/hotel/room', async (req, res) => {
   }
 });
 
-// 8. Detailed Bus Operations: Boarding Points, Seat Layout
-router.post('/travel/bus/boarding-points', async (req, res) => {
+// 8. Detailed Bus Operations: Boarding Points, Seat Layout, Block
+router.post(['/travel/bus/boarding-points', '/buses/boarding-points'], async (req, res) => {
   try {
     const data = await busProvider.boardingPointDetails(req.body);
     res.json({ success: true, data });
@@ -2449,10 +2449,56 @@ router.post('/travel/bus/boarding-points', async (req, res) => {
   }
 });
 
-router.post('/travel/bus/seat-layout', async (req, res) => {
+router.post(['/travel/bus/seat-layout', '/buses/seat-layout'], async (req, res) => {
   try {
     const data = await busProvider.seatLayout(req.body);
     res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post(['/travel/bus/block', '/buses/block'], async (req, res) => {
+  try {
+    const data = await busProvider.block(req.body);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Dummy Supplier Direct APIs (Matching real provider schema)
+router.post('/dummy-supplier/flight/book', async (req, res) => {
+  try {
+    const result = await flightProvider.book(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/dummy-supplier/hotel/book', async (req, res) => {
+  try {
+    const result = await hotelProvider.book(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/dummy-supplier/bus/book', async (req, res) => {
+  try {
+    const result = await busProvider.book(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/dummy-supplier/car/book', async (req, res) => {
+  try {
+    const result = await carProvider.book(req.body);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2619,7 +2665,7 @@ router.post('/payments/create-order', async (req, res) => {
 });
 
 // Verify Payment Signature & Execute Booking Atomically
-router.post('/payments/verify-and-book', async (req, res) => {
+router.post(['/payments/verify-and-book', '/payments/verify'], async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const {
@@ -3121,6 +3167,59 @@ router.get('/bookings/:serviceType/:id', async (req, res) => {
 
     res.json({ success: true, booking });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Cancel Booking Endpoint
+router.post('/bookings/cancel', async (req, res) => {
+  try {
+    const { bookingId, serviceType, pnr, cancellationReason, comments, cancellationFee, refundAmount } = req.body;
+    const type = (serviceType || '').toUpperCase();
+    const id = bookingId || pnr;
+
+    let booking = null;
+    let Model = null;
+
+    if (type === 'FLIGHT') {
+      Model = FlightBooking;
+      booking = await FlightBooking.findOne({
+        where: { [Op.or]: [{ id: isNaN(id) ? -1 : Number(id) }, { bookingId: String(id) }, { pnr: String(id) }] }
+      });
+    } else if (type === 'HOTEL') {
+      Model = HotelBooking;
+      booking = await HotelBooking.findOne({
+        where: { [Op.or]: [{ id: isNaN(id) ? -1 : Number(id) }, { bookingId: String(id) }, { confirmationNo: String(id) }] }
+      });
+    } else if (type === 'BUS') {
+      Model = BusBooking;
+      booking = await BusBooking.findOne({
+        where: { [Op.or]: [{ id: isNaN(id) ? -1 : Number(id) }, { bookingId: String(id) }, { ticketNo: String(id) }] }
+      });
+    } else if (type === 'CAR') {
+      Model = CarBooking;
+      booking = await CarBooking.findOne({
+        where: { [Op.or]: [{ id: isNaN(id) ? -1 : Number(id) }, { bookingId: String(id) }, { confirmationNo: String(id) }] }
+      });
+    }
+
+    if (booking) {
+      await booking.update({
+        status: 'CANCELLED',
+        cancellationReason: cancellationReason || 'Cancelled by agent/customer'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Booking cancelled successfully',
+      status: 'CANCELLED',
+      cancellationFee: cancellationFee || 0,
+      refundAmount: refundAmount || 0,
+      booking
+    });
+  } catch (err) {
+    console.error('Cancel booking error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
