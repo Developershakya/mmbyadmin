@@ -59,6 +59,9 @@ import PoliciesForm from './PoliciesForm.jsx';
 import CustomerPreviewView from './CustomerPreviewView.jsx';
 import PublishView from './PublishView.jsx';
 import StepperControl from './StepperControl.jsx';
+import RazorpayCheckoutModal from '../travel/RazorpayCheckoutModal.jsx';
+import BookingManagerModal from '../travel/BookingManagerModal.jsx';
+import ServiceAuditLogModal from '../travel/ServiceAuditLogModal.jsx';
 import { downloadCustomerPreviewAsPdf } from '../../lib/pdfGenerator.js';
 import { fetchPackageById, savePackage, deletePackageApi } from '../../lib/api/packages.js';
 import {
@@ -77,15 +80,98 @@ export default function TravelProPackageBuilder({
 }) {
   const [activeStep, setActiveStep] = useState(initialPackage ? 'itinerary' : 'info');
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [checkoutData, setCheckoutData] = useState(null);
+  const [bookingManagerOpen, setBookingManagerOpen] = useState(false);
+  const [auditLogOpen, setAuditLogOpen] = useState(false);
 
-  // Helper to parse package data safely
+  // Helper to parse JSON safely
+  const parseSafeJson = (val, fallback = null) => {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'object') return val;
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        return parsed !== null && parsed !== undefined ? parsed : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+    return fallback;
+  };
+
+  // Helper to construct structured default itinerary days
+  const createDefaultDays = (count = 4, destination = 'Manali') => {
+    const dest = destination || 'Manali';
+    const c = Math.max(Number(count) || 4, 1);
+    const result = [];
+    for (let i = 1; i <= c; i++) {
+      result.push({
+        id: `day-${i}`,
+        dayNumber: i,
+        title:
+          i === 1
+            ? `Day 1 - Arrival in ${dest}`
+            : i === c
+            ? `Day ${i} - Departure from ${dest}`
+            : `Day ${i} - Local Sightseeing & Activities in ${dest}`,
+        location: dest,
+        description:
+          i === 1
+            ? `Arrive at the destination, check-in to your stay, and spend the evening at leisure.`
+            : i === c
+            ? `Enjoy breakfast, complete check-out, and transfer for your return journey.`
+            : `Full day tour exploring key attractions, scenic spots, and local culture.`,
+        collapsed: false,
+        services: []
+      });
+    }
+    return result;
+  };
+
+  // Standard agency fallback policies
+  const DEFAULT_INCLUSIONS = [
+    'Accommodation in selected hotel / resort',
+    'Daily breakfast and meals as per package plan',
+    'All sightseeing and transfers by private vehicle',
+    'Toll taxes, state permits, parking fees, and driver allowances'
+  ];
+
+  const DEFAULT_EXCLUSIONS = [
+    'Airfare or train fare unless explicitly added to itinerary',
+    'Personal expenses such as laundry, calls, and minibar',
+    'Monument entry fees, camera charges, and activity passes',
+    'Any item not specified in package inclusions'
+  ];
+
+  const DEFAULT_TERMS = [
+    'All package rates are subject to availability at the time of confirmed booking.',
+    'Standard hotel check-in time is 12:00 PM / 02:00 PM and check-out is 10:00 AM / 11:00 AM.',
+    'Valid Government ID proof (Aadhar / Passport / Voter ID) is mandatory for all travelers at check-in.',
+    'AC will not operate in hill stations or when vehicle is parked/idle.',
+    'Any changes or deviations in route requested by the traveler will attract additional charges.'
+  ];
+
+  const DEFAULT_CANCELLATION_RULES = [
+    { timeframe: '30+ Days Before Departure', charge: '10% of Package Value', refund: '90% Refund within 7 working days' },
+    { timeframe: '15 to 29 Days Before Departure', charge: '25% of Package Value', refund: '75% Refund within 7 working days' },
+    { timeframe: '7 to 14 Days Before Departure', charge: '50% of Package Value', refund: '50% Refund within 7 working days' },
+    { timeframe: 'Within 7 Days of Departure / No Show', charge: '100% of Package Value', refund: 'Non-refundable' }
+  ];
+
+  const DEFAULT_DATE_CHANGE_RULES = [
+    { timeframe: 'Up to 15 Days Before Departure', charge: 'Free Date Rescheduling', remark: 'Hotel & airline fare difference applies' },
+    { timeframe: '7 to 14 Days Before Departure', charge: '₹1,500 per person change fee', remark: '+ airline/hotel fare difference' },
+    { timeframe: 'Less than 7 Days Before Departure', charge: 'Subject to Supplier Approval', remark: 'Treated as cancellation if not approved' }
+  ];
+
+  // Helper to parse package data safely with complete 100% state restoration
   const parsePackageIntoState = (pkg) => {
     if (!pkg) {
       return {
         title: '',
-        destination: '',
-        city: '',
-        originCity: '',
+        destination: 'Manali',
+        city: 'Manali',
+        originCity: 'Delhi',
         startDate: '',
         endDate: '',
         customerName: '',
@@ -94,23 +180,19 @@ export default function TravelProPackageBuilder({
         tripId: '',
         consultantName: '',
         coverImage: '',
-        nights: 1,
+        nights: 3,
         highlights: [],
-        inclusions: [
-          'Accommodation in selected hotel / resort',
-          'Daily breakfast and meals as per package plan',
-          'All sightseeing and transfers by private vehicle',
-          'Toll taxes, state permits, parking fees, and driver allowances'
-        ],
-        exclusions: [
-          'Airfare or train fare unless explicitly added to itinerary',
-          'Personal expenses such as laundry, calls, and minibar',
-          'Monument entry fees, camera charges, and activity passes',
-          'Any item not specified in package inclusions'
-        ],
-        terms: [],
-        cancellationPolicy: null,
-        dateChangePolicy: null,
+        inclusions: DEFAULT_INCLUSIONS,
+        exclusions: DEFAULT_EXCLUSIONS,
+        terms: DEFAULT_TERMS,
+        cancellationPolicy: {
+          rules: DEFAULT_CANCELLATION_RULES,
+          notes: 'Refund processing will take 5 to 7 business working days to the original mode of payment.'
+        },
+        dateChangePolicy: {
+          rules: DEFAULT_DATE_CHANGE_RULES,
+          notes: 'Date change requests are subject to hotel and transport availability during requested revised dates.'
+        },
         otherPolicies: [],
         travelers: {
           adults: 2,
@@ -133,75 +215,309 @@ export default function TravelProPackageBuilder({
         },
         policyVisibility: { ...DEFAULT_POLICY_VISIBILITY },
         priceBreakdownVisibility: { ...DEFAULT_PRICE_BREAKDOWN_VISIBILITY },
-        days: []
+        days: createDefaultDays(4, 'Manali')
       };
     }
 
-    const days = pkg.itineraryData?.days || pkg.dayWiseItinerary || pkg.days || [];
-    return {
-      id: pkg.id,
-      title: pkg.title || pkg.packageName || '',
-      destination: pkg.destination || pkg.city || '',
-      city: pkg.city || pkg.destination || '',
-      originCity: pkg.originCity || '',
-      startDate: pkg.startDate || '',
-      endDate: pkg.endDate || '',
-      customerName: pkg.customerName || pkg.customerInfo?.name || '',
-      customerInfo: pkg.customerInfo || { name: pkg.customerName || '' },
-      referenceId: pkg.referenceId || (pkg.id ? `PKG-${pkg.id}` : ''),
-      tripId: pkg.tripId || (pkg.id ? String(pkg.id) : ''),
-      consultantName: pkg.consultantName || '',
-      coverImage: pkg.coverImage || '',
-      nights: pkg.durationNights || pkg.nights || (Array.isArray(days) && days.length > 0 ? Math.max(days.length - 1, 1) : 1),
-      highlights: pkg.highlights || [],
-      inclusions: pkg.inclusions || [
-        'Accommodation in selected hotel / resort',
-        'Daily breakfast and meals as per package plan',
-        'All sightseeing and transfers by private vehicle',
-        'Toll taxes, state permits, parking fees, and driver allowances'
-      ],
-      exclusions: pkg.exclusions || [
-        'Airfare or train fare unless explicitly added to itinerary',
-        'Personal expenses such as laundry, calls, and minibar',
-        'Monument entry fees, camera charges, and activity passes',
-        'Any item not specified in package inclusions'
-      ],
-      terms: pkg.terms || [
-        'All package rates are subject to availability at the time of confirmed booking.',
-        'Standard hotel check-in time is 12:00 PM / 02:00 PM and check-out is 10:00 AM / 11:00 AM.',
-        'Valid Government ID proof (Aadhar / Passport / Voter ID) is mandatory for all travelers at check-in.',
-        'AC will not operate in hill stations or when vehicle is parked/idle.',
-        'Any changes or deviations in route requested by the traveler will attract additional charges.'
-      ],
-      cancellationPolicy: pkg.cancellationPolicy || {
-        rules: [
-          { timeframe: '30+ Days Before Departure', charge: '10% of Package Value', refund: '90% Refund within 7 working days' },
-          { timeframe: '15 to 29 Days Before Departure', charge: '25% of Package Value', refund: '75% Refund within 7 working days' },
-          { timeframe: '7 to 14 Days Before Departure', charge: '50% of Package Value', refund: '50% Refund within 7 working days' },
-          { timeframe: 'Within 7 Days of Departure / No Show', charge: '100% of Package Value', refund: 'Non-refundable' }
-        ],
+    const itin = parseSafeJson(pkg.itineraryData, {}) || {};
+    const rawDayWise = parseSafeJson(pkg.dayWiseItinerary, []) || [];
+    const rawItinDays = Array.isArray(itin.days) ? itin.days : [];
+    const rawDays = Array.isArray(pkg.days) ? pkg.days : [];
+
+    // 1. Resolve day-wise itinerary array from all possible persistence targets
+    let daysCandidates = [];
+    if (rawItinDays.length > 0) {
+      daysCandidates = rawItinDays;
+    } else if (rawDayWise.length > 0) {
+      daysCandidates = rawDayWise;
+    } else if (rawDays.length > 0) {
+      daysCandidates = rawDays;
+    }
+
+    // 2. Derive intended day count if daysCandidates is empty
+    let countDays = 0;
+    if (typeof pkg.days === 'string') {
+      const m = pkg.days.match(/(\d+)\s*Days?/i);
+      if (m) countDays = parseInt(m[1], 10);
+    }
+    if (!countDays) {
+      countDays = Number(pkg.durationDays) || (Number(pkg.nights) ? Number(pkg.nights) + 1 : 0);
+    }
+    if (!countDays) {
+      countDays = daysCandidates.length > 0 ? daysCandidates.length : 4;
+    }
+
+    if (daysCandidates.length === 0) {
+      daysCandidates = createDefaultDays(countDays, pkg.destination || pkg.city || 'Manali');
+    }
+
+    // 3. Check for service lists and ensure they are populated into days if days had empty services
+    const hotelsList = parseSafeJson(pkg.hotelsList, []) || [];
+    const flightsList = parseSafeJson(pkg.flightsList, []) || [];
+    const cabsList = parseSafeJson(pkg.cabsList, []) || [];
+    const busesList = parseSafeJson(pkg.busesList, []) || [];
+    const sightseeingList = parseSafeJson(pkg.sightseeingList, []) || [];
+    const activitiesList = parseSafeJson(pkg.activitiesList, []) || [];
+    const mealsList = parseSafeJson(pkg.mealsList, []) || [];
+
+    let totalServicesCount = 0;
+    daysCandidates.forEach((d) => {
+      if (Array.isArray(d.services)) totalServicesCount += d.services.length;
+    });
+
+    if (
+      totalServicesCount === 0 &&
+      (hotelsList.length || flightsList.length || cabsList.length || busesList.length || sightseeingList.length || activitiesList.length || mealsList.length)
+    ) {
+      daysCandidates = daysCandidates.map((day, idx) => {
+        const dayNum = idx + 1;
+        const dayServices = [];
+
+        flightsList.forEach((fl, sIdx) => {
+          const targetDay = fl.dayIndex !== undefined ? Number(fl.dayIndex) + 1 : 1;
+          if (targetDay === dayNum) {
+            dayServices.push({
+              id: `svc-fl-${dayNum}-${sIdx}-${Date.now()}`,
+              type: 'flight',
+              selected: true,
+              customizable: true,
+              data: fl
+            });
+          }
+        });
+
+        hotelsList.forEach((ht, sIdx) => {
+          const targetDay = ht.dayIndex !== undefined ? Number(ht.dayIndex) + 1 : 1;
+          if (targetDay === dayNum) {
+            dayServices.push({
+              id: `svc-ht-${dayNum}-${sIdx}-${Date.now()}`,
+              type: 'hotel',
+              selected: true,
+              customizable: true,
+              data: ht
+            });
+          }
+        });
+
+        cabsList.forEach((cb, sIdx) => {
+          const targetDay = cb.dayIndex !== undefined ? Number(cb.dayIndex) + 1 : 1;
+          if (targetDay === dayNum) {
+            dayServices.push({
+              id: `svc-cb-${dayNum}-${sIdx}-${Date.now()}`,
+              type: 'cab',
+              selected: true,
+              customizable: true,
+              data: cb
+            });
+          }
+        });
+
+        busesList.forEach((bs, sIdx) => {
+          const targetDay = bs.dayIndex !== undefined ? Number(bs.dayIndex) + 1 : 1;
+          if (targetDay === dayNum) {
+            dayServices.push({
+              id: `svc-bs-${dayNum}-${sIdx}-${Date.now()}`,
+              type: 'bus',
+              selected: true,
+              customizable: true,
+              data: bs
+            });
+          }
+        });
+
+        sightseeingList.forEach((sg, sIdx) => {
+          const targetDay = sg.dayIndex !== undefined ? Number(sg.dayIndex) + 1 : (dayNum === 2 || daysCandidates.length === 1 ? dayNum : -1);
+          if (targetDay === dayNum) {
+            dayServices.push({
+              id: `svc-sg-${dayNum}-${sIdx}-${Date.now()}`,
+              type: 'sightseeing',
+              selected: true,
+              customizable: true,
+              data: { items: [sg] }
+            });
+          }
+        });
+
+        activitiesList.forEach((act, sIdx) => {
+          const targetDay = act.dayIndex !== undefined ? Number(act.dayIndex) + 1 : (dayNum === 3 || (daysCandidates.length < 3 && dayNum === 2) ? dayNum : -1);
+          if (targetDay === dayNum) {
+            dayServices.push({
+              id: `svc-act-${dayNum}-${sIdx}-${Date.now()}`,
+              type: 'activity',
+              selected: true,
+              customizable: true,
+              data: { items: [act] }
+            });
+          }
+        });
+
+        mealsList.forEach((ml, sIdx) => {
+          const targetDay = ml.dayIndex !== undefined ? Number(ml.dayIndex) + 1 : 1;
+          if (targetDay === dayNum) {
+            dayServices.push({
+              id: `svc-ml-${dayNum}-${sIdx}-${Date.now()}`,
+              type: 'meal',
+              selected: true,
+              customizable: true,
+              data: { items: [ml] }
+            });
+          }
+        });
+
+        return {
+          ...day,
+          services: dayServices
+        };
+      });
+    }
+
+    // 4. Normalize every day and service cleanly
+    const normalizedDays = daysCandidates.map((day, idx) => {
+      const dayNum = day.dayNumber || (idx + 1);
+      const rawServices = Array.isArray(day.services) ? day.services : [];
+      const normalizedServices = rawServices.map((s, sIdx) => ({
+        ...s,
+        id: s.id || `svc-${dayNum}-${sIdx}-${Date.now()}`,
+        type: s.type || 'hotel',
+        selected: s.selected !== false,
+        customizable: s.customizable !== false,
+        data: s.data || {}
+      }));
+
+      return {
+        id: day.id || `day-${dayNum}-${Date.now()}`,
+        dayNumber: dayNum,
+        title: day.title || `Day ${dayNum} - ${day.location || pkg.destination || 'Exploration'}`,
+        location: day.location || pkg.destination || pkg.city || 'Manali',
+        description: day.description || '',
+        collapsed: Boolean(day.collapsed),
+        services: normalizedServices
+      };
+    });
+
+    const resolvedNights =
+      Number(pkg.durationNights) ||
+      Number(pkg.nights) ||
+      Math.max(normalizedDays.length - 1, 1);
+
+    // 5. Restore Inclusions, Exclusions, Terms, Policies
+    const rawTerms =
+      (Array.isArray(pkg.terms) && pkg.terms.length > 0)
+        ? pkg.terms
+        : (Array.isArray(pkg.termsAndConditions) && pkg.termsAndConditions.length > 0)
+        ? pkg.termsAndConditions
+        : (Array.isArray(itin.terms) && itin.terms.length > 0)
+        ? itin.terms
+        : (Array.isArray(itin.termsAndConditions) && itin.termsAndConditions.length > 0)
+        ? itin.termsAndConditions
+        : DEFAULT_TERMS;
+
+    const rawInclusions =
+      (Array.isArray(pkg.inclusions) && pkg.inclusions.length > 0)
+        ? pkg.inclusions
+        : (Array.isArray(itin.inclusions) && itin.inclusions.length > 0)
+        ? itin.inclusions
+        : DEFAULT_INCLUSIONS;
+
+    const rawExclusions =
+      (Array.isArray(pkg.exclusions) && pkg.exclusions.length > 0)
+        ? pkg.exclusions
+        : (Array.isArray(itin.exclusions) && itin.exclusions.length > 0)
+        ? itin.exclusions
+        : DEFAULT_EXCLUSIONS;
+
+    const rawCancellation =
+      pkg.cancellationPolicy ||
+      itin.cancellationPolicy || {
+        rules: DEFAULT_CANCELLATION_RULES,
         notes: 'Refund processing will take 5 to 7 business working days to the original mode of payment.'
-      },
-      dateChangePolicy: pkg.dateChangePolicy || {
-        rules: [
-          { timeframe: 'Up to 15 Days Before Departure', charge: 'Free Date Rescheduling', remark: 'Hotel & airline fare difference applies' },
-          { timeframe: '7 to 14 Days Before Departure', charge: '₹1,500 per person change fee', remark: '+ airline/hotel fare difference' },
-          { timeframe: 'Less than 7 Days Before Departure', charge: 'Subject to Supplier Approval', remark: 'Treated as cancellation if not approved' }
-        ],
+      };
+
+    const rawDateChange =
+      pkg.dateChangePolicy ||
+      itin.dateChangePolicy || {
+        rules: DEFAULT_DATE_CHANGE_RULES,
         notes: 'Date change requests are subject to hotel and transport availability during requested revised dates.'
-      },
-      otherPolicies: pkg.otherPolicies || pkg.itineraryData?.otherPolicies || [],
-      travelers: pkg.travelers || {
+      };
+
+    const rawOtherPolicies =
+      (Array.isArray(pkg.otherPolicies) && pkg.otherPolicies.length > 0)
+        ? pkg.otherPolicies
+        : (Array.isArray(itin.otherPolicies) && itin.otherPolicies.length > 0)
+        ? itin.otherPolicies
+        : (Array.isArray(pkg.policies) ? pkg.policies : []);
+
+    const rawPolicyVisibility = {
+      ...DEFAULT_POLICY_VISIBILITY,
+      ...(parseSafeJson(pkg.policyVisibility) || {}),
+      ...(parseSafeJson(itin.policyVisibility) || {})
+    };
+
+    const rawPriceBreakdownVisibility = {
+      ...DEFAULT_PRICE_BREAKDOWN_VISIBILITY,
+      ...(parseSafeJson(pkg.priceBreakdownVisibility) || {}),
+      ...(parseSafeJson(itin.priceBreakdownVisibility) || {})
+    };
+
+    const rawPricing =
+      parseSafeJson(pkg.pricingRules) ||
+      parseSafeJson(pkg.pricingBreakdown) ||
+      parseSafeJson(pkg.pricing) ||
+      parseSafeJson(itin.pricingRules) || {
+        markup: Number(pkg.markupAmount) || 0,
+        tax: Number(pkg.taxAmount) || 0,
+        discount: Number(pkg.discountAmount) || 0
+      };
+
+    const rawTravelers =
+      parseSafeJson(pkg.travelers) ||
+      parseSafeJson(itin.travelers) || {
         adults: 2,
         children: 0,
         infants: 0
-      },
-      pricing: pkg.pricingRules || pkg.pricingBreakdown || pkg.pricing || {
-        markup: 0,
-        tax: 0,
-        discount: 0
-      },
-      customization: pkg.customization || {
+      };
+
+    const rawCustomerInfo =
+      parseSafeJson(pkg.customerInfo) ||
+      parseSafeJson(itin.customerInfo) || {
+        name: pkg.customerName || itin.customerName || '',
+        email: '',
+        phone: ''
+      };
+
+    const rawHighlights =
+      Array.isArray(pkg.highlights)
+        ? pkg.highlights
+        : Array.isArray(itin.highlights)
+        ? itin.highlights
+        : [];
+
+    return {
+      id: pkg.id,
+      title: pkg.title || pkg.packageName || '',
+      destination: pkg.destination || pkg.city || 'Manali',
+      city: pkg.city || pkg.destination || 'Manali',
+      originCity: pkg.originCity || 'Delhi',
+      startDate: pkg.startDate || '',
+      endDate: pkg.endDate || '',
+      customerName: pkg.customerName || rawCustomerInfo.name || '',
+      customerInfo: rawCustomerInfo,
+      referenceId: pkg.referenceId || itin.referenceId || (pkg.id ? `PKG-${pkg.id}` : ''),
+      tripId: pkg.tripId || itin.tripId || (pkg.id ? String(pkg.id) : ''),
+      consultantName: pkg.consultantName || itin.consultantName || '',
+      coverImage: pkg.coverImage || '',
+      nights: resolvedNights,
+      highlights: rawHighlights,
+      inclusions: rawInclusions,
+      exclusions: rawExclusions,
+      terms: rawTerms,
+      termsAndConditions: rawTerms,
+      cancellationPolicy: rawCancellation,
+      dateChangePolicy: rawDateChange,
+      otherPolicies: rawOtherPolicies,
+      travelers: rawTravelers,
+      pricing: rawPricing,
+      customization: pkg.customization || itin.customization || {
         flight: true,
         hotel: true,
         cab: true,
@@ -210,15 +526,14 @@ export default function TravelProPackageBuilder({
         activity: true,
         meal: true
       },
-      policyVisibility: {
-        ...DEFAULT_POLICY_VISIBILITY,
-        ...(pkg.policyVisibility || pkg.itineraryData?.policyVisibility || {})
-      },
-      priceBreakdownVisibility: {
-        ...DEFAULT_PRICE_BREAKDOWN_VISIBILITY,
-        ...(pkg.priceBreakdownVisibility || pkg.itineraryData?.priceBreakdownVisibility || {})
-      },
-      days: Array.isArray(days) ? days : []
+      policyVisibility: rawPolicyVisibility,
+      priceBreakdownVisibility: rawPriceBreakdownVisibility,
+      coverLocation: Array.isArray(pkg.coverLocation) && pkg.coverLocation.length > 0
+        ? pkg.coverLocation
+        : (Array.isArray(itin.coverLocation) && itin.coverLocation.length > 0
+            ? itin.coverLocation
+            : []),
+      days: normalizedDays
     };
   };
 
@@ -252,30 +567,42 @@ export default function TravelProPackageBuilder({
   };
 
   // Synchronize when initialPackage prop updates or loads from DB
-  const loadedPkgIdRef = useRef(initialPackage?.id || null);
+  const loadedPkgIdRef = useRef(null);
   useEffect(() => {
-    if (initialPackage) {
-      if (loadedPkgIdRef.current !== initialPackage.id) {
-        const parsed = parsePackageIntoState(initialPackage);
-        setPackageData(parsed);
-        setLastSavedData(JSON.parse(JSON.stringify(parsed)));
-        loadedPkgIdRef.current = initialPackage.id;
+    const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    const urlId = searchParams.get('id');
+    const targetId = initialPackage?.id || urlId;
+
+    if (targetId) {
+      if (loadedPkgIdRef.current !== targetId) {
+        loadedPkgIdRef.current = targetId;
+
+        // Immediately hydrate from initialPackage if present
+        if (initialPackage) {
+          const parsed = parsePackageIntoState(initialPackage);
+          setPackageData(parsed);
+          setLastSavedData(JSON.parse(JSON.stringify(parsed)));
+        }
+
+        // Fetch the full database record by ID to guarantee 100% complete data restoration
+        fetchPackageById(targetId)
+          .then((dbPkg) => {
+            if (dbPkg) {
+              const parsed = parsePackageIntoState(dbPkg);
+              setPackageData(parsed);
+              setLastSavedData(JSON.parse(JSON.stringify(parsed)));
+            }
+          })
+          .catch((err) => {
+            console.warn('Could not fetch complete package by ID:', err);
+          });
       }
-    } else {
-      const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-      const urlId = searchParams.get('id');
-      if (urlId && loadedPkgIdRef.current !== urlId) {
-        fetchPackageById(urlId).then((dbPkg) => {
-          if (dbPkg) {
-            const parsed = parsePackageIntoState(dbPkg);
-            setPackageData(parsed);
-            setLastSavedData(JSON.parse(JSON.stringify(parsed)));
-            loadedPkgIdRef.current = urlId;
-          }
-        }).catch((err) => console.warn('Could not fetch package for edit:', err));
-      }
+    } else if (initialPackage) {
+      const parsed = parsePackageIntoState(initialPackage);
+      setPackageData(parsed);
+      setLastSavedData(JSON.parse(JSON.stringify(parsed)));
     }
-  }, [initialPackage?.id]);
+  }, [initialPackage, initialPackage?.id]);
 
   // Modal States
   const [modalState, setModalState] = useState({
@@ -1074,6 +1401,15 @@ export default function TravelProPackageBuilder({
         title: packageData.title || 'Untitled Package',
         city: packageData.destination || packageData.city || '',
         destination: packageData.destination || packageData.city || '',
+        coverLocation: Array.isArray(packageData.coverLocation) && packageData.coverLocation.length > 0
+          ? packageData.coverLocation
+          : Array.from(new Set([
+              packageData.destination || packageData.city,
+              ...packageData.days.flatMap(d => [
+                d.location,
+                ...(d.services || []).filter(s => s.type === 'sightseeing').flatMap(s => (s.data?.items || []).map(i => i.location || i.name))
+              ])
+            ])).filter(Boolean),
         originCity: packageData.originCity || '',
         state: packageData.state || '',
         totalPrice: pricingBreakdown.final,
@@ -1097,12 +1433,25 @@ export default function TravelProPackageBuilder({
         inclusions: packageData.inclusions || [],
         exclusions: packageData.exclusions || [],
         terms: packageData.terms || [],
+        termsAndConditions: packageData.terms || [],
         cancellationPolicy: packageData.cancellationPolicy,
         dateChangePolicy: packageData.dateChangePolicy,
         otherPolicies: packageData.otherPolicies || [],
         policyVisibility: packageData.policyVisibility || null,
         priceBreakdownVisibility: packageData.priceBreakdownVisibility || null,
         status,
+        travelers: packageData.travelers || { adults: 2, children: 0, infants: 0 },
+        customization: packageData.customization || null,
+        description: packageData.description || '',
+        destinationWiseItinerary: packageData.destinationWiseItinerary || [],
+        tags: packageData.tags || [],
+        galleryImages: packageData.galleryImages || [],
+        rating: packageData.rating || '4.8',
+        tagType: packageData.tagType || 'Customized',
+        foodType: packageData.foodType || [],
+        hotel: packageData.hotel || null,
+        totalTransfer: packageData.totalTransfer || 1,
+        dayWiseItinerary: packageData.days,
         itineraryData: {
           days: packageData.days,
           customization: packageData.customization,
@@ -1111,7 +1460,15 @@ export default function TravelProPackageBuilder({
           dateChangePolicy: packageData.dateChangePolicy,
           otherPolicies: packageData.otherPolicies || [],
           policyVisibility: packageData.policyVisibility || null,
-          priceBreakdownVisibility: packageData.priceBreakdownVisibility || null
+          priceBreakdownVisibility: packageData.priceBreakdownVisibility || null,
+          terms: packageData.terms || [],
+          termsAndConditions: packageData.terms || [],
+          inclusions: packageData.inclusions || [],
+          exclusions: packageData.exclusions || [],
+          highlights: packageData.highlights || [],
+          consultantName: packageData.consultantName || '',
+          referenceId: packageData.referenceId || '',
+          tripId: packageData.tripId || ''
         },
         pricingRules: packageData.pricing,
         pricingBreakdown: pricingBreakdown
@@ -1227,6 +1584,17 @@ export default function TravelProPackageBuilder({
 
             <button
               type="button"
+              id="btn-reservations-center"
+              onClick={() => setBookingManagerOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-medium text-slate-700 transition cursor-pointer shadow-xs"
+              title="Reservations & Voucher Center"
+            >
+              <CreditCard className="w-4 h-4 text-emerald-600" />
+              <span className="hidden md:inline">Reservations & Vouchers</span>
+            </button>
+
+            <button
+              type="button"
               id="btn-preview"
               onClick={() => handleStepTransition('preview')}
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 text-sm font-medium transition cursor-pointer shadow-xs"
@@ -1268,6 +1636,17 @@ export default function TravelProPackageBuilder({
               </button>
               {moreMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl py-1 text-sm z-50 animate-in fade-in">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      setAuditLogOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 text-left cursor-pointer font-medium"
+                  >
+                    <BarChart3 className="w-4 h-4 text-indigo-600" />
+                    <span>API Audit Logs</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -1383,6 +1762,7 @@ export default function TravelProPackageBuilder({
           {activeStep === 'preview' && (
             <CustomerPreviewView
               packageData={{ ...packageData, pricingBreakdown }}
+              packageId={packageData.id}
               onBack={() => handleStepTransition('policy')}
               onContinue={() => handleStepTransition('publish')}
               showToast={showToast}
@@ -1763,22 +2143,51 @@ export default function TravelProPackageBuilder({
                                       </span>
                                     </div>
 
-                                    <button
-                                      onClick={() =>
-                                        setModalState((prev) => ({
-                                          ...prev,
-                                          flight: {
-                                            isOpen: true,
-                                            dayId: day.id,
-                                            serviceId: svc.id,
-                                            initialData: svc.data || {}
-                                          }
-                                        }))
-                                      }
-                                      className="px-3 py-1.5 rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 text-xs font-semibold transition cursor-pointer"
-                                    >
-                                      Change Flight
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const flightFare = Number(svc.data?.fare || 5500);
+                                          const flightTax = Number(svc.data?.tax || 650);
+                                          setCheckoutData({
+                                            serviceType: 'FLIGHT',
+                                            title: `${svc.data?.airline || 'Flight'} (${svc.data?.from || 'DEL'} → ${svc.data?.to || 'KUU'})`,
+                                            amount: flightFare + flightTax,
+                                            details: `${svc.data?.airline || 'Airline'} ${svc.data?.flightNumber || ''} • Dep: ${svc.data?.departure || '09:20'} • ${svc.data?.cabin || 'Economy'}`,
+                                            packageId: packageData.id,
+                                            serviceItemId: svc.id,
+                                            itineraryDayId: day.id,
+                                            rawPayload: {
+                                              flightData: svc.data,
+                                              passengers: [
+                                                { Title: 'Mr', FirstName: 'Traveler', LastName: 'Primary', PaxType: 1, Gender: 1 }
+                                              ],
+                                              traceId: svc.data?.traceId || `TRC-${Date.now()}`
+                                            }
+                                          });
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                                      >
+                                        <CreditCard className="w-3.5 h-3.5" />
+                                        <span>Book & Pay</span>
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          setModalState((prev) => ({
+                                            ...prev,
+                                            flight: {
+                                              isOpen: true,
+                                              dayId: day.id,
+                                              serviceId: svc.id,
+                                              initialData: svc.data || {}
+                                            }
+                                          }))
+                                        }
+                                        className="px-3 py-1.5 rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 text-xs font-semibold transition cursor-pointer"
+                                      >
+                                        Change Flight
+                                      </button>
+                                    </div>
                                   </div>
                                 )}
 
@@ -1820,22 +2229,50 @@ export default function TravelProPackageBuilder({
                                       </p>
                                     </div>
 
-                                    <button
-                                      onClick={() =>
-                                        setModalState((prev) => ({
-                                          ...prev,
-                                          hotel: {
-                                            isOpen: true,
-                                            dayId: day.id,
-                                            serviceId: svc.id,
-                                            initialData: svc.data || {}
-                                          }
-                                        }))
-                                      }
-                                      className="px-3 py-1.5 rounded-lg border border-indigo-600 text-indigo-600 hover:bg-indigo-50 text-xs font-semibold transition cursor-pointer shrink-0"
-                                    >
-                                      Change Hotel
-                                    </button>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const hotelPrice = Number(svc.data?.price || 4500);
+                                          const nights = Number(svc.data?.nights || 1);
+                                          setCheckoutData({
+                                            serviceType: 'HOTEL',
+                                            title: `${svc.data?.name || 'Hotel'} (${svc.data?.room || 'Deluxe'})`,
+                                            amount: hotelPrice * nights,
+                                            details: `${nights} Night(s) • ${svc.data?.rating || 4} Star • ${svc.data?.meal || 'Breakfast Included'}`,
+                                            packageId: packageData.id,
+                                            serviceItemId: svc.id,
+                                            itineraryDayId: day.id,
+                                            rawPayload: {
+                                              hotelData: svc.data,
+                                              nights,
+                                              guests: [{ Title: 'Mr', FirstName: 'Traveler', LastName: 'Primary' }],
+                                              traceId: svc.data?.traceId || `TRC-${Date.now()}`
+                                            }
+                                          });
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                                      >
+                                        <CreditCard className="w-3.5 h-3.5" />
+                                        <span>Book & Pay</span>
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          setModalState((prev) => ({
+                                            ...prev,
+                                            hotel: {
+                                              isOpen: true,
+                                              dayId: day.id,
+                                              serviceId: svc.id,
+                                              initialData: svc.data || {}
+                                            }
+                                          }))
+                                        }
+                                        className="px-3 py-1.5 rounded-lg border border-indigo-600 text-indigo-600 hover:bg-indigo-50 text-xs font-semibold transition cursor-pointer shrink-0"
+                                      >
+                                        Change Hotel
+                                      </button>
+                                    </div>
                                   </div>
                                 )}
 
@@ -1863,22 +2300,48 @@ export default function TravelProPackageBuilder({
                                       <p className="text-[11px] text-slate-500">Tolls &amp; Driver Included</p>
                                     </div>
 
-                                    <button
-                                      onClick={() =>
-                                        setModalState((prev) => ({
-                                          ...prev,
-                                          cab: {
-                                            isOpen: true,
-                                            dayId: day.id,
-                                            serviceId: svc.id,
-                                            initialData: svc.data || {}
-                                          }
-                                        }))
-                                      }
-                                      className="px-3 py-1.5 rounded-lg border border-emerald-600 text-emerald-600 hover:bg-emerald-50 text-xs font-semibold transition cursor-pointer shrink-0"
-                                    >
-                                      Change Cab
-                                    </button>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const cabFare = Number(svc.data?.price || 2500);
+                                          setCheckoutData({
+                                            serviceType: 'CAR',
+                                            title: `${svc.data?.vehicle || 'Cab'} (${svc.data?.category || 'Sedan'})`,
+                                            amount: cabFare,
+                                            details: `${svc.data?.pickup || 'Pickup'} → ${svc.data?.drop || 'Drop'} • Tolls & Driver Included`,
+                                            packageId: packageData.id,
+                                            serviceItemId: svc.id,
+                                            itineraryDayId: day.id,
+                                            rawPayload: {
+                                              carData: svc.data,
+                                              passengers: [{ Name: 'Traveler Primary' }],
+                                              traceId: svc.data?.traceId || `TRC-${Date.now()}`
+                                            }
+                                          });
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                                      >
+                                        <CreditCard className="w-3.5 h-3.5" />
+                                        <span>Book & Pay</span>
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          setModalState((prev) => ({
+                                            ...prev,
+                                            cab: {
+                                              isOpen: true,
+                                              dayId: day.id,
+                                              serviceId: svc.id,
+                                              initialData: svc.data || {}
+                                            }
+                                          }))
+                                        }
+                                        className="px-3 py-1.5 rounded-lg border border-emerald-600 text-emerald-600 hover:bg-emerald-50 text-xs font-semibold transition cursor-pointer shrink-0"
+                                      >
+                                        Change Cab
+                                      </button>
+                                    </div>
                                   </div>
                                 )}
 
@@ -1907,22 +2370,48 @@ export default function TravelProPackageBuilder({
                                       <p className="text-[11px] text-slate-500">Confirmed Seat</p>
                                     </div>
 
-                                    <button
-                                      onClick={() =>
-                                        setModalState((prev) => ({
-                                          ...prev,
-                                          bus: {
-                                            isOpen: true,
-                                            dayId: day.id,
-                                            serviceId: svc.id,
-                                            initialData: svc.data || {}
-                                          }
-                                        }))
-                                      }
-                                      className="px-3 py-1.5 rounded-lg border border-amber-600 text-amber-600 hover:bg-amber-50 text-xs font-semibold transition cursor-pointer shrink-0"
-                                    >
-                                      Change Bus
-                                    </button>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const busFare = Number(svc.data?.price || 1400);
+                                          setCheckoutData({
+                                            serviceType: 'BUS',
+                                            title: `${svc.data?.operator || 'Bus'} (${svc.data?.busType || 'AC Sleeper'})`,
+                                            amount: busFare,
+                                            details: `${svc.data?.from || 'Delhi'} → ${svc.data?.to || 'Manali'} • Dep: ${svc.data?.departure || '21:00'}`,
+                                            packageId: packageData.id,
+                                            serviceItemId: svc.id,
+                                            itineraryDayId: day.id,
+                                            rawPayload: {
+                                              busData: svc.data,
+                                              passengers: [{ Name: 'Traveler Primary' }],
+                                              traceId: svc.data?.traceId || `TRC-${Date.now()}`
+                                            }
+                                          });
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                                      >
+                                        <CreditCard className="w-3.5 h-3.5" />
+                                        <span>Book & Pay</span>
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          setModalState((prev) => ({
+                                            ...prev,
+                                            bus: {
+                                              isOpen: true,
+                                              dayId: day.id,
+                                              serviceId: svc.id,
+                                              initialData: svc.data || {}
+                                            }
+                                          }))
+                                        }
+                                        className="px-3 py-1.5 rounded-lg border border-amber-600 text-amber-600 hover:bg-amber-50 text-xs font-semibold transition cursor-pointer shrink-0"
+                                      >
+                                        Change Bus
+                                      </button>
+                                    </div>
                                   </div>
                                 )}
 
@@ -2597,6 +3086,7 @@ export default function TravelProPackageBuilder({
             <div className="p-4 sm:p-6">
               <CustomerPreviewView
                 packageData={{ ...packageData, pricingBreakdown }}
+                packageId={packageData.id}
                 onBack={() => setModalState((prev) => ({ ...prev, customerPreview: { isOpen: false } }))}
                 onContinue={() => {
                   setModalState((prev) => ({ ...prev, customerPreview: { isOpen: false } }));
@@ -2780,6 +3270,29 @@ export default function TravelProPackageBuilder({
           />
         </div>
       )}
+      {/* Razorpay Test Mode Checkout Modal */}
+      <RazorpayCheckoutModal
+        isOpen={Boolean(checkoutData)}
+        bookingData={checkoutData}
+        onClose={() => setCheckoutData(null)}
+        onBookingConfirmed={() => {
+          if (showToast) showToast('Reservation confirmed and ticket generated!', 'success');
+        }}
+        showToast={showToast}
+      />
+
+      {/* Travel Reservations & Voucher Center */}
+      <BookingManagerModal
+        isOpen={bookingManagerOpen}
+        onClose={() => setBookingManagerOpen(false)}
+        showToast={showToast}
+      />
+
+      {/* Service Audit Log Modal */}
+      <ServiceAuditLogModal
+        isOpen={auditLogOpen}
+        onClose={() => setAuditLogOpen(false)}
+      />
     </div>
   );
 }

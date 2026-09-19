@@ -54,6 +54,7 @@ import PackageCustomizationView from './views/PackageCustomizationView.jsx';
 import DestinationsView from './views/DestinationsView.jsx';
 import BlogsView from './views/BlogsView.jsx';
 import BlogCategoriesView from './views/BlogCategoriesView.jsx';
+import SightseeingView from './views/SightseeingView.jsx';
 import UsersView from './views/UsersView.jsx';
 import PaymentsView from './views/PaymentsView.jsx';
 import ReportsView from './views/ReportsView.jsx';
@@ -69,20 +70,26 @@ import AddPackageModal from './components/admin/AddPackageModal.jsx';
 import AddBlogModal from './components/admin/AddBlogModal.jsx';
 import Toast from './components/admin/Toast.jsx';
 
+// Next.js App Router Blog Frontend components
+import BlogLayout from './app/blogs/layout.jsx';
+import BlogsPage from './app/blogs/page.jsx';
+import BlogDetailPage from './app/blogs/[slug]/page.jsx';
+import CategoryPage from './app/blog-category/[slug]/page.jsx';
+
 export default function App() {
-  // Navigation State - default to the new TravelPro package builder design
+  // Navigation State - defaults to /blogs so blog frontend opens cleanly
   const [currentPath, setCurrentPath] = useState(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
-      if (path && path.startsWith('/admin')) {
+      if (path && path !== '/' && path !== '') {
         return path;
       }
       const hash = window.location.hash.replace(/^#/, '');
-      if (hash && hash.startsWith('/admin')) {
+      if (hash && hash !== '' && hash !== '/') {
         return hash;
       }
     }
-    return '/admin/packages/builder';
+    return '/blogs';
   });
 
   // Sidebar Layout State
@@ -141,7 +148,7 @@ export default function App() {
     setToast(prev => ({ ...prev, show: false }));
   }, []);
 
-  // Fetch packages from database
+  // Fetch packages, blogs and categories from database
   useEffect(() => {
     let isMounted = true;
     fetchPackages().then((dbPackages) => {
@@ -149,6 +156,64 @@ export default function App() {
         setPackages(dbPackages);
       }
     }).catch(err => console.warn('Could not load DB packages:', err));
+
+    // Load blogs and categories from dynamic REST APIs
+    Promise.all([
+      fetch('/api/blogs').then(r => r.json()).catch(() => null),
+      fetch('/api/blog-categories').then(r => r.json()).catch(() => null),
+      fetch('/api/bookings').then(r => r.json()).catch(() => null),
+      fetch('/api/payments/history').then(r => r.json()).catch(() => null)
+    ]).then(([blogsData, catsData, bookingsData, paymentsData]) => {
+      if (isMounted) {
+        if (blogsData && blogsData.success && Array.isArray(blogsData.blogs)) {
+          setBlogs(blogsData.blogs);
+        }
+        if (catsData && catsData.success && Array.isArray(catsData.categories)) {
+          setBlogCategories(catsData.categories);
+        }
+        if (bookingsData && bookingsData.success && Array.isArray(bookingsData.bookings)) {
+          const formattedBookings = bookingsData.bookings.map(b => ({
+            id: b.bookingId || String(b.id),
+            type: b.serviceType ? b.serviceType.toLowerCase() : 'flight',
+            customer: {
+              name: b.passengers?.[0]?.FirstName ? `${b.passengers[0].FirstName} ${b.passengers[0].LastName}` : 'Traveler',
+              phone: '+91 98765 43210',
+              email: 'traveler@makemy91.com'
+            },
+            service: b.displayTitle,
+            amount: b.totalAmount || b.fare || 5000,
+            status: b.status === 'CANCELLED' ? 'Cancelled' : 'Confirmed',
+            date: b.createdAt ? new Date(b.createdAt).toISOString().split('T')[0] : '2026-09-19',
+            route: b.origin && b.destination ? `${b.origin} → ${b.destination}` : b.displayTitle,
+            airline: b.airline || 'Air India',
+            pnr: b.pnr || b.refCode || 'PNR123',
+            ...b
+          }));
+          setBookings(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const newOnes = formattedBookings.filter(f => !existingIds.has(f.id));
+            return [...newOnes, ...prev];
+          });
+        }
+        if (paymentsData && paymentsData.success && Array.isArray(paymentsData.payments)) {
+          const formattedTxs = paymentsData.payments.map(p => ({
+            id: p.gatewayPaymentId || p.gatewayOrderId || `TXN-${p.id}`,
+            bookingId: p.bookingId || `BKG-${p.id}`,
+            customer: { name: 'Verified Traveler', email: 'traveler@makemy91.com' },
+            amount: p.amount,
+            status: p.status === 'PAID' ? 'Success' : p.status === 'REFUNDED' ? 'Refunded' : 'Pending',
+            method: p.method || 'Razorpay (Test)',
+            date: new Date(p.createdAt).toISOString().split('T')[0]
+          }));
+          setTransactions(prev => {
+            const existingIds = new Set(prev.map(t => t.id));
+            const newOnes = formattedTxs.filter(t => !existingIds.has(t.id));
+            return [...newOnes, ...prev];
+          });
+        }
+      }
+    });
+
     return () => { isMounted = false; };
   }, []);
 
@@ -156,7 +221,7 @@ export default function App() {
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
-      if (path && path.startsWith('/admin')) {
+      if (path) {
         setCurrentPath(path);
       }
     };
@@ -166,12 +231,18 @@ export default function App() {
 
   const handleNavigate = useCallback((path) => {
     setCurrentPath(path);
-    if (window.history.pushState) {
-      window.history.pushState({}, '', path);
+    if (typeof window !== 'undefined' && window.history?.pushState) {
+      try {
+        window.history.pushState({}, '', path);
+      } catch (err) {
+        // Safe fallback in restricted iframe contexts
+      }
     }
     // Close mobile drawer on navigation
     setSidebarOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (typeof window !== 'undefined' && window.scrollTo) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, []);
 
   // Filter specific booking collections
@@ -255,33 +326,56 @@ export default function App() {
     });
   };
 
-  // Add / Edit Blog
-  const handleSaveBlog = (blogData) => {
-    if (blogModalState.initialData) {
-      setBlogs(prev => prev.map(b => b.id === blogData.id ? blogData : b));
-      showToast(`Article "${blogData.title}" updated.`);
-    } else {
-      const newBlog = {
-        ...blogData,
-        id: `BLOG-${Date.now().toString().slice(-4)}`,
-        date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-        views: 0
-      };
-      setBlogs(prev => [newBlog, ...prev]);
-      showToast(`Article "${blogData.title}" published!`);
+  // Add / Edit Blog (Persisted to Database)
+  const handleSaveBlog = async (blogData) => {
+    try {
+      const isEditing = blogModalState.initialData && blogModalState.initialData.id;
+      const url = isEditing ? `/api/blogs/${blogModalState.initialData.id}` : '/api/blogs';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(blogData)
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showToast(isEditing ? `Article "${blogData.title}" updated.` : `Article "${blogData.title}" published!`);
+        // Refresh blogs from backend
+        const refreshed = await fetch('/api/blogs').then(r => r.json());
+        if (refreshed.success && Array.isArray(refreshed.blogs)) {
+          setBlogs(refreshed.blogs);
+        }
+      } else {
+        showToast(`Failed to save: ${data.error || 'Server error'}`, 'error');
+      }
+    } catch (err) {
+      console.error('Error saving blog:', err);
+      showToast(`Error saving article: ${err.message}`, 'error');
+    } finally {
+      setBlogModalState({ isOpen: false, initialData: null });
     }
   };
 
   const handleDeleteBlog = (blog) => {
+    const targetId = typeof blog === 'object' ? blog.id : blog;
+    const targetTitle = typeof blog === 'object' ? (blog.title || 'article') : 'article';
+
     setConfirmationState({
       isOpen: true,
       title: 'Delete Blog Article?',
-      message: `Are you sure you want to remove "${blog.title}"?`,
+      message: `Are you sure you want to delete "${targetTitle}"? This will permanently remove it from the public blog and database.`,
       confirmText: 'Delete Article',
       isDanger: true,
-      onConfirm: () => {
-        setBlogs(prev => prev.filter(b => b.id !== blog.id));
-        showToast(`Article deleted.`, 'info');
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/blogs/${targetId}`, { method: 'DELETE' });
+          setBlogs(prev => prev.filter(b => b.id !== targetId));
+          showToast(`Article deleted.`, 'info');
+        } catch (err) {
+          console.error('Error deleting blog:', err);
+        }
         setConfirmationState(prev => ({ ...prev, isOpen: false }));
       }
     });
@@ -308,14 +402,42 @@ export default function App() {
     });
   };
 
-  const handleAddCategory = (newCat) => {
-    setBlogCategories(prev => [...prev, newCat]);
-    showToast(`Category "${newCat.name}" created.`);
+  const handleAddCategory = async (newCat) => {
+    try {
+      const res = await fetch('/api/blog-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCat)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBlogCategories(prev => [...prev, data.category]);
+        showToast(`Category "${newCat.name}" created.`);
+      }
+    } catch (err) {
+      setBlogCategories(prev => [...prev, newCat]);
+      showToast(`Category "${newCat.name}" created.`);
+    }
   };
 
   const handleDeleteCategory = (cat) => {
-    setBlogCategories(prev => prev.filter(c => c.id !== cat.id));
-    showToast(`Category removed.`, 'info');
+    setConfirmationState({
+      isOpen: true,
+      title: 'Delete Blog Category?',
+      message: `Are you sure you want to remove category "${cat.name}"?`,
+      confirmText: 'Delete Category',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/blog-categories/${cat.id}`, { method: 'DELETE' });
+        } catch (err) {
+          console.error('Error deleting category:', err);
+        }
+        setBlogCategories(prev => prev.filter(c => c.id !== cat.id));
+        showToast(`Category "${cat.name}" deleted.`, 'info');
+        setConfirmationState(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   };
 
   // Users & Payments Actions
@@ -499,6 +621,7 @@ export default function App() {
         const pkgToEdit = builderEditingPackage || (queryPackageId ? packages.find(p => String(p.id) === String(queryPackageId)) : null);
         return (
           <PackageBuilderView
+            key={pkgToEdit?.id || queryPackageId || 'new'}
             initialPackage={pkgToEdit}
             onSavePackage={handleSaveBuilderPackage}
             onCancel={() => handleNavigate('/admin/packages')}
@@ -549,6 +672,15 @@ export default function App() {
             onAddCategory={handleAddCategory}
             onDeleteCategory={handleDeleteCategory}
             onNavigate={handleNavigate}
+          />
+        );
+
+      case '/admin/sightseeing':
+      case '/admin/sightseeing-management':
+        return (
+          <SightseeingView
+            onNavigate={handleNavigate}
+            onShowToast={showToast}
           />
         );
 
@@ -659,6 +791,36 @@ export default function App() {
         );
     }
   };
+
+  // Check if current path is an admin management route
+  const isAdminRoute = currentPath.startsWith('/admin');
+
+  // If public blog route (Next.js App Router style: /blogs, /blogs/[slug], /blog-category/[slug])
+  if (!isAdminRoute) {
+    let blogContent = null;
+    if (currentPath.startsWith('/blog-category/')) {
+      const catSlug = currentPath.replace(/^\/blog-category\//, '').split('/')[0].split('?')[0];
+      blogContent = <CategoryPage slug={catSlug} onNavigate={handleNavigate} />;
+    } else if (currentPath.startsWith('/blogs/') && currentPath.replace(/^\/blogs\/?/, '') !== '') {
+      const postSlug = currentPath.replace(/^\/blogs\//, '').split('/')[0].split('?')[0];
+      blogContent = <BlogDetailPage slug={postSlug} onNavigate={handleNavigate} />;
+    } else {
+      blogContent = <BlogsPage onNavigate={handleNavigate} />;
+    }
+
+    return (
+      <BlogLayout currentPath={currentPath} onNavigate={handleNavigate}>
+        {blogContent}
+        {/* Toast notifications */}
+        <Toast
+          show={toast.show}
+          message={toast.message}
+          type={toast.type}
+          onClose={hideToast}
+        />
+      </BlogLayout>
+    );
+  }
 
   return (
     <div id="admin-root" className="min-h-screen bg-[#F6F7FB] flex text-[#0F172A] font-sans antialiased">

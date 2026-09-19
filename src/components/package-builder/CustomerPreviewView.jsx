@@ -28,7 +28,10 @@ import {
   Eye,
   Copy,
   Check,
-  Receipt
+  Receipt,
+  Percent,
+  Tag,
+  Loader2
 } from 'lucide-react';
 import { downloadCustomerPreviewAsPdf } from '../../lib/pdfGenerator.js';
 import { getCustomerFacingPackageData } from '../../lib/customerPackageData.js';
@@ -64,6 +67,7 @@ const formatFullDate = (dateStr, dayOffset = 0) => {
 
 export default function CustomerPreviewView({
   packageData,
+  packageId,
   onBack,
   onContinue,
   showToast
@@ -71,10 +75,17 @@ export default function CustomerPreviewView({
   const [downloading, setDownloading] = useState(false);
   const [previewImage, setPreviewImage] = useState(null); // For flight ticket/image modal
   const [copiedJson, setCopiedJson] = useState(false);
+  const [isCopyingJson, setIsCopyingJson] = useState(false);
 
   // Single Source of Truth for customer-facing data (visibility filtering for preview & PDF)
   const customerFacingData = getCustomerFacingPackageData(packageData);
-  const { visiblePolicies, showPriceBreakdown, visibleBreakdownItems } = customerFacingData;
+  const {
+    visiblePolicies,
+    showPriceBreakdown,
+    visibleBreakdownItems,
+    coverLocations: customerCoverLocations
+  } = customerFacingData;
+  const coverLocations = customerCoverLocations || [];
 
   const termsPolicy = visiblePolicies.find((p) => p.key === 'terms');
   const cancellationPolicy = visiblePolicies.find((p) => p.key === 'cancellation');
@@ -193,27 +204,88 @@ export default function CustomerPreviewView({
     }
   };
 
-  // Copy Clean Sanitized JSON (No passwords, tokens, API credentials, or secrets)
+  // Copy Exact Saved Package Record from Database (Sequelize Package Model)
   const handleCopyJson = async () => {
+    if (isCopyingJson) return;
+
+    // Use actual database Package.id (must be a saved record in DB)
+    const rawId = packageId || packageData?.id;
+    let savedPackageId = null;
+
+    if (typeof rawId === 'number' && rawId > 0) {
+      savedPackageId = rawId;
+    } else if (typeof rawId === 'string') {
+      const cleaned = rawId.replace(/^PKG-/i, '').trim();
+      if (/^\d+$/.test(cleaned) && Number(cleaned) > 0) {
+        savedPackageId = Number(cleaned);
+      }
+    }
+
+    setIsCopyingJson(true);
+
     try {
-      const dataToExport = customerFacingData.sanitizedForExport;
-      const jsonText = JSON.stringify(dataToExport, null, 2);
+      // If not saved yet, auto-save to database to obtain the real Sequelize Package record
+      if (!savedPackageId) {
+        if (showToast) showToast('Saving package to database first...', 'info');
+        const saveRes = await fetch('/api/packages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(packageData)
+        });
+        if (saveRes.ok) {
+          const saveJson = await saveRes.json();
+          if (saveJson?.package?.id) {
+            savedPackageId = Number(saveJson.package.id);
+          }
+        }
+      }
+
+      if (!savedPackageId) {
+        throw new Error('Please save the package first to generate a database record.');
+      }
+
+      // Retrieve the actual Sequelize Package record from the database
+      const res = await fetch(`/api/packages/${savedPackageId}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error('Package not found.');
+        }
+        throw new Error('Unable to fetch saved package JSON.');
+      }
+
+      const jsonResponse = await res.json();
+      const savedPackageModel = jsonResponse?.package || (jsonResponse?.id ? jsonResponse : null);
+
+      if (!savedPackageModel) {
+        throw new Error(jsonResponse?.error || 'Unable to fetch saved package JSON.');
+      }
+
+      // Format as indented JSON (2 spaces), preserving all numbers, objects, arrays, and nulls
+      const formattedJson = JSON.stringify(savedPackageModel, null, 2);
+
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(jsonText);
+        await navigator.clipboard.writeText(formattedJson);
       } else {
         const ta = document.createElement('textarea');
-        ta.value = jsonText;
+        ta.value = formattedJson;
         document.body.appendChild(ta);
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
       }
+
       setCopiedJson(true);
-      if (showToast) showToast('Sanitized Package JSON copied to clipboard!', 'success');
+      if (showToast) {
+        showToast('Copied saved Package JSON from database!', 'success');
+      }
       setTimeout(() => setCopiedJson(false), 2500);
     } catch (err) {
-      console.error('Failed to copy JSON:', err);
-      if (showToast) showToast('Could not copy JSON to clipboard.', 'error');
+      console.error('Failed to copy saved package JSON:', err);
+      if (showToast) {
+        showToast(err.message || 'Unable to fetch saved package JSON.', 'error');
+      }
+    } finally {
+      setIsCopyingJson(false);
     }
   };
 
@@ -276,17 +348,25 @@ export default function CustomerPreviewView({
           <button
             type="button"
             onClick={handleCopyJson}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+            disabled={isCopyingJson}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
               copiedJson
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                : isCopyingJson
+                ? 'bg-slate-100 border-slate-300 text-slate-600'
                 : 'border-slate-200 hover:bg-slate-50 text-slate-700'
             }`}
-            title="Copy clean package JSON without sensitive keys"
+            title="Copy saved package database record as JSON"
           >
             {copiedJson ? (
               <>
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Copied JSON!</span>
+                <span>Copied!</span>
+              </>
+            ) : isCopyingJson ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 text-slate-600 animate-spin" />
+                <span>Copying...</span>
               </>
             ) : (
               <>
@@ -360,9 +440,17 @@ export default function CustomerPreviewView({
             <h1 className="text-3xl sm:text-5xl font-black uppercase tracking-tight text-white drop-shadow-md leading-tight max-w-2xl">
               {packageData.title || `${packageData.destination || 'MUSSORIE TO KHAJJIAR'}`}
             </h1>
-            <span className="text-base sm:text-lg font-bold uppercase tracking-[0.2em] text-white/90 mt-2">
-              ITINERARY
-            </span>
+            <div className="flex items-center gap-2.5 flex-wrap mt-2">
+              <span className="text-base sm:text-lg font-bold uppercase tracking-[0.2em] text-white/90">
+                ITINERARY
+              </span>
+              {coverLocations.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-xs border border-white/20 text-xs font-semibold text-orange-300">
+                  <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                  <span>Covered: {coverLocations.join(' · ')}</span>
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -388,10 +476,10 @@ export default function CustomerPreviewView({
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-0.5">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                  DESTINATION
+                  COVER LOCATIONS
                 </span>
-                <p className="font-bold text-sm sm:text-base text-slate-900 truncate">
-                  {packageData.destination || 'Manali / Mussoorie'}
+                <p className="font-bold text-sm text-slate-900 line-clamp-2" title={coverLocations.join(' · ')}>
+                  {coverLocations.join(' · ') || packageData.destination || 'Custom Destination'}
                 </p>
               </div>
 
@@ -486,48 +574,19 @@ export default function CustomerPreviewView({
               </div>
             </div>
 
-            {/* Itemized Price Breakdown Table (Single Source of Truth for Preview & PDF) */}
-            {showPriceBreakdown && visibleBreakdownItems.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-orange-200/80 space-y-2.5">
-                <div className="flex items-center justify-between text-xs font-bold text-orange-950">
-                  <div className="flex items-center gap-1.5">
-                    <Receipt className="w-3.5 h-3.5 text-orange-600" />
-                    <span>Itemized Price Breakdown</span>
-                  </div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-orange-700 bg-orange-100/70 px-2 py-0.5 rounded-full border border-orange-200">
-                    Commercial Quotation
-                  </span>
-                </div>
-
-                <div className="bg-white/95 rounded-xl border border-orange-200/90 divide-y divide-orange-100/80 text-xs overflow-hidden shadow-2xs">
-                  {visibleBreakdownItems.map((item) => (
-                    <div
-                      key={item.key}
-                      className={`flex items-center justify-between px-3.5 py-2.5 ${
-                        item.key === 'grandTotal'
-                          ? 'bg-orange-50/90 font-bold text-slate-900 border-t border-orange-200'
-                          : 'text-slate-700 hover:bg-orange-50/30'
-                      }`}
-                    >
-                      <span className={item.key === 'grandTotal' ? 'font-bold text-slate-900' : 'font-medium'}>
-                        {item.label} {item.count ? `(${item.count})` : ''}
-                      </span>
-                      <span
-                        className={`font-mono ${
-                          item.key === 'grandTotal'
-                            ? 'text-orange-700 font-black text-sm'
-                            : item.amount < 0
-                            ? 'text-emerald-600 font-semibold'
-                            : 'font-semibold text-slate-800'
-                        }`}
-                      >
-                        {item.amount < 0 ? `- ${inr(Math.abs(item.amount))}` : inr(item.amount)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Commercial Tariff Note & Quick Jump */}
+            <div className="pt-3 border-t border-orange-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <span className="text-orange-950/80 font-medium">
+                Comprehensive quotation including all transfers, taxes, and specified meals.
+              </span>
+              <a
+                href="#price-breakdown-section"
+                className="inline-flex items-center gap-1.5 text-orange-700 hover:text-orange-900 font-bold underline underline-offset-2 transition"
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>See Price Breakdown Below ↓</span>
+              </a>
+            </div>
           </div>
 
           {/* =====================================================================
@@ -948,16 +1007,35 @@ export default function CustomerPreviewView({
                                 {svc.type === 'hotel' && `${svc.data?.name || 'Hotel'} (${svc.data?.roomType || svc.data?.room || 'Deluxe Room'})`}
                                 {svc.type === 'cab' && `${svc.data?.vehicle || 'Cab'} · ${svc.data?.pickup || ''} to ${svc.data?.drop || ''}`}
                                 {svc.type === 'bus' && `${svc.data?.operator || 'Bus'} (${svc.data?.busType || 'Volvo'})`}
-                                {svc.type === 'sightseeing' && (svc.data?.items?.map((i) => i.name).join(', ') || 'Sightseeing Tour')}
+                                {svc.type === 'sightseeing' && (
+                                  <span>
+                                    {svc.data?.items?.map((i) => i.name).join(' · ') || 'Sightseeing Tour'}
+                                  </span>
+                                )}
                                 {svc.type === 'activity' && (svc.data?.items?.map((i) => i.name).join(', ') || 'Adventure Tour')}
                                 {svc.type === 'meal' && (svc.data?.items?.filter((i) => i.enabled).map((i) => i.name).join(', ') || 'Buffet Meals')}
                               </p>
-                              <p className="text-[11px] text-slate-500">
+                              <div className="text-[11px] text-slate-500">
                                 {svc.type === 'flight' && `Dep: ${svc.data?.departure || '09:00'} · Cabin: ${svc.data?.cabin || 'Economy'}`}
                                 {svc.type === 'hotel' && `Meal Plan: ${svc.data?.mealPlan || svc.data?.meal || 'Breakfast Included'} · ${svc.data?.stars || 4} Stars`}
                                 {svc.type === 'cab' && `Category: ${svc.data?.category || 'Sedan'} · Time: ${svc.data?.time || '12:30 PM'}`}
                                 {svc.type === 'bus' && `Timing: ${svc.data?.departure || '21:00'} to ${svc.data?.arrival || '08:00'}`}
-                              </p>
+                                {svc.type === 'sightseeing' && (
+                                  <span className="text-teal-700 font-medium inline-flex items-center gap-1">
+                                    <MapPin className="w-3 h-3 text-teal-600" />
+                                    <span>
+                                      Cover Locations:{' '}
+                                      {Array.from(
+                                        new Set(
+                                          (svc.data?.items || [])
+                                            .map((i) => i.location || day.location || packageData.destination)
+                                            .filter(Boolean)
+                                        )
+                                      ).join(' · ') || 'Local Sightseeing'}
+                                    </span>
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
 
@@ -974,7 +1052,211 @@ export default function CustomerPreviewView({
           </div>
 
           {/* =====================================================================
-             9. INCLUSIONS & EXCLUSIONS (MATCHING PAGE 3)
+             9. DETAILED COMMERCIAL PRICE BREAKDOWN (EXACT PLACEMENT & STYLING)
+             Appears directly after Itinerary and before Inclusions/Exclusions
+             ===================================================================== */}
+          <div id="price-breakdown-section" className="space-y-4 pt-6 border-t border-slate-100 break-inside-avoid">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="w-1.5 h-6 rounded-full bg-orange-500"></span>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                    Commercial Price Breakdown
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Itemized commercial tariff and financial quotation for all included services and taxes
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-bold text-orange-800 bg-orange-100/80 px-3 py-1 rounded-full border border-orange-200 inline-flex items-center gap-1.5">
+                  <Receipt className="w-3 h-3 text-orange-600" />
+                  <span>Itemized Tariff</span>
+                </span>
+                <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 px-3 py-1 rounded-full border border-emerald-200">
+                  GST &amp; Levies Included
+                </span>
+              </div>
+            </div>
+
+            {showPriceBreakdown && visibleBreakdownItems.length > 0 ? (
+              <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-2xs">
+                {/* Table Column Headers */}
+                <div className="grid grid-cols-12 bg-slate-50/90 border-b border-slate-200 px-4 sm:px-6 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  <div className="col-span-6 sm:col-span-5">Component / Service</div>
+                  <div className="col-span-3 sm:col-span-4 text-left">Details &amp; Inclusions</div>
+                  <div className="col-span-3 sm:col-span-3 text-right">Amount (INR)</div>
+                </div>
+
+                {/* Table Rows */}
+                <div className="divide-y divide-slate-100 text-xs sm:text-sm">
+                  {visibleBreakdownItems.map((item) => {
+                    const isGrandTotal = item.key === 'grandTotal';
+                    if (isGrandTotal) return null; // Rendered in dedicated grand total footer block
+
+                    let ServiceIcon = Receipt;
+                    let iconColor = 'text-slate-600';
+                    let bgIcon = 'bg-slate-100';
+
+                    if (item.key === 'flights') {
+                      ServiceIcon = Plane;
+                      iconColor = 'text-blue-600';
+                      bgIcon = 'bg-blue-50';
+                    } else if (item.key === 'hotels') {
+                      ServiceIcon = Building2;
+                      iconColor = 'text-indigo-600';
+                      bgIcon = 'bg-indigo-50';
+                    } else if (item.key === 'cabs') {
+                      ServiceIcon = Car;
+                      iconColor = 'text-emerald-600';
+                      bgIcon = 'bg-emerald-50';
+                    } else if (item.key === 'buses') {
+                      ServiceIcon = Bus;
+                      iconColor = 'text-amber-600';
+                      bgIcon = 'bg-amber-50';
+                    } else if (item.key === 'sightseeing') {
+                      ServiceIcon = Mountain;
+                      iconColor = 'text-teal-600';
+                      bgIcon = 'bg-teal-50';
+                    } else if (item.key === 'activities') {
+                      ServiceIcon = Compass;
+                      iconColor = 'text-purple-600';
+                      bgIcon = 'bg-purple-50';
+                    } else if (item.key === 'meals') {
+                      ServiceIcon = Utensils;
+                      iconColor = 'text-rose-600';
+                      bgIcon = 'bg-rose-50';
+                    } else if (item.key === 'tax') {
+                      ServiceIcon = Percent;
+                      iconColor = 'text-orange-600';
+                      bgIcon = 'bg-orange-50';
+                    } else if (item.key === 'discount') {
+                      ServiceIcon = Tag;
+                      iconColor = 'text-emerald-600';
+                      bgIcon = 'bg-emerald-50';
+                    }
+
+                    return (
+                      <div
+                        key={item.key}
+                        className="grid grid-cols-12 px-4 sm:px-6 py-3.5 items-center hover:bg-slate-50/60 transition"
+                      >
+                        <div className="col-span-6 sm:col-span-5 flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${bgIcon}`}>
+                            <ServiceIcon className={`w-4 h-4 ${iconColor}`} />
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900 block">
+                              {item.label}
+                            </span>
+                            {item.key === 'flights' && (
+                              <span className="text-[11px] text-slate-500">Scheduled flight sectors &amp; cabin bag</span>
+                            )}
+                            {item.key === 'hotels' && (
+                              <span className="text-[11px] text-slate-500">Verified hotel rooms with meal plans</span>
+                            )}
+                            {item.key === 'cabs' && (
+                              <span className="text-[11px] text-slate-500">Private dedicated cab transfers &amp; sightseeing</span>
+                            )}
+                            {item.key === 'sightseeing' && (
+                              <span className="text-[11px] text-slate-500">Curated monument entry &amp; excursion tours</span>
+                            )}
+                            {item.key === 'buses' && (
+                              <span className="text-[11px] text-slate-500">Intercity Volvo / luxury coach tickets</span>
+                            )}
+                            {item.key === 'activities' && (
+                              <span className="text-[11px] text-slate-500">Adventure sports &amp; activity passes</span>
+                            )}
+                            {item.key === 'meals' && (
+                              <span className="text-[11px] text-slate-500">Breakfast &amp; scheduled dining inclusions</span>
+                            )}
+                            {item.key === 'tax' && (
+                              <span className="text-[11px] text-slate-500">Applicable Goods &amp; Services Tax (GST)</span>
+                            )}
+                            {item.key === 'discount' && (
+                              <span className="text-[11px] text-emerald-600 font-semibold">Special promotional waiver applied</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="col-span-3 sm:col-span-4 text-slate-600 text-xs">
+                          {item.count ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px]">
+                              {item.count} {item.count === 1 ? 'Unit / Service' : 'Units / Services'}
+                            </span>
+                          ) : item.key === 'tax' ? (
+                            <span className="text-slate-500 text-[11px]">Government Statutory</span>
+                          ) : item.key === 'discount' ? (
+                            <span className="text-emerald-700 font-semibold text-[11px]">Promotional Concession</span>
+                          ) : (
+                            <span className="text-slate-500 text-[11px]">Package Inclusions</span>
+                          )}
+                        </div>
+
+                        <div className="col-span-3 sm:col-span-3 text-right">
+                          <span
+                            className={`font-mono text-sm sm:text-base font-bold ${
+                              item.amount < 0
+                                ? 'text-emerald-600'
+                                : 'text-slate-900'
+                            }`}
+                          >
+                            {item.amount < 0
+                              ? `- ${inr(Math.abs(item.amount))}`
+                              : inr(item.amount)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Grand Total Footer Card */}
+                <div className="bg-[#FFF8F2] border-t-2 border-orange-200 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-orange-800">
+                      Total Package Commercial Quotation
+                    </span>
+                    <p className="text-xs text-slate-600">
+                      All-in cost for <strong className="text-slate-900">{totalTravelers} {totalTravelers === 1 ? 'Traveler' : 'Travelers'}</strong> ({inr(perPerson)} per person), all taxes, vehicle permits, and statutory levies included.
+                    </p>
+                  </div>
+
+                  <div className="text-left sm:text-right shrink-0">
+                    <span className="text-2xl sm:text-3xl font-black text-orange-600 font-mono tracking-tight block">
+                      {inr(finalTotal)}
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                      Net Amount (INR)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Consolidated Total Fallback if breakdown is disabled */
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h4 className="font-bold text-sm text-slate-900">
+                    Consolidated All-Inclusive Package Quote
+                  </h4>
+                  <p className="text-xs text-slate-600">
+                    Includes all accommodations, transfers, sightseeing excursions, and taxes as detailed in the itinerary above.
+                  </p>
+                </div>
+                <div className="text-left sm:text-right shrink-0">
+                  <span className="text-2xl sm:text-3xl font-black text-slate-900 font-mono block">
+                    {inr(finalTotal)}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {inr(perPerson)} per person ({totalTravelers} {totalTravelers === 1 ? 'traveler' : 'travelers'})
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* =====================================================================
+             10. INCLUSIONS & EXCLUSIONS (MATCHING PAGE 3)
              ===================================================================== */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
             {/* Inclusions */}

@@ -17,6 +17,7 @@ import {
   Settings as SettingsIcon,
   ChevronDown,
   Compass,
+  Landmark,
   X,
   Sparkles
 } from 'lucide-react';
@@ -57,7 +58,8 @@ export default function Sidebar({
         { label: 'Package Customization', path: '/admin/packages/customization', icon: Sliders },
         { label: 'Destinations', path: '/admin/destinations', icon: MapPin },
         { label: 'Blogs', path: '/admin/blogs', icon: FileText },
-        { label: 'Blog Categories', path: '/admin/blog-categories', icon: Tags }
+        { label: 'Blog Categories', path: '/admin/blog-categories', icon: Tags },
+        { label: 'Sightseeing Management', path: '/admin/sightseeing', icon: Landmark }
       ]
     },
     {

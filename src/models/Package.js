@@ -223,12 +223,21 @@ const Package = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true,
     },
-    policyVisibility: {
+    highlights: {
       type: DataTypes.JSON,
       allowNull: true,
+      defaultValue: [],
     },
-    priceBreakdownVisibility: {
-      type: DataTypes.JSON,
+    consultantName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    referenceId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    tripId: {
+      type: DataTypes.STRING,
       allowNull: true,
     },
     tags: {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tags, Plus, Edit2, Trash2, X, Check } from 'lucide-react';
+import { Tags, Plus, Edit2, Trash2, X, Check, ExternalLink } from 'lucide-react';
 import PageHeader from '../components/admin/PageHeader.jsx';
 
 export default function BlogCategoriesView({
@@ -72,14 +72,24 @@ export default function BlogCategoriesView({
                   </span>
                 </td>
                 <td className="py-3.5 px-4 text-center">
-                  <button
-                    type="button"
-                    onClick={() => onDeleteCategory(cat)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                    title="Delete Category"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onNavigate(`/blog-category/${cat.slug}`)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 cursor-pointer"
+                      title="View Category on Website"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteCategory(cat)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                      title="Delete Category"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

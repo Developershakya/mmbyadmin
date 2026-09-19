@@ -302,7 +302,37 @@ export function getCustomerFacingPackageData(rawPackageData = {}) {
     }
   });
 
-  // 5. Build Sanitized Data for "Copy JSON" (Strictly excludes internal secrets, keys, or private auth tokens)
+  // 5. Extract all covered locations (destination + day locations + sightseeing spots)
+  let coverLocations = [];
+  if (Array.isArray(pkg.coverLocation) && pkg.coverLocation.length > 0) {
+    coverLocations = pkg.coverLocation;
+  } else {
+    const locSet = new Set();
+    const primary = (pkg.destination || pkg.city || '').trim();
+    if (primary) locSet.add(primary);
+
+    days.forEach((day) => {
+      if (day.location && typeof day.location === 'string' && day.location.trim()) {
+        locSet.add(day.location.trim());
+      }
+      (day.services || []).forEach((svc) => {
+        if (svc.type === 'sightseeing') {
+          (svc.data?.items || []).forEach((item) => {
+            if (item.location && typeof item.location === 'string') {
+              item.location.split(',').map((p) => p.trim()).filter(Boolean).forEach((p) => locSet.add(p));
+            } else if (item.name && typeof item.name === 'string') {
+              locSet.add(item.name.trim());
+            }
+          });
+        }
+      });
+    });
+
+    const res = Array.from(locSet).filter(Boolean);
+    coverLocations = res.length > 0 ? res : [primary || 'Custom Destination'];
+  }
+
+  // 6. Build Sanitized Data for "Copy JSON" (Strictly excludes internal secrets, keys, or private auth tokens)
   const sanitizedForExport = {
     id: pkg.id || pkg.referenceId || 'PKG-EXPORT',
     referenceId: pkg.referenceId || (pkg.id ? `PKG-${pkg.id}` : 'PKG-DRAFT'),
@@ -323,6 +353,7 @@ export function getCustomerFacingPackageData(rawPackageData = {}) {
       children,
       total: totalTravelers
     },
+    coverLocations,
     inclusions: pkg.inclusions || [],
     exclusions: pkg.exclusions || [],
     pricingSummary: {
@@ -363,6 +394,7 @@ export function getCustomerFacingPackageData(rawPackageData = {}) {
     raw: pkg,
     title: pkg.title || pkg.packageName || 'Holiday Package',
     destination: pkg.destination || pkg.city || '',
+    coverLocations,
     originCity: pkg.originCity || 'Delhi',
     durationNights: pkg.nights || Math.max(days.length - 1, 1),
     durationDays: days.length,

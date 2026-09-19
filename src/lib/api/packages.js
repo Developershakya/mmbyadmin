@@ -61,6 +61,9 @@ export async function savePackage(packageData) {
 
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) {
+      if (data.package && data.package.id && !data.id) {
+        data.id = data.package.id;
+      }
       return data;
     } else {
       return { success: false, error: data.error || `Server responded with status ${res.status}` };
