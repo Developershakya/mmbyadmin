@@ -17,7 +17,8 @@ import { fetchHotelInfoApi } from '../../lib/packageBuilder/searchApi.js';
 export default function HotelInfoModal({
   isOpen,
   onClose,
-  hotel
+  hotel,
+  onSelectRoom
 }) {
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState(null);
@@ -262,14 +263,26 @@ export default function HotelInfoModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end shrink-0">
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition cursor-pointer"
           >
             Close Details
           </button>
+          {onSelectRoom && (
+            <button
+              type="button"
+              onClick={() => {
+                onSelectRoom(hotel, details);
+              }}
+              className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5"
+            >
+              <span>Select Room</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>

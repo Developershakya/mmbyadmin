@@ -103,6 +103,27 @@ export function buildHotelSearchPayload(params = {}, endUserIp = '122.161.76.198
   const totalAdults = Math.max(1, Number(adults || guestCount) || 2);
   const totalChildren = Math.max(0, Number(children || childCount) || 0);
 
+  const roomGuestsList =
+    Array.isArray(params.RoomGuests) && params.RoomGuests.length > 0
+      ? params.RoomGuests.map((rg) => ({
+          NoOfAdults: String(Math.max(1, Number(rg.NoOfAdults || rg.adults || 1))),
+          NoOfChild: String(Math.max(0, Number(rg.NoOfChild || rg.children || 0))),
+          ChildAge: Array.isArray(rg.ChildAge)
+            ? rg.ChildAge.map(Number)
+            : Array.isArray(rg.childAges)
+            ? rg.childAges.map(Number)
+            : []
+        }))
+      : [
+          {
+            NoOfAdults: String(totalAdults),
+            NoOfChild: String(totalChildren),
+            ChildAge: []
+          }
+        ];
+
+  const resolvedRooms = String(params.NoOfRooms || roomGuestsList.length || Math.max(1, Number(rooms || roomCount) || 1));
+
   return {
     EndUserIp: resolvedIp,
     ClientId: SRDV_CLIENT_ID,
@@ -115,15 +136,9 @@ export function buildHotelSearchPayload(params = {}, endUserIp = '122.161.76.198
     CityId: String(resolvedCity.cityid),
     ResultCount: null,
     PreferredCurrency: 'INR',
-    GuestNationality: 'IN',
-    NoOfRooms: String(Math.max(1, Number(rooms || roomCount) || 1)),
-    RoomGuests: [
-      {
-        NoOfAdults: String(totalAdults),
-        NoOfChild: String(totalChildren),
-        ChildAge: []
-      }
-    ],
+    GuestNationality: params.GuestNationality || 'IN',
+    NoOfRooms: resolvedRooms,
+    RoomGuests: roomGuestsList,
     PreferredHotel: '',
     MaxRating: String(maxRating || 5),
     MinRating: String(minRating || 0),

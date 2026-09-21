@@ -34,25 +34,27 @@ export default function FareCalendarStrip({
         if (Array.isArray(rawList) && rawList.length > 0) {
           // Find lowest fare in the set
           const minFare = Math.min(...rawList.map((f) => Number(f.TotalFare || f.fare || 999999)));
-          const formatted = rawList.map((f) => {
-            const dStr = f.DepartureDate ? f.DepartureDate.split('T')[0] : '';
-            const fareVal = Number(f.TotalFare || f.fare || 0);
-            return {
-              date: dStr,
-              fare: fareVal,
-              airline: f.AirlineCode || '6E',
-              isLowest: fareVal > 0 && fareVal === minFare
-            };
-          });
+          const formatted = rawList
+            .filter((f) => f && (f.TotalFare || f.fare))
+            .map((f) => {
+              const dStr = f.DepartureDate ? f.DepartureDate.split('T')[0] : '';
+              const fareVal = Number(f.TotalFare || f.fare || 0);
+              return {
+                date: dStr,
+                fare: fareVal,
+                airline: f.AirlineCode || '6E',
+                isLowest: fareVal > 0 && fareVal === minFare
+              };
+            })
+            .filter((f) => f.date);
           setCalendarFares(formatted);
         } else {
-          // Generate 7-10 days surrounding selectedDate with realistic calibrated variations
-          generateCalibratedDateStrip(selectedDate);
+          setCalendarFares([]);
         }
       } catch (err) {
-        console.warn('Fare calendar API notice, showing calibrated date strip:', err.message);
+        // As per specification: If API fails, hide silently without mock data
         if (isMounted) {
-          generateCalibratedDateStrip(selectedDate);
+          setCalendarFares([]);
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -65,33 +67,6 @@ export default function FareCalendarStrip({
       isMounted = false;
     };
   }, [origin, destination, selectedDate, cabinClass]);
-
-  const generateCalibratedDateStrip = (baseDateStr) => {
-    const baseDate = new Date(baseDateStr || Date.now());
-    const days = [];
-    const baseFare = 4650;
-
-    for (let i = -3; i <= 6; i++) {
-      const d = new Date(baseDate);
-      d.setDate(d.getDate() + i);
-      const iso = d.toISOString().split('T')[0];
-      // subtle deterministic variance
-      const seed = (d.getDate() * 17 + d.getMonth() * 31) % 11;
-      const fare = baseFare + (seed - 5) * 180;
-      days.push({
-        date: iso,
-        fare,
-        isLowest: false
-      });
-    }
-
-    const min = Math.min(...days.map((d) => d.fare));
-    days.forEach((d) => {
-      if (d.fare === min) d.isLowest = true;
-    });
-
-    setCalendarFares(days);
-  };
 
   const formatDateLabel = (dateStr) => {
     try {

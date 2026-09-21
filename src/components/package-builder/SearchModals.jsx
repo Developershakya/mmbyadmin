@@ -21,6 +21,8 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import AutocompleteInput from './AutocompleteInput.jsx';
+import FlightResultCard from './FlightResultCard.jsx';
+import FareCalendarStrip from './FareCalendarStrip.jsx';
 import {
   searchFlightsApi,
   searchHotelsApi,
@@ -56,8 +58,11 @@ export function FlightSearchModal({
   const [toCode, setToCode] = useState(initialData.to || 'BOM');
   const [toName, setToName] = useState(initialData.toName || 'Mumbai');
   const [date, setDate] = useState(initialData.departureDate || getFutureDateStr(14));
-  const [pax, setPax] = useState(initialData.pax || 2);
-  const [cabin, setCabin] = useState(initialData.cabin || 'Economy');
+  const [adults, setAdults] = useState(initialData.adults || initialData.pax || 1);
+  const [children, setChildren] = useState(initialData.children || 0);
+  const [infants, setInfants] = useState(initialData.infants || 0);
+  const [nonStopOnly, setNonStopOnly] = useState(initialData.nonStopOnly || false);
+  const [cabinClass, setCabinClass] = useState(String(initialData.flightCabinClass || '2')); // '2': Economy
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -102,13 +107,32 @@ export function FlightSearchModal({
     }
   };
 
-  const handleSearch = async () => {
-    if (!fromName.trim()) {
+  const executeFlightSearch = async (searchParams = {}) => {
+    const originAirport = searchParams.fromName || fromName;
+    const destAirport = searchParams.toName || toName;
+    const originIata = searchParams.fromCode || fromCode || originAirport.slice(0, 3).toUpperCase();
+    const destIata = searchParams.toCode || toCode || destAirport.slice(0, 3).toUpperCase();
+    const flightDate = searchParams.date || date;
+    const numAdults = Math.max(1, Number(searchParams.adults ?? adults) || 1);
+    const numChildren = Math.max(0, Number(searchParams.children ?? children) || 0);
+    const numInfants = Math.max(0, Number(searchParams.infants ?? infants) || 0);
+    const isDirect = Boolean(searchParams.nonStopOnly ?? nonStopOnly);
+    const cabinCode = Number(searchParams.cabinClass ?? cabinClass) || 2;
+
+    if (!originAirport.trim()) {
       setError('Origin airport is required.');
       return;
     }
-    if (!toName.trim()) {
+    if (!destAirport.trim()) {
       setError('Destination airport is required.');
+      return;
+    }
+    if (numAdults + numChildren + numInfants > 9) {
+      setError('Total passengers (Adults + Children + Infants) cannot exceed 9.');
+      return;
+    }
+    if (numInfants > numAdults) {
+      setError('Number of infants cannot exceed the number of adults.');
       return;
     }
 
@@ -119,16 +143,19 @@ export function FlightSearchModal({
 
     try {
       const flightResults = await searchFlightsApi({
-        origin: fromCode || fromName.slice(0, 3).toUpperCase(),
-        destination: toCode || toName.slice(0, 3).toUpperCase(),
-        departureDate: date,
-        adultCount: pax,
-        flightCabinClass: cabin === 'Business' ? 4 : cabin === 'Premium Economy' ? 3 : 2
+        origin: originIata,
+        destination: destIata,
+        departureDate: flightDate,
+        adultCount: numAdults,
+        childCount: numChildren,
+        infantCount: numInfants,
+        directFlight: isDirect,
+        flightCabinClass: cabinCode
       });
 
       setResults(flightResults);
       if (flightResults.length === 0 && showToast) {
-        showToast('No direct flights found for this route. Showing nearby connections or use Manual Form.', 'info');
+        showToast('No flights found for this route and criteria. Showing nearby options or use Manual Entry.', 'info');
       }
     } catch (err) {
       console.error('Flight search failed:', err);
@@ -156,6 +183,10 @@ export function FlightSearchModal({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearch = () => {
+    executeFlightSearch();
   };
 
   const handleLoadDemoFlights = async () => {
@@ -395,14 +426,42 @@ Team MakeMy91`;
 
                 <div className="col-span-1">
                   <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-                    Passengers
+                    Adults (12+ yrs)
                   </label>
                   <input
                     type="number"
                     min="1"
                     max="9"
-                    value={pax}
-                    onChange={(e) => setPax(Number(e.target.value) || 1)}
+                    value={adults}
+                    onChange={(e) => setAdults(Math.max(1, Math.min(9, Number(e.target.value) || 1)))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Children (2-11 yrs)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="8"
+                    value={children}
+                    onChange={(e) => setChildren(Math.max(0, Math.min(8, Number(e.target.value) || 0)))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Infants (&lt;2 yrs)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={adults}
+                    value={infants}
+                    onChange={(e) => setInfants(Math.max(0, Math.min(adults, Number(e.target.value) || 0)))}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
                   />
                 </div>
@@ -412,14 +471,32 @@ Team MakeMy91`;
                     Cabin Class
                   </label>
                   <select
-                    value={cabin}
-                    onChange={(e) => setCabin(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                    value={cabinClass}
+                    onChange={(e) => setCabinClass(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition bg-white"
                   >
-                    <option>Economy</option>
-                    <option>Premium Economy</option>
-                    <option>Business</option>
+                    <option value="1">1 - All Cabins</option>
+                    <option value="2">2 - Economy</option>
+                    <option value="3">3 - Premium Economy</option>
+                    <option value="4">4 - Business</option>
+                    <option value="5">5 - Premium Business</option>
+                    <option value="6">6 - First Class</option>
                   </select>
+                </div>
+
+                <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center justify-between py-1 px-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={nonStopOnly}
+                      onChange={(e) => setNonStopOnly(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                    />
+                    <span>Non-stop flights only (Direct Flights)</span>
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Total: {adults + children + infants} passenger{adults + children + infants !== 1 ? 's' : ''} (Max 9)
+                  </span>
                 </div>
               </div>
 
@@ -431,6 +508,17 @@ Team MakeMy91`;
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 <span>{loading ? 'Querying Live Airline GDS...' : 'Search Flights via API'}</span>
               </button>
+
+              {/* Fare Calendar Strip above results */}
+              <FareCalendarStrip
+                origin={fromCode || fromName.slice(0, 3).toUpperCase()}
+                destination={toCode || toName.slice(0, 3).toUpperCase()}
+                selectedDate={date}
+                onSelectDate={(newDate) => {
+                  setDate(newDate);
+                  executeFlightSearch({ date: newDate });
+                }}
+              />
 
               {/* Results Container */}
               <div className="space-y-3 pt-2">
@@ -462,60 +550,37 @@ Team MakeMy91`;
                 )}
 
                 {!loading &&
-                  results.map((flight) => (
-                    <div
-                      key={flight.id || flight.resultIndex}
-                      className="flex flex-wrap items-center justify-between gap-4 border border-slate-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-sm transition bg-white"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-[#0F172A] text-sm">
-                            {flight.airline}
-                          </p>
-                          <span className="text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono font-semibold">
-                            {flight.flightNumber}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                          <span className="font-semibold text-slate-800">{flight.departure}</span>
-                          <ArrowRight className="w-3 h-3 text-slate-400" />
-                          <span className="font-semibold text-slate-800">{flight.arrival}</span>
-                          <span className="text-slate-300">·</span>
-                          <span>{flight.duration}</span>
-                          <span className="text-slate-300">·</span>
-                          <span className="text-slate-700 font-medium">{flight.cabin || cabin}</span>
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="font-bold text-[#0F172A] text-base">
-                          {inr(flight.fare)}
-                          <span className="text-xs font-normal text-slate-500"> / pax</span>
-                        </p>
-                        <p className="text-[11px] text-emerald-700 font-medium">Taxes: {inr(flight.tax || 650)}</p>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          onSelectFlight({
-                            ...flight,
-                            from: fromCode || fromName.slice(0, 3).toUpperCase(),
-                            fromName,
-                            to: toCode || toName.slice(0, 3).toUpperCase(),
-                            toName,
-                            cabin,
-                            apiSelected: true
-                          });
-                          onClose();
-                          if (showToast) {
-                            showToast(`Added ${flight.airline} flight to day!`, 'success');
-                          }
-                        }}
-                        className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer shrink-0"
-                      >
-                        Select Flight
-                      </button>
-                    </div>
+                  results.map((flight, idx) => (
+                    <FlightResultCard
+                      key={flight.id || flight.resultIndex || `flight-${idx}`}
+                      flight={flight}
+                      onSelect={(chosenFlight) => {
+                        const cabinLabelMap = {
+                          '1': 'All',
+                          '2': 'Economy',
+                          '3': 'Premium Economy',
+                          '4': 'Business',
+                          '5': 'Premium Business',
+                          '6': 'First'
+                        };
+                        onSelectFlight({
+                          ...chosenFlight,
+                          from: fromCode || fromName.slice(0, 3).toUpperCase(),
+                          fromName,
+                          to: toCode || toName.slice(0, 3).toUpperCase(),
+                          toName,
+                          cabin: chosenFlight.cabin || cabinLabelMap[cabinClass] || 'Economy',
+                          adults,
+                          children,
+                          infants,
+                          apiSelected: true
+                        });
+                        onClose();
+                        if (showToast) {
+                          showToast(`Added ${chosenFlight.airline || 'Flight'} to itinerary!`, 'success');
+                        }
+                      }}
+                    />
                   ))}
               </div>
             </div>
@@ -756,14 +821,68 @@ export function HotelSearchModal({
   const [destination, setDestination] = useState(initialData.location || 'Manali');
   const [checkIn, setCheckIn] = useState(initialData.checkIn || getFutureDateStr(14));
   const [checkOut, setCheckOut] = useState(initialData.checkOut || getFutureDateStr(16));
-  const [guests, setGuests] = useState(initialData.guests || 2);
   const [category, setCategory] = useState(initialData.category || 'Any');
-  const [nights, setNights] = useState(initialData.nights || 2);
+  const [rooms, setRooms] = useState([
+    { adults: 2, children: 0, childAges: [] }
+  ]);
+
+  // Compute stay nights from check-in and check-out dates
+  const calculateStayNights = (inDate, outDate) => {
+    const d1 = new Date(inDate);
+    const d2 = new Date(outDate);
+    const diff = Math.ceil((d2 - d1) / (1000 * 60 * 60 * 24));
+    return Math.max(1, isNaN(diff) ? 1 : diff);
+  };
+  const nights = calculateStayNights(checkIn, checkOut);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [results, setResults] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
+
+  // Room count changer
+  const handleRoomCountChange = (count) => {
+    const newCount = Math.max(1, Math.min(5, Number(count) || 1));
+    setRooms((prev) => {
+      if (newCount > prev.length) {
+        const added = Array.from({ length: newCount - prev.length }, () => ({
+          adults: 2,
+          children: 0,
+          childAges: []
+        }));
+        return [...prev, ...added];
+      }
+      return prev.slice(0, newCount);
+    });
+  };
+
+  const updateRoomField = (roomIdx, field, val) => {
+    setRooms((prev) =>
+      prev.map((r, i) => {
+        if (i !== roomIdx) return r;
+        if (field === 'children') {
+          const numChildren = Math.max(0, Math.min(3, Number(val) || 0));
+          const updatedAges = (r.childAges || []).slice(0, numChildren);
+          while (updatedAges.length < numChildren) {
+            updatedAges.push(5);
+          }
+          return { ...r, children: numChildren, childAges: updatedAges };
+        }
+        return { ...r, [field]: val };
+      })
+    );
+  };
+
+  const updateChildAge = (roomIdx, childIdx, age) => {
+    setRooms((prev) =>
+      prev.map((r, i) => {
+        if (i !== roomIdx) return r;
+        const newAges = [...(r.childAges || [])];
+        newAges[childIdx] = Number(age) || 5;
+        return { ...r, childAges: newAges };
+      })
+    );
+  };
 
   // Manual Entry State
   const [manualName, setManualName] = useState(initialData.name || 'Snow Valley Luxury Resort');
@@ -810,12 +929,23 @@ export function HotelSearchModal({
 
     try {
       const starRating = category === '5 Star' ? 5 : category === '4 Star' ? 4 : category === '3 Star' ? 3 : 0;
+      const roomGuests = rooms.map((r) => ({
+        NoOfAdults: Math.max(1, Number(r.adults) || 1),
+        NoOfChild: Math.max(0, Number(r.children) || 0),
+        ChildAge: (r.childAges || []).slice(0, Number(r.children) || 0).map(Number)
+      }));
+
+      const totalGuests = rooms.reduce((acc, r) => acc + Number(r.adults) + Number(r.children), 0);
+
       const hotelResults = await searchHotelsApi({
         destination,
         checkIn,
         checkOut,
         nights,
-        guestCount: guests,
+        NoOfRooms: rooms.length,
+        RoomGuests: roomGuests,
+        guestCount: totalGuests,
+        GuestNationality: 'IN',
         starRating
       });
 
@@ -941,7 +1071,7 @@ export function HotelSearchModal({
 
                 <div>
                   <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-                    Check-in Date
+                    Check-in Date <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -953,7 +1083,7 @@ export function HotelSearchModal({
 
                 <div>
                   <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-                    Check-out Date
+                    Check-out Date <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -965,46 +1095,124 @@ export function HotelSearchModal({
 
                 <div>
                   <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-                    Nights Stay
+                    Number of Rooms
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="14"
-                    value={nights}
-                    onChange={(e) => setNights(Number(e.target.value) || 1)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
-                  />
+                  <select
+                    value={rooms.length}
+                    onChange={(e) => handleRoomCountChange(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition bg-white"
+                  >
+                    <option value="1">1 Room</option>
+                    <option value="2">2 Rooms</option>
+                    <option value="3">3 Rooms</option>
+                    <option value="4">4 Rooms</option>
+                    <option value="5">5 Rooms</option>
+                  </select>
                 </div>
 
                 <div>
                   <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-                    Guests
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={guests}
-                    onChange={(e) => setGuests(Number(e.target.value) || 1)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-                    Category / Rating
+                    Category / Star Rating
                   </label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition bg-white"
                   >
                     <option>Any</option>
                     <option>5 Star</option>
                     <option>4 Star</option>
                     <option>3 Star</option>
                   </select>
+                </div>
+
+                {/* Per-Room Guests Breakdown */}
+                <div className="sm:col-span-2 lg:col-span-4 bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-slate-800">
+                      Room &amp; Guest Breakdown ({rooms.length} Room{rooms.length > 1 ? 's' : ''}, {nights} Night{nights > 1 ? 's' : ''})
+                    </p>
+                    <span className="text-[11px] text-slate-500">
+                      Total: {rooms.reduce((acc, r) => acc + Number(r.adults) + Number(r.children), 0)} Guests
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {rooms.map((room, rIdx) => (
+                      <div
+                        key={`room-${rIdx}`}
+                        className="bg-white border border-slate-200 rounded-lg p-3 space-y-2.5 shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                          <span className="text-xs font-bold text-indigo-700">Room {rIdx + 1}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {room.adults} Adult(s){room.children > 0 ? `, ${room.children} Child` : ''}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600 mb-1 block">
+                              Adults (12+ yrs)
+                            </label>
+                            <select
+                              value={room.adults}
+                              onChange={(e) => updateRoomField(rIdx, 'adults', Number(e.target.value) || 1)}
+                              className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-xs font-medium text-slate-800 focus:border-indigo-500 outline-none"
+                            >
+                              <option value="1">1 Adult</option>
+                              <option value="2">2 Adults</option>
+                              <option value="3">3 Adults</option>
+                              <option value="4">4 Adults</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600 mb-1 block">
+                              Children (0-11 yrs)
+                            </label>
+                            <select
+                              value={room.children}
+                              onChange={(e) => updateRoomField(rIdx, 'children', Number(e.target.value) || 0)}
+                              className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-xs font-medium text-slate-800 focus:border-indigo-500 outline-none"
+                            >
+                              <option value="0">0 Children</option>
+                              <option value="1">1 Child</option>
+                              <option value="2">2 Children</option>
+                              <option value="3">3 Children</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Child Age Selectors if room has children */}
+                        {room.children > 0 && (
+                          <div className="pt-1 border-t border-dashed border-slate-200 space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Child Ages at Check-in
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              {Array.from({ length: room.children }).map((_, cIdx) => (
+                                <div key={`child-age-${rIdx}-${cIdx}`} className="flex items-center gap-1">
+                                  <span className="text-[10px] text-slate-500 font-medium">Child {cIdx + 1}:</span>
+                                  <select
+                                    value={room.childAges?.[cIdx] ?? 5}
+                                    onChange={(e) => updateChildAge(rIdx, cIdx, e.target.value)}
+                                    className="border border-slate-200 rounded px-1.5 py-1 text-[11px] font-medium text-slate-800 bg-white"
+                                  >
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map((age) => (
+                                      <option key={age} value={age}>
+                                        {age} yr{age > 1 ? 's' : ''}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -1935,7 +2143,7 @@ export function BusSearchModal({
           {/* TAB 1: API SEARCH */}
           {activeTab === 'api' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
                   <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
                     Origin City <span className="text-red-500">*</span>
@@ -1968,16 +2176,6 @@ export function BusSearchModal({
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">Passengers</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={pax}
-                    onChange={(e) => setPax(Number(e.target.value) || 1)}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
                   />
                 </div>

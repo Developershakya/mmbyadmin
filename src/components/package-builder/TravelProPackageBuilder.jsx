@@ -69,7 +69,7 @@ import PoliciesForm from './PoliciesForm.jsx';
 import CustomerPreviewView from './CustomerPreviewView.jsx';
 import PublishView from './PublishView.jsx';
 import StepperControl from './StepperControl.jsx';
-import RazorpayCheckoutModal from '../travel/RazorpayCheckoutModal.jsx';
+import { openRazorpayCheckout } from '../../lib/razorpayClient.js';
 import BookingManagerModal from '../travel/BookingManagerModal.jsx';
 import ServiceAuditLogModal from '../travel/ServiceAuditLogModal.jsx';
 import { downloadCustomerPreviewAsPdf } from '../../lib/pdfGenerator.js';
@@ -646,6 +646,9 @@ export default function TravelProPackageBuilder({
   // Handlers for seat/room selection and booking workflows
   const handleSaveFlightSeats = (selection) => {
     if (!flightSeatModal.dayId || !flightSeatModal.serviceId) return;
+    const seatSummary = selection.seatNumbers || (selection.seats || []).map((s) => s.SeatNo).join(', ');
+    const addOnsTotal = Number(selection.seatsPrice || 0) + Number(selection.baggagePrice || 0) + Number(selection.mealsPrice || 0);
+
     setPackageData((prev) => {
       const updatedDays = prev.days.map((d) => {
         if (d.id !== flightSeatModal.dayId) return d;
@@ -653,18 +656,21 @@ export default function TravelProPackageBuilder({
           ...d,
           services: d.services.map((s) => {
             if (s.id !== flightSeatModal.serviceId) return s;
-            const extra = Number(selection.extraFare || 0);
+            const currentBase = Number(s.data?.baseFare || s.data?.fare || 5500);
             return {
               ...s,
               data: {
                 ...s.data,
-                selectedSeats: selection.selectedSeats,
-                seatSummary: selection.seatSummary,
-                selectedBaggage: selection.selectedBaggage,
-                selectedMeal: selection.selectedMeal,
-                extraFare: extra,
-                baseFare: s.data?.baseFare || s.data?.fare || 5500,
-                fare: Number(s.data?.baseFare || s.data?.fare || 5500) + extra
+                selectedSeats: selection.seats,
+                seatSummary,
+                hasSeatsConfirmed: true,
+                selectedBaggage: selection.baggage,
+                selectedMeals: selection.meals,
+                seatsPrice: selection.seatsPrice || 0,
+                baggagePrice: selection.baggagePrice || 0,
+                mealsPrice: selection.mealsPrice || 0,
+                addOnsTotal,
+                fare: selection.updatedTotalFare ? (selection.updatedTotalFare - Number(s.data?.tax || 650)) : (currentBase + addOnsTotal)
               }
             };
           })
@@ -672,7 +678,121 @@ export default function TravelProPackageBuilder({
       });
       return { ...prev, days: updatedDays };
     });
-    showToast(`Saved flight seats (${selection.seatSummary}) & add-ons`, 'success');
+    showToast(`Flight seat(s) ${seatSummary} & add-ons confirmed!`, 'success');
+  };
+
+  const handleInitiateServiceBooking = (svc, dayId, serviceType) => {
+    let amount = 0;
+    let title = '';
+    let details = '';
+    let rawPayload = {};
+
+    if (serviceType === 'FLIGHT') {
+      const flightFare = Number(svc.data?.fare || 5500);
+      const flightTax = Number(svc.data?.tax || 650);
+      amount = flightFare + flightTax;
+      title = `${svc.data?.airline || 'Flight'} (${svc.data?.from || svc.data?.origin || 'DEL'} → ${svc.data?.to || svc.data?.destination || 'KUU'})`;
+      details = `${svc.data?.airline || 'Airline'} ${svc.data?.flightNumber || ''} • Dep: ${svc.data?.departure || '09:20'} • ${svc.data?.cabin || 'Economy'}${svc.data?.seatSummary ? ` • Seat: ${svc.data.seatSummary}` : ''}`;
+      rawPayload = {
+        flightData: svc.data,
+        passengers: [
+          { Title: 'Mr', FirstName: 'Traveler', LastName: 'Primary', PaxType: 1, Gender: 1, Seat: svc.data?.seatSummary || '' }
+        ],
+        traceId: svc.data?.traceId || `TRC-${Date.now()}`
+      };
+    } else if (serviceType === 'HOTEL') {
+      const hotelPrice = Number(svc.data?.price || 4500);
+      const nights = Number(svc.data?.nights || 1);
+      amount = hotelPrice * nights;
+      title = `${svc.data?.name || 'Hotel'} (${svc.data?.room || 'Deluxe Room'})`;
+      details = `${nights} Night(s) • ${svc.data?.stars || svc.data?.rating || 4} Star • ${svc.data?.meal || 'Breakfast Included'}`;
+      rawPayload = {
+        hotelData: svc.data,
+        nights,
+        guests: [{ Title: 'Mr', FirstName: 'Traveler', LastName: 'Primary' }],
+        traceId: svc.data?.traceId || `TRC-${Date.now()}`
+      };
+    } else if (serviceType === 'CAR') {
+      amount = Number(svc.data?.price || 2500);
+      title = `${svc.data?.vehicle || 'Cab'} (${svc.data?.category || 'Sedan'})`;
+      details = `${svc.data?.pickup || 'Pickup'} → ${svc.data?.drop || 'Drop'} • Tolls & Driver Included`;
+      rawPayload = {
+        carData: svc.data,
+        passengers: [{ Name: 'Traveler Primary' }],
+        traceId: svc.data?.traceId || `TRC-${Date.now()}`
+      };
+    } else if (serviceType === 'BUS') {
+      amount = Number(svc.data?.price || 1400);
+      title = `${svc.data?.operator || 'Bus'} (${svc.data?.busType || 'AC Sleeper'})`;
+      details = `${svc.data?.from || 'Delhi'} → ${svc.data?.to || 'Manali'} • Dep: ${svc.data?.departure || '21:00'}${svc.data?.seatNumbers ? ` • Seats: ${svc.data.seatNumbers}` : ''}`;
+      rawPayload = {
+        busData: svc.data,
+        passengers: [{ Name: 'Traveler Primary', Seats: svc.data?.seatNumbers || '' }],
+        traceId: svc.data?.traceId || `TRC-${Date.now()}`
+      };
+    }
+
+    openRazorpayCheckout({
+      checkoutItem: {
+        amount,
+        serviceType,
+        title,
+        details,
+        packageId: packageData.id,
+        serviceItemId: svc.id,
+        itineraryDayId: dayId,
+        rawPayload,
+        travelerName: 'Traveler Primary',
+        travelerEmail: 'guest@travelpro.com',
+        travelerPhone: '9876543210'
+      },
+      onSuccess: (booking) => {
+        const pnr = booking?.pnr || booking?.ticketNo || booking?.bookingId || `TRV-${Math.floor(100000 + Math.random() * 900000)}`;
+        setPackageData((prev) => {
+          const updatedDays = prev.days.map((d) => {
+            if (d.id !== dayId) return d;
+            return {
+              ...d,
+              services: d.services.map((s) => {
+                if (s.id !== svc.id) return s;
+                return {
+                  ...s,
+                  isBooked: true,
+                  status: 'BOOKED',
+                  booking: {
+                    bookingId: booking?.bookingId || `BK-${Date.now()}`,
+                    pnr,
+                    ticketNo: booking?.ticketNo || pnr,
+                    referenceNo: booking?.referenceNo || booking?.bookingId || pnr,
+                    status: 'CONFIRMED',
+                    bookedAt: new Date().toISOString(),
+                    amountPaid: amount
+                  },
+                  data: {
+                    ...(s.data || {}),
+                    isBooked: true,
+                    bookingStatus: 'CONFIRMED',
+                    pnr,
+                    ticketNo: booking?.ticketNo || pnr
+                  }
+                };
+              })
+            };
+          });
+          return { ...prev, days: updatedDays };
+        });
+
+        if (showToast) {
+          showToast(`${serviceType} booked successfully! Real test payment confirmed.`, 'success');
+        }
+      },
+      onError: (err) => {
+        console.error('Payment error:', err);
+        if (showToast) {
+          showToast(err.message || 'Payment processing could not be completed.', 'error');
+        }
+      }
+    });
   };
 
   const handleSaveHotelRoom = (selection) => {
@@ -2341,6 +2461,9 @@ export default function TravelProPackageBuilder({
 
                                     {svc.isBooked || svc.status === 'BOOKED' || svc.booking?.pnr || svc.pnr ? (
                                       <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
+                                        <div className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
+                                          Booked {svc.booking?.pnr || svc.pnr || svc.data?.pnr ? `· PNR: ${svc.booking?.pnr || svc.pnr || svc.data?.pnr}` : ''}
+                                        </div>
                                         <button
                                           type="button"
                                           onClick={() => handleDownloadTicketOrVoucher(svc)}
@@ -2359,68 +2482,86 @@ export default function TravelProPackageBuilder({
                                         </button>
                                       </div>
                                     ) : (
-                                      <div className="flex flex-col gap-1.5 items-end shrink-0">
-                                        <div className="flex items-center gap-2">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const flightFare = Number(svc.data?.fare || 5500);
-                                              const flightTax = Number(svc.data?.tax || 650);
-                                              setCheckoutData({
-                                                serviceType: 'FLIGHT',
-                                                title: `${svc.data?.airline || 'Flight'} (${svc.data?.from || 'DEL'} → ${svc.data?.to || 'KUU'})`,
-                                                amount: flightFare + flightTax,
-                                                details: `${svc.data?.airline || 'Airline'} ${svc.data?.flightNumber || ''} • Dep: ${svc.data?.departure || '09:20'} • ${svc.data?.cabin || 'Economy'}${svc.data?.seatSummary ? ` • Seat: ${svc.data.seatSummary}` : ''}`,
-                                                packageId: packageData.id,
-                                                serviceItemId: svc.id,
-                                                itineraryDayId: day.id,
-                                                rawPayload: {
-                                                  flightData: svc.data,
-                                                  passengers: [
-                                                    { Title: 'Mr', FirstName: 'Traveler', LastName: 'Primary', PaxType: 1, Gender: 1, Seat: svc.data?.seatSummary || '' }
-                                                  ],
-                                                  traceId: svc.data?.traceId || `TRC-${Date.now()}`
-                                                }
-                                              });
-                                            }}
-                                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
-                                          >
-                                            <CreditCard className="w-3.5 h-3.5" />
-                                            <span>Book Flight</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setModalState((prev) => ({
-                                                ...prev,
-                                                flight: {
+                                      <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
+                                        {(!svc.data?.hasSeatsConfirmed && !svc.data?.seatSummary) ? (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setModalState((prev) => ({
+                                                  ...prev,
+                                                  flight: {
+                                                    isOpen: true,
+                                                    dayId: day.id,
+                                                    serviceId: svc.id,
+                                                    initialData: svc.data || {}
+                                                  }
+                                                }))
+                                              }
+                                              className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+                                            >
+                                              Change Flight
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setFlightSeatModal({
                                                   isOpen: true,
-                                                  dayId: day.id,
+                                                  flight: svc.data || {},
                                                   serviceId: svc.id,
-                                                  initialData: svc.data || {}
-                                                }
-                                              }))
-                                            }
-                                            className="px-3 py-1.5 rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 text-xs font-semibold transition cursor-pointer"
-                                          >
-                                            Change Flight
-                                          </button>
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setFlightSeatModal({
-                                              isOpen: true,
-                                              flight: svc.data || {},
-                                              serviceId: svc.id,
-                                              dayId: day.id
-                                            })
-                                          }
-                                          className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200 px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1"
-                                        >
-                                          <Armchair className="w-3 h-3 text-blue-600" />
-                                          <span>{svc.data?.seatSummary ? `Seat: ${svc.data.seatSummary} (Edit)` : 'Select Seat & Add-ons'}</span>
-                                        </button>
+                                                  dayId: day.id
+                                                })
+                                              }
+                                              className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1.5"
+                                            >
+                                              <Armchair className="w-3.5 h-3.5" />
+                                              <span>Select Seat &amp; Add-ons</span>
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setFlightSeatModal({
+                                                  isOpen: true,
+                                                  flight: svc.data || {},
+                                                  serviceId: svc.id,
+                                                  dayId: day.id
+                                                })
+                                              }
+                                              className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1"
+                                            >
+                                              <Armchair className="w-3 h-3 text-blue-600" />
+                                              <span>Seat: {svc.data?.seatSummary} (Edit)</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setModalState((prev) => ({
+                                                  ...prev,
+                                                  flight: {
+                                                    isOpen: true,
+                                                    dayId: day.id,
+                                                    serviceId: svc.id,
+                                                    initialData: svc.data || {}
+                                                  }
+                                                }))
+                                              }
+                                              className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+                                            >
+                                              Change Flight
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleInitiateServiceBooking(svc, day.id, 'FLIGHT')}
+                                              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                                            >
+                                              <CreditCard className="w-3.5 h-3.5" />
+                                              <span>Book Flight</span>
+                                            </button>
+                                          </>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -2489,8 +2630,11 @@ export default function TravelProPackageBuilder({
                                       )}
                                     </div>
 
-                                    {svc.isBooked || svc.status === 'BOOKED' || svc.booking?.confirmationNo || svc.pnr ? (
+                                    {svc.isBooked || svc.status === 'BOOKED' || svc.booking?.confirmationNo || svc.booking?.pnr || svc.pnr ? (
                                       <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
+                                        <div className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
+                                          Booked {svc.booking?.confirmationNo || svc.booking?.bookingId || svc.booking?.pnr || svc.pnr ? `· Ref: ${svc.booking?.confirmationNo || svc.booking?.bookingId || svc.booking?.pnr || svc.pnr}` : ''}
+                                        </div>
                                         <button
                                           type="button"
                                           onClick={() => handleDownloadTicketOrVoucher(svc)}
@@ -2509,84 +2653,62 @@ export default function TravelProPackageBuilder({
                                         </button>
                                       </div>
                                     ) : (
-                                      <div className="flex flex-col gap-1.5 items-end shrink-0">
-                                        <div className="flex items-center gap-2">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const hotelPrice = Number(svc.data?.price || 4500);
-                                              const nights = Number(svc.data?.nights || 1);
-                                              setCheckoutData({
-                                                serviceType: 'HOTEL',
-                                                title: `${svc.data?.name || 'Hotel'} (${svc.data?.room || 'Deluxe'})`,
-                                                amount: hotelPrice * nights,
-                                                details: `${nights} Night(s) • ${svc.data?.rating || 4} Star • ${svc.data?.meal || 'Breakfast Included'}`,
-                                                packageId: packageData.id,
-                                                serviceItemId: svc.id,
-                                                itineraryDayId: day.id,
-                                                rawPayload: {
-                                                  hotelData: svc.data,
-                                                  nights,
-                                                  guests: [{ Title: 'Mr', FirstName: 'Traveler', LastName: 'Primary' }],
-                                                  traceId: svc.data?.traceId || `TRC-${Date.now()}`
-                                                }
-                                              });
-                                            }}
-                                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
-                                          >
-                                            <CreditCard className="w-3.5 h-3.5" />
-                                            <span>Book Hotel</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setModalState((prev) => ({
-                                                ...prev,
-                                                hotel: {
-                                                  isOpen: true,
-                                                  dayId: day.id,
-                                                  serviceId: svc.id,
-                                                  initialData: svc.data || {}
-                                                }
-                                              }))
-                                            }
-                                            className="px-3 py-1.5 rounded-lg border border-indigo-600 text-indigo-600 hover:bg-indigo-50 text-xs font-semibold transition cursor-pointer shrink-0"
-                                          >
-                                            Change Hotel
-                                          </button>
-                                        </div>
-
-                                        <div className="flex items-center gap-1.5">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setHotelRoomModal({
+                                      <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setHotelInfoModal({
+                                              isOpen: true,
+                                              hotel: svc.data || {},
+                                              serviceId: svc.id,
+                                              dayId: day.id
+                                            })
+                                          }
+                                          className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                                        >
+                                          <Info className="w-3.5 h-3.5 text-slate-500" />
+                                          <span>Hotel Info &amp; Gallery</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setHotelRoomModal({
+                                              isOpen: true,
+                                              hotel: svc.data || {},
+                                              serviceId: svc.id,
+                                              dayId: day.id
+                                            })
+                                          }
+                                          className="px-3 py-1.5 rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                                        >
+                                          <Bed className="w-3.5 h-3.5 text-indigo-600" />
+                                          <span>{svc.data?.room ? `${svc.data.room} (Change)` : 'Select Room'}</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setModalState((prev) => ({
+                                              ...prev,
+                                              hotel: {
                                                 isOpen: true,
-                                                hotel: svc.data || {},
+                                                dayId: day.id,
                                                 serviceId: svc.id,
-                                                dayId: day.id
-                                              })
-                                            }
-                                            className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200 px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1"
-                                          >
-                                            <Bed className="w-3 h-3 text-indigo-600" />
-                                            <span>{svc.data?.room ? `${svc.data.room} (Change)` : 'Select Room'}</span>
-                                          </button>
-
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setHotelInfoModal({
-                                                isOpen: true,
-                                                hotel: svc.data || {}
-                                              })
-                                            }
-                                            className="text-[11px] font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1"
-                                          >
-                                            <Info className="w-3 h-3 text-slate-500" />
-                                            <span>Hotel Info</span>
-                                          </button>
-                                        </div>
+                                                initialData: svc.data || {}
+                                              }
+                                            }))
+                                          }
+                                          className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+                                        >
+                                          Change Hotel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleInitiateServiceBooking(svc, day.id, 'HOTEL')}
+                                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                                        >
+                                          <CreditCard className="w-3.5 h-3.5" />
+                                          <span>Book Hotel</span>
+                                        </button>
                                       </div>
                                     )}
                                   </div>
@@ -2641,8 +2763,11 @@ export default function TravelProPackageBuilder({
                                       )}
                                     </div>
 
-                                    {svc.isBooked || svc.status === 'BOOKED' || svc.booking?.confirmationNo || svc.pnr ? (
+                                    {svc.isBooked || svc.status === 'BOOKED' || svc.booking?.confirmationNo || svc.booking?.pnr || svc.pnr ? (
                                       <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
+                                        <div className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
+                                          Booked {svc.booking?.confirmationNo || svc.booking?.bookingId || svc.booking?.pnr || svc.pnr ? `· Ref: ${svc.booking?.confirmationNo || svc.booking?.bookingId || svc.booking?.pnr || svc.pnr}` : ''}
+                                        </div>
                                         <button
                                           type="button"
                                           onClick={() => handleDownloadTicketOrVoucher(svc)}
@@ -2661,50 +2786,32 @@ export default function TravelProPackageBuilder({
                                         </button>
                                       </div>
                                     ) : (
-                                      <div className="flex flex-col gap-1.5 items-end shrink-0">
-                                        <div className="flex items-center gap-2">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const cabFare = Number(svc.data?.price || 2500);
-                                              setCheckoutData({
-                                                serviceType: 'CAR',
-                                                title: `${svc.data?.vehicle || 'Cab'} (${svc.data?.category || 'Sedan'})`,
-                                                amount: cabFare,
-                                                details: `${svc.data?.pickup || 'Pickup'} → ${svc.data?.drop || 'Drop'} • Tolls & Driver Included`,
-                                                packageId: packageData.id,
-                                                serviceItemId: svc.id,
-                                                itineraryDayId: day.id,
-                                                rawPayload: {
-                                                  carData: svc.data,
-                                                  passengers: [{ Name: 'Traveler Primary' }],
-                                                  traceId: svc.data?.traceId || `TRC-${Date.now()}`
-                                                }
-                                              });
-                                            }}
-                                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
-                                          >
-                                            <CreditCard className="w-3.5 h-3.5" />
-                                            <span>Book Car</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setModalState((prev) => ({
-                                                ...prev,
-                                                cab: {
-                                                  isOpen: true,
-                                                  dayId: day.id,
-                                                  serviceId: svc.id,
-                                                  initialData: svc.data || {}
-                                                }
-                                              }))
-                                            }
-                                            className="px-3 py-1.5 rounded-lg border border-emerald-600 text-emerald-600 hover:bg-emerald-50 text-xs font-semibold transition cursor-pointer shrink-0"
-                                          >
-                                            Change Cab
-                                          </button>
-                                        </div>
+                                      <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setModalState((prev) => ({
+                                              ...prev,
+                                              cab: {
+                                                isOpen: true,
+                                                dayId: day.id,
+                                                serviceId: svc.id,
+                                                initialData: svc.data || {}
+                                              }
+                                            }))
+                                          }
+                                          className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer shrink-0"
+                                        >
+                                          Change Cab
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleInitiateServiceBooking(svc, day.id, 'CAR')}
+                                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                                        >
+                                          <CreditCard className="w-3.5 h-3.5" />
+                                          <span>Book Car</span>
+                                        </button>
                                       </div>
                                     )}
                                   </div>
@@ -2763,8 +2870,11 @@ export default function TravelProPackageBuilder({
                                       )}
                                     </div>
 
-                                    {svc.isBooked || svc.status === 'BOOKED' || svc.booking?.ticketNo || svc.pnr ? (
+                                    {svc.isBooked || svc.status === 'BOOKED' || svc.booking?.ticketNo || svc.booking?.pnr || svc.pnr ? (
                                       <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
+                                        <div className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
+                                          Booked {svc.booking?.ticketNo || svc.booking?.pnr || svc.pnr ? `· Tkt: ${svc.booking?.ticketNo || svc.booking?.pnr || svc.pnr}` : ''}
+                                        </div>
                                         <button
                                           type="button"
                                           onClick={() => handleDownloadTicketOrVoucher(svc)}
@@ -2783,82 +2893,99 @@ export default function TravelProPackageBuilder({
                                         </button>
                                       </div>
                                     ) : (
-                                      <div className="flex flex-col gap-1.5 items-end shrink-0">
-                                        <div className="flex items-center gap-2">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const busFare = Number(svc.data?.price || 1400);
-                                              setCheckoutData({
-                                                serviceType: 'BUS',
-                                                title: `${svc.data?.operator || 'Bus'} (${svc.data?.busType || 'AC Sleeper'})`,
-                                                amount: busFare,
-                                                details: `${svc.data?.from || 'Delhi'} → ${svc.data?.to || 'Manali'} • Dep: ${svc.data?.departure || '21:00'}${svc.data?.seatNumbers ? ` • Seats: ${svc.data.seatNumbers}` : ''}`,
-                                                packageId: packageData.id,
-                                                serviceItemId: svc.id,
-                                                itineraryDayId: day.id,
-                                                rawPayload: {
-                                                  busData: svc.data,
-                                                  passengers: [{ Name: 'Traveler Primary', Seats: svc.data?.seatNumbers || '' }],
-                                                  traceId: svc.data?.traceId || `TRC-${Date.now()}`
-                                                }
-                                              });
-                                            }}
-                                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
-                                          >
-                                            <CreditCard className="w-3.5 h-3.5" />
-                                            <span>Book Bus</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setModalState((prev) => ({
-                                                ...prev,
-                                                bus: {
+                                      <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
+                                        {!svc.data?.seatNumbers ? (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setModalState((prev) => ({
+                                                  ...prev,
+                                                  bus: {
+                                                    isOpen: true,
+                                                    dayId: day.id,
+                                                    serviceId: svc.id,
+                                                    initialData: svc.data || {}
+                                                  }
+                                                }))
+                                              }
+                                              className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+                                            >
+                                              Change Bus
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setBusSeatModal({
                                                   isOpen: true,
-                                                  dayId: day.id,
+                                                  bus: svc.data || {},
                                                   serviceId: svc.id,
-                                                  initialData: svc.data || {}
-                                                }
-                                              }))
-                                            }
-                                            className="px-3 py-1.5 rounded-lg border border-amber-600 text-amber-600 hover:bg-amber-50 text-xs font-semibold transition cursor-pointer shrink-0"
-                                          >
-                                            Change Bus
-                                          </button>
-                                        </div>
-
-                                        <div className="flex items-center gap-1.5">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setBusSeatModal({
-                                                isOpen: true,
-                                                bus: svc.data || {},
-                                                serviceId: svc.id,
-                                                dayId: day.id
-                                              })
-                                            }
-                                            className="text-[11px] font-bold text-amber-800 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1"
-                                          >
-                                            <Armchair className="w-3 h-3 text-amber-700" />
-                                            <span>{svc.data?.seatNumbers ? `Seat: ${svc.data.seatNumbers}` : 'Select Seat'}</span>
-                                          </button>
-
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setBusBoardingModal({
-                                                isOpen: true,
-                                                bus: svc.data || {}
-                                              })
-                                            }
-                                            className="text-[11px] font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1"
-                                          >
-                                            <MapPin className="w-3 h-3 text-slate-500" />
-                                            <span>Boarding &amp; Dropping Details</span>
-                                          </button>
-                                        </div>
+                                                  dayId: day.id
+                                                })
+                                              }
+                                              className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1.5"
+                                            >
+                                              <Armchair className="w-3.5 h-3.5" />
+                                              <span>Select Seats &amp; Boarding</span>
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setBusSeatModal({
+                                                  isOpen: true,
+                                                  bus: svc.data || {},
+                                                  serviceId: svc.id,
+                                                  dayId: day.id
+                                                })
+                                              }
+                                              className="text-[11px] font-bold text-amber-800 hover:text-amber-950 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1"
+                                            >
+                                              <Armchair className="w-3 h-3 text-amber-700" />
+                                              <span>Seat: {svc.data.seatNumbers} (Edit)</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setBusBoardingModal({
+                                                  isOpen: true,
+                                                  bus: svc.data || {}
+                                                })
+                                              }
+                                              className="text-[11px] font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1"
+                                            >
+                                              <MapPin className="w-3 h-3 text-slate-500" />
+                                              <span>Points</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setModalState((prev) => ({
+                                                  ...prev,
+                                                  bus: {
+                                                    isOpen: true,
+                                                    dayId: day.id,
+                                                    serviceId: svc.id,
+                                                    initialData: svc.data || {}
+                                                  }
+                                                }))
+                                              }
+                                              className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+                                            >
+                                              Change Bus
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleInitiateServiceBooking(svc, day.id, 'BUS')}
+                                              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                                            >
+                                              <CreditCard className="w-3.5 h-3.5" />
+                                              <span>Book Bus</span>
+                                            </button>
+                                          </>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -3719,15 +3846,75 @@ export default function TravelProPackageBuilder({
           />
         </div>
       )}
-      {/* Razorpay Test Mode Checkout Modal */}
-      <RazorpayCheckoutModal
-        isOpen={Boolean(checkoutData)}
-        bookingData={checkoutData}
-        onClose={() => setCheckoutData(null)}
-        onBookingConfirmed={() => {
-          if (showToast) showToast('Reservation confirmed and ticket generated!', 'success');
+      {/* Flight Seat & Add-ons Modal */}
+      <FlightSeatModal
+        isOpen={flightSeatModal.isOpen}
+        flight={flightSeatModal.flight}
+        currentSelection={{
+          seats: flightSeatModal.flight?.selectedSeats || [],
+          baggage: flightSeatModal.flight?.selectedBaggage || null,
+          meals: flightSeatModal.flight?.selectedMeals || []
         }}
-        showToast={showToast}
+        onClose={() => setFlightSeatModal({ isOpen: false, flight: null, serviceId: null, dayId: null })}
+        onSaveSelection={handleSaveFlightSeats}
+      />
+
+      {/* Hotel Info & Gallery Modal */}
+      <HotelInfoModal
+        isOpen={hotelInfoModal.isOpen}
+        hotel={hotelInfoModal.hotel}
+        onClose={() => setHotelInfoModal({ isOpen: false, hotel: null, serviceId: null, dayId: null })}
+        onSelectRoom={(htl) => {
+          const sId = hotelInfoModal.serviceId;
+          const dId = hotelInfoModal.dayId;
+          setHotelInfoModal({ isOpen: false, hotel: null, serviceId: null, dayId: null });
+          setHotelRoomModal({
+            isOpen: true,
+            hotel: htl || hotelInfoModal.hotel,
+            serviceId: sId,
+            dayId: dId
+          });
+        }}
+      />
+
+      {/* Hotel Room Selection Modal */}
+      <HotelRoomModal
+        isOpen={hotelRoomModal.isOpen}
+        hotel={hotelRoomModal.hotel}
+        currentRoom={hotelRoomModal.hotel?.room || null}
+        onClose={() => setHotelRoomModal({ isOpen: false, hotel: null, serviceId: null, dayId: null })}
+        onSaveRoom={handleSaveHotelRoom}
+      />
+
+      {/* Bus Seat Layout Selection Modal */}
+      <BusSeatModal
+        isOpen={busSeatModal.isOpen}
+        bus={busSeatModal.bus}
+        currentSelection={{
+          seats: busSeatModal.bus?.selectedSeats || [],
+          boardingPoint: busSeatModal.bus?.boardingPoint || null,
+          droppingPoint: busSeatModal.bus?.droppingPoint || null
+        }}
+        onClose={() => setBusSeatModal({ isOpen: false, bus: null, serviceId: null, dayId: null })}
+        onSaveSelection={handleSaveBusSeats}
+      />
+
+      {/* Bus Boarding & Dropping Points Modal */}
+      <BusBoardingDetailsModal
+        isOpen={busBoardingModal.isOpen}
+        bus={busBoardingModal.bus}
+        onClose={() => setBusBoardingModal({ isOpen: false, bus: null })}
+      />
+
+      {/* Booking Cancellation Modal */}
+      <CancelBookingModal
+        isOpen={cancelBookingModal.isOpen}
+        serviceItem={cancelBookingModal.serviceItem}
+        onClose={() => setCancelBookingModal({ isOpen: false, serviceItem: null, dayId: null })}
+        onCancellationSuccess={(result) => {
+          handleCancellationSuccess(result);
+          setCancelBookingModal({ isOpen: false, serviceItem: null, dayId: null });
+        }}
       />
 
       {/* Travel Reservations & Voucher Center */}
