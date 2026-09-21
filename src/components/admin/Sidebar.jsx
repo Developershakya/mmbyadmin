@@ -19,7 +19,8 @@ import {
   Compass,
   Landmark,
   X,
-  Sparkles
+  Sparkles,
+  ScrollText
 } from 'lucide-react';
 
 export default function Sidebar({
@@ -68,6 +69,12 @@ export default function Sidebar({
         { label: 'Users / Customers', path: '/admin/users', icon: Users },
         { label: 'Payments / Transactions', path: '/admin/payments', icon: CreditCard },
         { label: 'Reports', path: '/admin/reports', icon: BarChart3 }
+      ]
+    },
+    {
+      title: 'SYSTEM / LOGS',
+      items: [
+        { label: 'API Logs', path: '/admin/api-logs', icon: ScrollText }
       ]
     },
     {

@@ -272,31 +272,37 @@ export default function BusSeatModal({
                           {leftSeats.map((seat) => {
                             const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
                             const isSleeper = seat.IsSleeper;
+                            const tooltipText = `Seat ${seat.SeatNo} • ${inr(seat.Fare)}${seat.IsLadies ? ' • Ladies' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
 
                             return (
-                              <button
-                                key={seat.SeatNo}
-                                type="button"
-                                disabled={seat.IsBooked}
-                                onClick={() => handleToggleSeat(seat)}
-                                title={`${seat.SeatNo} (${inr(seat.Fare)})`}
-                                className={`rounded-lg font-bold text-[10px] flex flex-col items-center justify-center transition cursor-pointer ${
-                                  isSleeper ? 'w-10 h-14' : 'w-9 h-9'
-                                } ${
-                                  seat.IsBooked
-                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                    : isSel
-                                    ? 'bg-emerald-600 text-white shadow-xs'
-                                    : seat.IsLadies
-                                    ? 'bg-rose-50 border border-rose-300 text-rose-800 hover:bg-rose-100'
-                                    : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
-                                }`}
-                              >
-                                {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo}
-                                <span className="text-[8px] font-normal opacity-80 mt-0.5">
-                                  {inr(seat.Fare)}
-                                </span>
-                              </button>
+                              <div key={seat.SeatNo} className="relative group">
+                                <button
+                                  type="button"
+                                  disabled={seat.IsBooked}
+                                  onClick={() => handleToggleSeat(seat)}
+                                  className={`rounded-lg font-bold text-[10px] flex flex-col items-center justify-center transition cursor-pointer ${
+                                    isSleeper ? 'w-10 h-14' : 'w-9 h-9'
+                                  } ${
+                                    seat.IsBooked
+                                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                      : isSel
+                                      ? 'bg-emerald-600 text-white shadow-xs'
+                                      : seat.IsLadies
+                                      ? 'bg-rose-50 border border-rose-300 text-rose-800 hover:bg-rose-100'
+                                      : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
+                                  }`}
+                                >
+                                  {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo}
+                                  <span className="text-[8px] font-normal opacity-80 mt-0.5">
+                                    {inr(seat.Fare)}
+                                  </span>
+                                </button>
+                                {/* Instant zero-delay custom tooltip */}
+                                <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
+                                  <span>{tooltipText}</span>
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                                </div>
+                              </div>
                             );
                           })}
                         </div>
@@ -309,31 +315,37 @@ export default function BusSeatModal({
                           {rightSeats.map((seat) => {
                             const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
                             const isSleeper = seat.IsSleeper;
+                            const tooltipText = `Seat ${seat.SeatNo} • ${inr(seat.Fare)}${seat.IsLadies ? ' • Ladies' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
 
                             return (
-                              <button
-                                key={seat.SeatNo}
-                                type="button"
-                                disabled={seat.IsBooked}
-                                onClick={() => handleToggleSeat(seat)}
-                                title={`${seat.SeatNo} (${inr(seat.Fare)})`}
-                                className={`rounded-lg font-bold text-[10px] flex flex-col items-center justify-center transition cursor-pointer ${
-                                  isSleeper ? 'w-10 h-14' : 'w-9 h-9'
-                                } ${
-                                  seat.IsBooked
-                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                    : isSel
-                                    ? 'bg-emerald-600 text-white shadow-xs'
-                                    : seat.IsLadies
-                                    ? 'bg-rose-50 border border-rose-300 text-rose-800 hover:bg-rose-100'
-                                    : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
-                                }`}
-                              >
-                                {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo}
-                                <span className="text-[8px] font-normal opacity-80 mt-0.5">
-                                  {inr(seat.Fare)}
-                                </span>
-                              </button>
+                              <div key={seat.SeatNo} className="relative group">
+                                <button
+                                  type="button"
+                                  disabled={seat.IsBooked}
+                                  onClick={() => handleToggleSeat(seat)}
+                                  className={`rounded-lg font-bold text-[10px] flex flex-col items-center justify-center transition cursor-pointer ${
+                                    isSleeper ? 'w-10 h-14' : 'w-9 h-9'
+                                  } ${
+                                    seat.IsBooked
+                                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                      : isSel
+                                      ? 'bg-emerald-600 text-white shadow-xs'
+                                      : seat.IsLadies
+                                      ? 'bg-rose-50 border border-rose-300 text-rose-800 hover:bg-rose-100'
+                                      : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
+                                  }`}
+                                >
+                                  {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo}
+                                  <span className="text-[8px] font-normal opacity-80 mt-0.5">
+                                    {inr(seat.Fare)}
+                                  </span>
+                                </button>
+                                {/* Instant zero-delay custom tooltip */}
+                                <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
+                                  <span>{tooltipText}</span>
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                                </div>
+                              </div>
                             );
                           })}
                         </div>

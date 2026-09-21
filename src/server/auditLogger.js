@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { ServiceApiLog } from '../models/index.js';
 
 const REDACTED_KEYS = new Set([
@@ -53,6 +55,11 @@ export async function logApiCall({
   latency = 0,
   status = 'SUCCESS'
 }) {
+  const timestamp = new Date().toISOString();
+  const sanitizedRequest = sanitizePayload(requestData);
+  const sanitizedResponse = sanitizePayload(responseData);
+
+  // 1. Write to database
   try {
     await ServiceApiLog.create({
       userId,
@@ -64,8 +71,8 @@ export async function logApiCall({
       provider,
       endpoint,
       httpMethod,
-      requestJson: sanitizePayload(requestData),
-      responseJson: sanitizePayload(responseData),
+      requestJson: sanitizedRequest,
+      responseJson: sanitizedResponse,
       httpStatus,
       providerErrorCode: providerErrorCode ? String(providerErrorCode) : null,
       providerErrorMessage: providerErrorMessage ? String(providerErrorMessage) : null,
@@ -74,6 +81,40 @@ export async function logApiCall({
       status
     });
   } catch (err) {
-    console.error('Failed to write to ServiceApiLog:', err.message);
+    console.error('Failed to write to ServiceApiLog DB:', err.message);
+  }
+
+  // 2. Write to logs/api-YYYY-MM-DD.jsonl
+  try {
+    const logsDir = path.join(process.cwd(), 'logs');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+
+    const dateStr = timestamp.split('T')[0];
+    const logFilePath = path.join(logsDir, `api-${dateStr}.jsonl`);
+
+    const logEntry = {
+      timestamp,
+      serviceType,
+      action,
+      provider,
+      endpoint,
+      httpMethod,
+      httpStatus,
+      latencyMs: latency,
+      traceId,
+      bookingId,
+      packageId,
+      status,
+      providerErrorCode,
+      providerErrorMessage,
+      request: sanitizedRequest,
+      response: sanitizedResponse
+    };
+
+    await fs.promises.appendFile(logFilePath, JSON.stringify(logEntry) + '\n', 'utf8');
+  } catch (err) {
+    console.error('Failed to append to API JSONL log file:', err.message);
   }
 }

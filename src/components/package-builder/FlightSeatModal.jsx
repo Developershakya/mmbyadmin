@@ -301,25 +301,32 @@ export default function FlightSeatModal({
                           <div className="flex gap-1">
                             {row.Seats.slice(0, 3).map((seat) => {
                               const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
+                              const isLegroom = row.RowNumber <= 2 || seat.SeatType === 'ExtraLegroom';
+                              const tooltipText = `${seat.SeatNo} • ${seat.Price ? `₹${seat.Price}` : 'Free'}${isLegroom ? ' • Legroom' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
                               return (
-                                <button
-                                  key={seat.SeatNo}
-                                  type="button"
-                                  disabled={seat.IsBooked}
-                                  onClick={() => handleToggleSeat(seat)}
-                                  title={`${seat.SeatNo} ${seat.Price ? `(₹${seat.Price})` : '(Free)'}`}
-                                  className={`w-7 h-7 rounded-md text-[10px] font-bold transition flex flex-col items-center justify-center cursor-pointer ${
-                                    seat.IsBooked
-                                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                      : isSel
-                                      ? 'bg-blue-600 text-white shadow-xs'
-                                      : seat.Price > 0
-                                      ? 'bg-blue-50 border border-blue-400 text-blue-900 hover:bg-blue-100'
-                                      : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
-                                  }`}
-                                >
-                                  {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo.slice(-1)}
-                                </button>
+                                <div key={seat.SeatNo} className="relative group">
+                                  <button
+                                    type="button"
+                                    disabled={seat.IsBooked}
+                                    onClick={() => handleToggleSeat(seat)}
+                                    className={`w-7 h-7 rounded-md text-[10px] font-bold flex flex-col items-center justify-center cursor-pointer ${
+                                      seat.IsBooked
+                                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                        : isSel
+                                        ? 'bg-blue-600 text-white shadow-xs'
+                                        : seat.Price > 0
+                                        ? 'bg-blue-50 border border-blue-400 text-blue-900 hover:bg-blue-100'
+                                        : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
+                                    }`}
+                                  >
+                                    {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo.slice(-1)}
+                                  </button>
+                                  {/* Instant zero-delay custom tooltip */}
+                                  <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
+                                    <span>{tooltipText}</span>
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                                  </div>
+                                </div>
                               );
                             })}
                           </div>
@@ -331,25 +338,32 @@ export default function FlightSeatModal({
                           <div className="flex gap-1">
                             {row.Seats.slice(3, 6).map((seat) => {
                               const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
+                              const isLegroom = row.RowNumber <= 2 || seat.SeatType === 'ExtraLegroom';
+                              const tooltipText = `${seat.SeatNo} • ${seat.Price ? `₹${seat.Price}` : 'Free'}${isLegroom ? ' • Legroom' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
                               return (
-                                <button
-                                  key={seat.SeatNo}
-                                  type="button"
-                                  disabled={seat.IsBooked}
-                                  onClick={() => handleToggleSeat(seat)}
-                                  title={`${seat.SeatNo} ${seat.Price ? `(₹${seat.Price})` : '(Free)'}`}
-                                  className={`w-7 h-7 rounded-md text-[10px] font-bold transition flex flex-col items-center justify-center cursor-pointer ${
-                                    seat.IsBooked
-                                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                      : isSel
-                                      ? 'bg-blue-600 text-white shadow-xs'
-                                      : seat.Price > 0
-                                      ? 'bg-blue-50 border border-blue-400 text-blue-900 hover:bg-blue-100'
-                                      : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
-                                  }`}
-                                >
-                                  {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo.slice(-1)}
-                                </button>
+                                <div key={seat.SeatNo} className="relative group">
+                                  <button
+                                    type="button"
+                                    disabled={seat.IsBooked}
+                                    onClick={() => handleToggleSeat(seat)}
+                                    className={`w-7 h-7 rounded-md text-[10px] font-bold flex flex-col items-center justify-center cursor-pointer ${
+                                      seat.IsBooked
+                                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                        : isSel
+                                        ? 'bg-blue-600 text-white shadow-xs'
+                                        : seat.Price > 0
+                                        ? 'bg-blue-50 border border-blue-400 text-blue-900 hover:bg-blue-100'
+                                        : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
+                                    }`}
+                                  >
+                                    {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo.slice(-1)}
+                                  </button>
+                                  {/* Instant zero-delay custom tooltip */}
+                                  <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
+                                    <span>{tooltipText}</span>
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                                  </div>
+                                </div>
                               );
                             })}
                           </div>

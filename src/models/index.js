@@ -16,6 +16,7 @@ import FlightBooking from "./FlightBooking.js";
 import HotelBooking from "./HotelBooking.js";
 import BusBooking from "./BusBooking.js";
 import CarBooking from "./CarBooking.js";
+import PackageBooking from "./PackageBooking.js";
 import { SRDV_BUS_CITIES, SRDV_HOTEL_CITIES } from "../lib/srdv/cityMappings.js";
 
 // Setup Associations
@@ -33,6 +34,9 @@ BusBooking.belongsTo(Package, { foreignKey: 'packageId', as: 'package' });
 
 Package.hasMany(CarBooking, { foreignKey: 'packageId', as: 'carBookings' });
 CarBooking.belongsTo(Package, { foreignKey: 'packageId', as: 'package' });
+
+Package.hasMany(PackageBooking, { foreignKey: 'packageId', as: 'packageBookings' });
+PackageBooking.belongsTo(Package, { foreignKey: 'packageId', as: 'package' });
 
 Package.hasMany(Payment, { foreignKey: 'packageId', as: 'payments' });
 Payment.belongsTo(Package, { foreignKey: 'packageId', as: 'package' });
@@ -55,7 +59,8 @@ export {
   FlightBooking,
   HotelBooking,
   BusBooking,
-  CarBooking
+  CarBooking,
+  PackageBooking
 };
 
 export async function initDb() {

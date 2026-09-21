@@ -1,9 +1,28 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import apiRouter from "./src/server/apiRouter.js";
 
 async function startServer() {
+  // SAFETY GUARD 1 & 2: Enforce TEST mode & DUMMY booking mode
+  const bookingMode = process.env.BOOKING_MODE || 'dummy';
+  if (bookingMode !== 'dummy') {
+    console.error('[SAFETY GUARD] FATAL: BOOKING_MODE is not "dummy". Real SRDV booking adapter is disabled.');
+    throw new Error('FATAL: BOOKING_MODE must be "dummy". Real booking endpoints are permanently disabled.');
+  }
+
+  const razorpayKeyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_517hUuVvL9vQvC';
+  if (!razorpayKeyId.startsWith('rzp_test_')) {
+    console.error('[SAFETY GUARD] FATAL: LIVE KEY BLOCKED! RAZORPAY_KEY_ID does not start with rzp_test_.');
+    throw new Error('FATAL: LIVE KEY BLOCKED! Only Razorpay test mode is permitted.');
+  }
+
+  console.log('====================================================');
+  console.log(`[SAFETY GUARD] Razorpay mode: TEST (${razorpayKeyId})`);
+  console.log(`[SAFETY GUARD] Booking mode: DUMMY (Real SRDV Booking Endpoints BLOCKED)`);
+  console.log('====================================================');
+
   const app = express();
   const PORT = 3000;
 

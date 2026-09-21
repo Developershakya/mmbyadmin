@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import express from 'express';
 import { Op } from 'sequelize';
 import {
@@ -18,8 +20,10 @@ import {
   FlightBooking,
   HotelBooking,
   BusBooking,
-  CarBooking
+  CarBooking,
+  PackageBooking
 } from '../models/index.js';
+import { logApiCall } from './auditLogger.js';
 import { searchFlights } from '../lib/srdv/flightService.js';
 import { searchBuses } from '../lib/srdv/busService.js';
 import { searchCars } from '../lib/srdv/carService.js';
@@ -2644,22 +2648,92 @@ router.get('/payments/history', async (req, res) => {
 // Create Razorpay Order
 router.post('/payments/create-order', async (req, res) => {
   try {
-    const { amount, currency = 'INR', packageId, serviceItemId, serviceType } = req.body;
-    if (!amount || !serviceType) {
-      return res.status(400).json({ success: false, error: 'Amount and serviceType are required' });
+    const {
+      amount: rawAmount,
+      currency = 'INR',
+      packageId,
+      serviceItemId,
+      serviceType,
+      selection,
+      bookingPayload,
+      travelerDetails
+    } = req.body;
+
+    if (!serviceType) {
+      return res.status(400).json({ success: false, error: 'serviceType is required' });
     }
 
+    // SERVER-SIDE AMOUNT COMPUTATION from saved selection
+    const payload = selection || bookingPayload || {};
+    let computedAmount = 0;
+
+    if (serviceType === 'FLIGHT') {
+      const base = Number(payload.fare || payload.baseFare || 0);
+      const tax = Number(payload.tax || 0);
+      const seatsTotal = Array.isArray(payload.seats)
+        ? payload.seats.reduce((s, x) => s + Number(x.Price || x.price || 0), 0)
+        : 0;
+      const baggageTotal = Array.isArray(payload.baggage)
+        ? payload.baggage.reduce((s, x) => s + Number(x.Price || x.price || 0), 0)
+        : 0;
+      const mealsTotal = Array.isArray(payload.meals)
+        ? payload.meals.reduce((s, x) => s + Number(x.Price || x.price || 0), 0)
+        : 0;
+      computedAmount = (base + tax + seatsTotal + baggageTotal + mealsTotal) || Number(payload.totalAmount || rawAmount || 0);
+    } else if (serviceType === 'HOTEL') {
+      const roomPrice = Number(payload.roomPrice || payload.pricePerNight || payload.price || 0);
+      const nights = Math.max(1, Number(payload.nights || 1));
+      const rooms = Math.max(1, Number(payload.roomsCount || payload.rooms || 1));
+      computedAmount = (roomPrice * nights * rooms) || Number(payload.totalAmount || rawAmount || 0);
+    } else if (serviceType === 'BUS') {
+      const seatsTotal = Array.isArray(payload.seats)
+        ? payload.seats.reduce((s, x) => s + Number(x.Fare || x.fare || x.price || 0), 0)
+        : 0;
+      computedAmount = seatsTotal || Number(payload.fare || payload.totalAmount || rawAmount || 0);
+    } else if (serviceType === 'CAR') {
+      computedAmount = Number(payload.price || payload.fare || payload.totalAmount || rawAmount || 0);
+    } else {
+      computedAmount = Number(rawAmount || payload.totalAmount || 0);
+    }
+
+    const finalAmount = Math.max(1, Math.round(computedAmount || Number(rawAmount || 0)));
+
     const orderData = await createPaymentOrder({
-      amount: Number(amount),
+      amount: finalAmount,
       currency,
       packageId: packageId ? parseInt(packageId, 10) : null,
       serviceItemId: serviceItemId || null,
       serviceType
     });
 
+    // Log Razorpay CreateOrder call
+    await logApiCall({
+      serviceType: serviceType || 'PAYMENT',
+      action: 'CreateRazorpayOrder',
+      provider: 'RAZORPAY',
+      endpoint: '/api/payments/create-order',
+      httpMethod: 'POST',
+      requestData: { serviceType, packageId, serviceItemId, finalAmount, travelerDetails },
+      responseData: orderData,
+      httpStatus: 200,
+      status: 'SUCCESS'
+    });
+
     res.json({ success: true, ...orderData });
   } catch (err) {
     console.error('Error creating payment order:', err);
+    await logApiCall({
+      serviceType: req.body.serviceType || 'PAYMENT',
+      action: 'CreateRazorpayOrderFailed',
+      provider: 'RAZORPAY',
+      endpoint: '/api/payments/create-order',
+      httpMethod: 'POST',
+      requestData: req.body,
+      responseData: { error: err.message },
+      httpStatus: 500,
+      status: 'FAILED',
+      providerErrorMessage: err.message
+    });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -2676,7 +2750,8 @@ router.post(['/payments/verify-and-book', '/payments/verify'], async (req, res) 
       packageId,
       serviceItemId,
       itineraryDayId,
-      bookingPayload
+      bookingPayload,
+      travelerDetails
     } = req.body;
 
     if (!orderId || !paymentId || !serviceType || !bookingPayload) {
@@ -2687,9 +2762,26 @@ router.post(['/payments/verify-and-book', '/payments/verify'], async (req, res) 
       });
     }
 
-    // 1. Verify Razorpay Signature (or generate valid test signature if in dev/test)
+    // 1. Verify Razorpay Signature
     const isValidSignature = verifyPaymentSignature(orderId, paymentId, signature);
     if (!isValidSignature && !paymentId.startsWith('pay_test_')) {
+      await Payment.update(
+        { status: 'FAILED', gatewayPaymentId: paymentId },
+        { where: { gatewayOrderId: orderId } }
+      ).catch(() => {});
+
+      await logApiCall({
+        serviceType,
+        action: 'PaymentSignatureVerificationFailed',
+        provider: 'RAZORPAY',
+        endpoint: '/api/payments/verify',
+        httpMethod: 'POST',
+        requestData: { orderId, paymentId, signature },
+        responseData: { error: 'Invalid payment signature' },
+        httpStatus: 400,
+        status: 'FAILED'
+      });
+
       await transaction.rollback();
       return res.status(400).json({
         success: false,
@@ -2710,7 +2802,6 @@ router.post(['/payments/verify-and-book', '/payments/verify'], async (req, res) 
 
     if (payment.status === 'PAID') {
       await transaction.rollback();
-      // Payment already processed, return existing booking
       let existingBooking = null;
       if (serviceType === 'FLIGHT') existingBooking = await FlightBooking.findOne({ where: { bookingId: payment.bookingId } });
       else if (serviceType === 'HOTEL') existingBooking = await HotelBooking.findOne({ where: { bookingId: payment.bookingId } });
@@ -2771,7 +2862,8 @@ router.post(['/payments/verify-and-book', '/payments/verify'], async (req, res) 
           seats: bookingPayload.seats || [],
           ssr: bookingPayload.ssr || {},
           traceId: bookingPayload.traceId,
-          bookingSnapshot: bookRes
+          bookingSnapshot: bookRes,
+          isDummy: true
         },
         { transaction }
       );
@@ -2813,7 +2905,8 @@ router.post(['/payments/verify-and-book', '/payments/verify'], async (req, res) 
           currency: 'INR',
           voucherStatus: 'CONFIRMED',
           traceId: bookingPayload.traceId,
-          bookingSnapshot: bookRes
+          bookingSnapshot: bookRes,
+          isDummy: true
         },
         { transaction }
       );
@@ -2848,7 +2941,8 @@ router.post(['/payments/verify-and-book', '/payments/verify'], async (req, res) 
           totalAmount,
           currency: 'INR',
           traceId: bookingPayload.traceId,
-          bookingSnapshot: bookRes
+          bookingSnapshot: bookRes,
+          isDummy: true
         },
         { transaction }
       );
@@ -2881,11 +2975,25 @@ router.post(['/payments/verify-and-book', '/payments/verify'], async (req, res) 
           totalAmount,
           currency: 'INR',
           traceId: bookingPayload.traceId,
-          bookingSnapshot: bookRes
+          bookingSnapshot: bookRes,
+          isDummy: true
         },
         { transaction }
       );
     }
+
+    // Log dummy supplier booking call
+    await logApiCall({
+      serviceType,
+      action: 'DummyBookingSupplier',
+      provider: 'DUMMY_SUPPLIER',
+      endpoint: `/dummy/${serviceType.toLowerCase()}/book`,
+      httpMethod: 'POST',
+      requestData: bookingPayload,
+      responseData: providerResult,
+      httpStatus: 200,
+      status: 'SUCCESS'
+    });
 
     // 4. Update Payment status to PAID
     await payment.update(
@@ -2899,7 +3007,88 @@ router.post(['/payments/verify-and-book', '/payments/verify'], async (req, res) 
       { transaction }
     );
 
-    // 5. Update PackageServiceItem if attached to a package
+    // 5. Create Parent PackageBooking record
+    const leadTraveler = travelerDetails?.fullName || (travelerDetails?.firstName ? `${travelerDetails.firstName} ${travelerDetails.lastName || ''}`.trim() : (bookingPayload.passengers?.[0]?.FirstName ? `${bookingPayload.passengers[0].FirstName} ${bookingPayload.passengers[0].LastName || ''}`.trim() : (bookingPayload.guests?.[0]?.FirstName ? `${bookingPayload.guests[0].FirstName} ${bookingPayload.guests[0].LastName || ''}`.trim() : 'Guest Traveller')));
+    const travelerEmail = travelerDetails?.email || bookingPayload.customerEmail || bookingPayload.email || 'traveler@makemybharatyatra.com';
+    const travelerPhone = travelerDetails?.phone || travelerDetails?.mobile || bookingPayload.customerPhone || '9876543210';
+
+    let packageRecord = null;
+    if (packageId) {
+      packageRecord = await Package.findByPk(packageId, { transaction });
+    }
+
+    const packageBooking = await PackageBooking.create(
+      {
+        bookingId: `PKG-BKG-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+        packageId: packageId ? parseInt(packageId, 10) : null,
+        packageName: packageRecord?.name || `${serviceType} Tour Package`,
+        customerName: leadTraveler,
+        customerEmail: travelerEmail,
+        customerPhone: travelerPhone,
+        destination: packageRecord?.destination || bookingPayload.toCity || bookingPayload.city || 'India',
+        travelDate: bookingPayload.travelDate || bookingPayload.departureDate || bookingPayload.checkInDate || new Date().toISOString().split('T')[0],
+        passengersCount: Array.isArray(bookingPayload.passengers) ? bookingPayload.passengers.length : (Array.isArray(bookingPayload.guests) ? bookingPayload.guests.length : 1),
+        totalAmount,
+        currency: 'INR',
+        status: 'CONFIRMED',
+        paymentId: payment.id,
+        servicesBooked: [
+          {
+            serviceType,
+            bookingId: createdBooking?.bookingId || createdBooking?.id,
+            pnr: createdBooking?.pnr || createdBooking?.ticketNo || createdBooking?.confirmationNo,
+            amount: totalAmount
+          }
+        ],
+        bookingDetails: {
+          serviceType,
+          serviceBookingId: createdBooking?.bookingId || createdBooking?.id,
+          pnr: createdBooking?.pnr || createdBooking?.ticketNo || createdBooking?.confirmationNo,
+          bookingSnapshot: providerResult
+        },
+        isDummy: true
+      },
+      { transaction }
+    );
+
+    // 6. Update Package model: mark that service booked, pnr, booking details
+    if (packageRecord) {
+      let itineraryUpdated = false;
+      const dayList = Array.isArray(packageRecord.dayWiseItinerary)
+        ? JSON.parse(JSON.stringify(packageRecord.dayWiseItinerary))
+        : (Array.isArray(packageRecord.days) ? JSON.parse(JSON.stringify(packageRecord.days)) : []);
+
+      for (const day of dayList) {
+        if (Array.isArray(day.services)) {
+          for (const s of day.services) {
+            if (s.id === serviceItemId || s.serviceType?.toUpperCase() === serviceType?.toUpperCase()) {
+              s.status = 'booked';
+              s.isBooked = true;
+              s.bookingRef = createdBooking?.bookingId || createdBooking?.id;
+              s.pnr = createdBooking?.pnr || createdBooking?.ticketNo || createdBooking?.confirmationNo;
+              s.bookingDetails = {
+                bookingId: createdBooking?.bookingId || createdBooking?.id,
+                pnr: s.pnr,
+                bookedAt: new Date().toISOString(),
+                status: 'CONFIRMED'
+              };
+              itineraryUpdated = true;
+              break;
+            }
+          }
+        }
+        if (itineraryUpdated) break;
+      }
+
+      if (itineraryUpdated) {
+        packageRecord.dayWiseItinerary = dayList;
+        packageRecord.changed('dayWiseItinerary', true);
+      }
+      packageRecord.bookedServicesCount = (packageRecord.bookedServicesCount || 0) + 1;
+      await packageRecord.save({ transaction });
+    }
+
+    // 7. Update PackageServiceItem if attached to a package
     if (serviceItemId) {
       await PackageServiceItem.update(
         { status: 'BOOKED' },
@@ -2909,15 +3098,41 @@ router.post(['/payments/verify-and-book', '/payments/verify'], async (req, res) 
 
     await transaction.commit();
 
+    // Log successful verification and booking
+    await logApiCall({
+      serviceType: 'PAYMENT',
+      action: 'VerifyAndBookSuccess',
+      provider: 'RAZORPAY',
+      endpoint: '/api/payments/verify',
+      httpMethod: 'POST',
+      requestData: { orderId, paymentId, serviceType, packageId },
+      responseData: { bookingId: createdBooking?.bookingId, status: 'CONFIRMED' },
+      httpStatus: 200,
+      status: 'SUCCESS'
+    });
+
     res.json({
       success: true,
       booking: createdBooking,
+      packageBooking,
       payment,
       providerResult
     });
   } catch (err) {
     await transaction.rollback();
     console.error('Error verifying payment and booking:', err);
+    await logApiCall({
+      serviceType: req.body.serviceType || 'PAYMENT',
+      action: 'VerifyAndBookFailed',
+      provider: 'RAZORPAY',
+      endpoint: '/api/payments/verify',
+      httpMethod: 'POST',
+      requestData: req.body,
+      responseData: { error: err.message },
+      httpStatus: 500,
+      status: 'FAILED',
+      providerErrorMessage: err.message
+    });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -3357,5 +3572,329 @@ const handleGetServiceLogs = async (req, res) => {
 
 router.get('/service-logs', handleGetServiceLogs);
 router.get('/travel/logs', handleGetServiceLogs);
+
+/* =========================================================================
+   ADMIN BOOKINGS, DASHBOARD STATS & AUDIT LOGS (REAL DB DRIVEN)
+   ========================================================================= */
+
+// Admin Flight Bookings
+router.get('/admin/bookings/flights', async (req, res) => {
+  try {
+    const { search, status, startDate, endDate, page = 1, limit = 50 } = req.query;
+    const where = {};
+    if (status && status !== 'ALL') where.status = status;
+    if (search) {
+      where[Op.or] = [
+        { bookingId: { [Op.like]: `%${search}%` } },
+        { pnr: { [Op.like]: `%${search}%` } },
+        { airline: { [Op.like]: `%${search}%` } },
+        { origin: { [Op.like]: `%${search}%` } },
+        { destination: { [Op.like]: `%${search}%` } }
+      ];
+    }
+    if (startDate && endDate) {
+      where.createdAt = { [Op.between]: [new Date(startDate), new Date(endDate + 'T23:59:59.999Z')] };
+    }
+    const offset = (Math.max(1, Number(page)) - 1) * Number(limit);
+    const { count, rows } = await FlightBooking.findAndCountAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: Number(limit),
+      offset
+    });
+    res.json({ success: true, count, totalPages: Math.ceil(count / limit), bookings: rows });
+  } catch (err) {
+    console.error('Error fetching admin flight bookings:', err);
+    res.status(500).json({ success: false, error: err.message, bookings: [] });
+  }
+});
+
+// Admin Hotel Bookings
+router.get('/admin/bookings/hotels', async (req, res) => {
+  try {
+    const { search, status, startDate, endDate, page = 1, limit = 50 } = req.query;
+    const where = {};
+    if (status && status !== 'ALL') where.status = status;
+    if (search) {
+      where[Op.or] = [
+        { bookingId: { [Op.like]: `%${search}%` } },
+        { confirmationNo: { [Op.like]: `%${search}%` } },
+        { hotelName: { [Op.like]: `%${search}%` } },
+        { city: { [Op.like]: `%${search}%` } }
+      ];
+    }
+    if (startDate && endDate) {
+      where.createdAt = { [Op.between]: [new Date(startDate), new Date(endDate + 'T23:59:59.999Z')] };
+    }
+    const offset = (Math.max(1, Number(page)) - 1) * Number(limit);
+    const { count, rows } = await HotelBooking.findAndCountAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: Number(limit),
+      offset
+    });
+    res.json({ success: true, count, totalPages: Math.ceil(count / limit), bookings: rows });
+  } catch (err) {
+    console.error('Error fetching admin hotel bookings:', err);
+    res.status(500).json({ success: false, error: err.message, bookings: [] });
+  }
+});
+
+// Admin Bus Bookings
+router.get('/admin/bookings/buses', async (req, res) => {
+  try {
+    const { search, status, startDate, endDate, page = 1, limit = 50 } = req.query;
+    const where = {};
+    if (status && status !== 'ALL') where.status = status;
+    if (search) {
+      where[Op.or] = [
+        { bookingId: { [Op.like]: `%${search}%` } },
+        { ticketNo: { [Op.like]: `%${search}%` } },
+        { operator: { [Op.like]: `%${search}%` } },
+        { fromCity: { [Op.like]: `%${search}%` } },
+        { toCity: { [Op.like]: `%${search}%` } }
+      ];
+    }
+    if (startDate && endDate) {
+      where.createdAt = { [Op.between]: [new Date(startDate), new Date(endDate + 'T23:59:59.999Z')] };
+    }
+    const offset = (Math.max(1, Number(page)) - 1) * Number(limit);
+    const { count, rows } = await BusBooking.findAndCountAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: Number(limit),
+      offset
+    });
+    res.json({ success: true, count, totalPages: Math.ceil(count / limit), bookings: rows });
+  } catch (err) {
+    console.error('Error fetching admin bus bookings:', err);
+    res.status(500).json({ success: false, error: err.message, bookings: [] });
+  }
+});
+
+// Admin Car Bookings
+router.get('/admin/bookings/cars', async (req, res) => {
+  try {
+    const { search, status, startDate, endDate, page = 1, limit = 50 } = req.query;
+    const where = {};
+    if (status && status !== 'ALL') where.status = status;
+    if (search) {
+      where[Op.or] = [
+        { bookingId: { [Op.like]: `%${search}%` } },
+        { confirmationNo: { [Op.like]: `%${search}%` } },
+        { vehicleName: { [Op.like]: `%${search}%` } },
+        { pickupCity: { [Op.like]: `%${search}%` } },
+        { dropCity: { [Op.like]: `%${search}%` } }
+      ];
+    }
+    if (startDate && endDate) {
+      where.createdAt = { [Op.between]: [new Date(startDate), new Date(endDate + 'T23:59:59.999Z')] };
+    }
+    const offset = (Math.max(1, Number(page)) - 1) * Number(limit);
+    const { count, rows } = await CarBooking.findAndCountAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: Number(limit),
+      offset
+    });
+    res.json({ success: true, count, totalPages: Math.ceil(count / limit), bookings: rows });
+  } catch (err) {
+    console.error('Error fetching admin car bookings:', err);
+    res.status(500).json({ success: false, error: err.message, bookings: [] });
+  }
+});
+
+// Admin Package Bookings
+router.get('/admin/bookings/packages', async (req, res) => {
+  try {
+    const { search, status, startDate, endDate, page = 1, limit = 50 } = req.query;
+    const where = {};
+    if (status && status !== 'ALL') where.status = status;
+    if (search) {
+      where[Op.or] = [
+        { bookingId: { [Op.like]: `%${search}%` } },
+        { packageName: { [Op.like]: `%${search}%` } },
+        { customerName: { [Op.like]: `%${search}%` } },
+        { customerEmail: { [Op.like]: `%${search}%` } },
+        { customerPhone: { [Op.like]: `%${search}%` } },
+        { destination: { [Op.like]: `%${search}%` } }
+      ];
+    }
+    if (startDate && endDate) {
+      where.createdAt = { [Op.between]: [new Date(startDate), new Date(endDate + 'T23:59:59.999Z')] };
+    }
+    const offset = (Math.max(1, Number(page)) - 1) * Number(limit);
+    const { count, rows } = await PackageBooking.findAndCountAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: Number(limit),
+      offset
+    });
+    res.json({ success: true, count, totalPages: Math.ceil(count / limit), bookings: rows });
+  } catch (err) {
+    console.error('Error fetching admin package bookings:', err);
+    res.status(500).json({ success: false, error: err.message, bookings: [] });
+  }
+});
+
+// Admin Dashboard Real DB Computed Stats
+router.get('/admin/dashboard/stats', async (req, res) => {
+  try {
+    // 1. Total Packages Count
+    const packagesCount = await Package.count();
+
+    // 2. Counts and Totals by service
+    const [flights, hotels, buses, cars, packages, paidPayments] = await Promise.all([
+      FlightBooking.findAll({ attributes: ['id', 'bookingId', 'status', 'totalAmount', 'createdAt', 'airline', 'origin', 'destination', 'pnr'] }),
+      HotelBooking.findAll({ attributes: ['id', 'bookingId', 'status', 'totalAmount', 'createdAt', 'hotelName', 'city', 'confirmationNo'] }),
+      BusBooking.findAll({ attributes: ['id', 'bookingId', 'status', 'totalAmount', 'createdAt', 'operator', 'fromCity', 'toCity', 'ticketNo'] }),
+      CarBooking.findAll({ attributes: ['id', 'bookingId', 'status', 'totalAmount', 'createdAt', 'vehicleName', 'pickupCity', 'dropCity', 'confirmationNo'] }),
+      PackageBooking.findAll({ attributes: ['id', 'bookingId', 'status', 'totalAmount', 'createdAt', 'packageName', 'destination', 'customerName'] }),
+      Payment.findAll({ where: { status: 'PAID' }, attributes: ['amount', 'createdAt', 'serviceType'] })
+    ]);
+
+    // Total Paid Revenue
+    const totalRevenue = paidPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    // Grouping all bookings for status and recent lists
+    const allBookings = [
+      ...flights.map(f => ({ ...f.toJSON(), serviceType: 'FLIGHT', title: `${f.airline} (${f.origin} → ${f.destination})`, ref: f.pnr })),
+      ...hotels.map(h => ({ ...h.toJSON(), serviceType: 'HOTEL', title: `${h.hotelName} (${h.city})`, ref: h.confirmationNo })),
+      ...buses.map(b => ({ ...b.toJSON(), serviceType: 'BUS', title: `${b.operator} (${b.fromCity} → ${b.toCity})`, ref: b.ticketNo })),
+      ...cars.map(c => ({ ...c.toJSON(), serviceType: 'CAR', title: `${c.vehicleName} (${c.pickupCity} → ${c.dropCity})`, ref: c.confirmationNo })),
+      ...packages.map(p => ({ ...p.toJSON(), serviceType: 'PACKAGE', title: `${p.packageName} (${p.destination || ''})`, ref: p.bookingId }))
+    ];
+
+    const confirmedCount = allBookings.filter(b => b.status === 'CONFIRMED').length;
+    const cancelledCount = allBookings.filter(b => b.status === 'CANCELLED').length;
+    const pendingCount = allBookings.filter(b => b.status === 'PENDING').length;
+    const failedCount = allBookings.filter(b => b.status === 'FAILED').length;
+
+    // Today's Bookings
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayBookingsCount = allBookings.filter(b => new Date(b.createdAt) >= todayStart).length;
+
+    // Sort for recent bookings
+    const recentBookings = [...allBookings]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 10);
+
+    // Compute real 7-day trend
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const trend7d = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dayStart = new Date(d);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(d);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const dayPayments = paidPayments.filter(p => {
+        const pt = new Date(p.createdAt);
+        return pt >= dayStart && pt <= dayEnd;
+      });
+      const dayRevenue = dayPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const dayBookings = allBookings.filter(b => {
+        const bt = new Date(b.createdAt);
+        return bt >= dayStart && bt <= dayEnd;
+      }).length;
+
+      trend7d.push({
+        day: dayNames[d.getDay()],
+        date: d.toISOString().split('T')[0],
+        revenue: dayRevenue,
+        bookings: dayBookings
+      });
+    }
+
+    // Breakdown
+    const serviceBreakdown = [
+      { name: 'Flights', count: flights.length, revenue: flights.reduce((s, f) => s + Number(f.totalAmount || 0), 0) },
+      { name: 'Hotels', count: hotels.length, revenue: hotels.reduce((s, h) => s + Number(h.totalAmount || 0), 0) },
+      { name: 'Buses', count: buses.length, revenue: buses.reduce((s, b) => s + Number(b.totalAmount || 0), 0) },
+      { name: 'Cabs', count: cars.length, revenue: cars.reduce((s, c) => s + Number(c.totalAmount || 0), 0) },
+      { name: 'Packages', count: packages.length, revenue: packages.reduce((s, p) => s + Number(p.totalAmount || 0), 0) }
+    ];
+
+    res.json({
+      success: true,
+      stats: {
+        totalBookings: allBookings.length,
+        totalRevenue,
+        confirmedCount,
+        cancelledCount,
+        pendingCount,
+        failedCount,
+        todayBookingsCount,
+        packagesCount,
+        serviceBreakdown,
+        overviewTrendData7d: trend7d,
+        recentBookings
+      }
+    });
+  } catch (err) {
+    console.error('Error computing dashboard stats:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Admin API Audit Logs Listing
+router.get('/admin/api-logs', async (req, res) => {
+  try {
+    const { serviceType, status, search, page = 1, limit = 50 } = req.query;
+    const where = {};
+    if (serviceType && serviceType !== 'ALL') where.serviceType = serviceType.toUpperCase();
+    if (status && status !== 'ALL') where.status = status.toUpperCase();
+    if (search) {
+      where[Op.or] = [
+        { endpoint: { [Op.like]: `%${search}%` } },
+        { action: { [Op.like]: `%${search}%` } },
+        { traceId: { [Op.like]: `%${search}%` } },
+        { bookingId: { [Op.like]: `%${search}%` } }
+      ];
+    }
+    const offset = (Math.max(1, Number(page)) - 1) * Number(limit);
+    const { count, rows } = await ServiceApiLog.findAndCountAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: Number(limit),
+      offset
+    });
+    res.json({ success: true, count, totalPages: Math.ceil(count / limit), logs: rows });
+  } catch (err) {
+    console.error('Error fetching admin api logs:', err);
+    res.status(500).json({ success: false, error: err.message, logs: [] });
+  }
+});
+
+// Admin API Audit Logs JSONL Export
+router.get('/admin/api-logs/export', async (req, res) => {
+  try {
+    const logsDir = path.join(process.cwd(), 'logs');
+    const todayStr = new Date().toISOString().split('T')[0];
+    const logFilePath = path.join(logsDir, `api-${todayStr}.jsonl`);
+
+    if (fs.existsSync(logFilePath)) {
+      res.setHeader('Content-Disposition', `attachment; filename="api-logs-${todayStr}.jsonl"`);
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      return fs.createReadStream(logFilePath).pipe(res);
+    }
+
+    // Fallback to streaming from ServiceApiLog
+    const logs = await ServiceApiLog.findAll({
+      order: [['createdAt', 'DESC']],
+      limit: 1000
+    });
+    const jsonl = logs.map(l => JSON.stringify(l.toJSON())).join('\n');
+    res.setHeader('Content-Disposition', `attachment; filename="api-logs-${todayStr}.jsonl"`);
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.send(jsonl);
+  } catch (err) {
+    console.error('Error exporting api logs:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 export default router;
