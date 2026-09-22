@@ -104,15 +104,15 @@ const CarBooking = sequelize.define(
       }
     },
     perKmRate: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.DECIMAL,
       defaultValue: 14
     },
     baseFare: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.DECIMAL,
       allowNull: false
     },
     driverAllowance: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.DECIMAL,
       defaultValue: 350
     },
     tollIncluded: {
@@ -120,7 +120,7 @@ const CarBooking = sequelize.define(
       defaultValue: true
     },
     totalAmount: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.DECIMAL,
       allowNull: false
     },
     currency: {

@@ -2097,31 +2097,18 @@ router.post('/route/directions', async (req, res) => {
 router.post('/travel/search/flight', async (req, res) => {
   try {
     const outboundIp = await getOutboundIp();
-    let resultData = null;
-    let isFallback = false;
-    let traceId = `TR-${Date.now()}`;
-
-    try {
-      resultData = await flightProvider.search(req.body, outboundIp);
-      traceId = resultData?.TraceId || resultData?.Response?.TraceId || traceId;
-    } catch (apiErr) {
-      console.warn('Live SRDV flight search failed, activating normalized fallback:', apiErr.message);
-      isFallback = true;
-      const origin = req.body.origin || 'DEL';
-      const destination = req.body.destination || 'BOM';
-      const date = req.body.departureDate || new Date().toISOString().split('T')[0];
-      resultData = generateNormalizedFallbackFlights(origin, destination, date);
-    }
+    const resultData = await flightProvider.search(req.body, outboundIp);
+    const traceId = resultData?.TraceId || resultData?.Response?.TraceId || `TR-${Date.now()}`;
 
     // Save search session to database
     const session = await TravelSearchSession.create({
       serviceType: 'FLIGHT',
-      provider: isFallback ? 'NORMALIZED_FALLBACK' : 'SRDV',
+      provider: 'SRDV',
       searchParams: req.body,
       requestSnapshot: req.body,
       resultSnapshot: resultData,
       traceId,
-      resultCount: Array.isArray(resultData?.Results?.[0]) ? resultData.Results[0].length : 5,
+      resultCount: Array.isArray(resultData?.Results?.[0]) ? resultData.Results[0].length : 0,
       status: 'COMPLETED',
       expiresAt: new Date(Date.now() + 30 * 60 * 1000)
     });
@@ -2130,7 +2117,7 @@ router.post('/travel/search/flight', async (req, res) => {
       success: true,
       sessionId: session.id,
       traceId,
-      isFallback,
+      isFallback: false,
       data: resultData
     });
   } catch (err) {
@@ -2143,51 +2130,12 @@ router.post('/travel/search/flight', async (req, res) => {
 router.post('/travel/search/hotel', async (req, res) => {
   try {
     const outboundIp = await getOutboundIp();
-    let resultData = null;
-    let isFallback = false;
-    let traceId = `TR-HT-${Date.now()}`;
-
-    try {
-      resultData = await hotelProvider.search(req.body, outboundIp);
-      traceId = resultData?.TraceId || traceId;
-    } catch (apiErr) {
-      console.warn('Live SRDV hotel search failed, falling back to local catalog:', apiErr.message);
-      isFallback = true;
-      const city = req.body.destination || req.body.city || 'Manali';
-      const fallbackList = await Hotel.findAll({
-        where: {
-          [Op.or]: [
-            { city: { [Op.like]: `%${city}%` } },
-            { destination: { [Op.like]: `%${city}%` } }
-          ]
-        },
-        limit: 15
-      });
-      resultData = {
-        TraceId: traceId,
-        ResponseStatus: 1,
-        HotelResult: fallbackList.map((h, idx) => ({
-          ResultIndex: String(idx + 1),
-          HotelCode: `HTL-${h.id}`,
-          HotelName: h.name,
-          StarRating: h.starRating || 4,
-          HotelAddress: h.location || h.city,
-          CityName: h.city,
-          CountryName: 'India',
-          Price: {
-            Currency: 'INR',
-            RoomPrice: Number(h.pricePerNight || 3500),
-            Tax: Math.round(Number(h.pricePerNight || 3500) * 0.12),
-            TotalFare: Math.round(Number(h.pricePerNight || 3500) * 1.12)
-          },
-          HotelPicture: h.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945'
-        }))
-      };
-    }
+    const resultData = await hotelProvider.search(req.body, outboundIp);
+    const traceId = resultData?.TraceId || `TR-HT-${Date.now()}`;
 
     const session = await TravelSearchSession.create({
       serviceType: 'HOTEL',
-      provider: isFallback ? 'DATABASE_CATALOG' : 'SRDV',
+      provider: 'SRDV',
       searchParams: req.body,
       requestSnapshot: req.body,
       resultSnapshot: resultData,
@@ -2201,7 +2149,7 @@ router.post('/travel/search/hotel', async (req, res) => {
       success: true,
       sessionId: session.id,
       traceId,
-      isFallback,
+      isFallback: false,
       data: resultData
     });
   } catch (err) {
@@ -2213,39 +2161,12 @@ router.post('/travel/search/hotel', async (req, res) => {
 // 3. Bus Search Session
 router.post('/travel/search/bus', async (req, res) => {
   try {
-    let resultData = null;
-    let isFallback = false;
-    let traceId = `TR-BS-${Date.now()}`;
-
-    try {
-      resultData = await busProvider.search(req.body);
-      traceId = resultData?.TraceId || resultData?.Result?.TraceId || traceId;
-    } catch (apiErr) {
-      console.warn('Live SRDV bus search failed, falling back to local bus routes:', apiErr.message);
-      isFallback = true;
-      const from = req.body.fromCity || 'Delhi';
-      const to = req.body.toCity || 'Manali';
-      const localBuses = await Bus.findAll({ limit: 10 });
-      resultData = {
-        TraceId: traceId,
-        Result: localBuses.map((b, idx) => ({
-          ResultIndex: String(idx + 1),
-          TravelName: b.operator || 'Zingbus Luxury Class',
-          BusType: b.busType || 'Volvo A/C Sleeper',
-          DepartureTime: b.departureTime || '20:30',
-          ArrivalTime: b.arrivalTime || '08:30',
-          Duration: '12h 00m',
-          FromCity: from,
-          ToCity: to,
-          Fare: Number(b.fare || 1450),
-          AvailableSeats: 18
-        }))
-      };
-    }
+    const resultData = await busProvider.search(req.body);
+    const traceId = resultData?.TraceId || resultData?.Result?.TraceId || `TR-BS-${Date.now()}`;
 
     const session = await TravelSearchSession.create({
       serviceType: 'BUS',
-      provider: isFallback ? 'DATABASE_ROUTES' : 'SRDV',
+      provider: 'SRDV',
       searchParams: req.body,
       requestSnapshot: req.body,
       resultSnapshot: resultData,
@@ -2259,7 +2180,7 @@ router.post('/travel/search/bus', async (req, res) => {
       success: true,
       sessionId: session.id,
       traceId,
-      isFallback,
+      isFallback: false,
       data: resultData
     });
   } catch (err) {
@@ -2272,70 +2193,12 @@ router.post('/travel/search/bus', async (req, res) => {
 router.post('/travel/search/car', async (req, res) => {
   try {
     const outboundIp = await getOutboundIp();
-    let resultData = null;
-    let isFallback = false;
-    let traceId = `TR-CR-${Date.now()}`;
-
-    try {
-      resultData = await carProvider.search(req.body, outboundIp);
-      traceId = resultData?.TraceId || resultData?.Result?.TraceId || traceId;
-    } catch (apiErr) {
-      console.warn('Live SRDV car search failed, falling back to fleet catalog:', apiErr.message);
-      isFallback = true;
-      const from = req.body.fromCity || 'Delhi';
-      const to = req.body.toCity || 'Manali';
-      resultData = {
-        TraceId: traceId,
-        Result: [
-          {
-            ResultIndex: '1',
-            VehicleName: 'Dzire / Etios or Equivalent',
-            Category: 'SEDAN',
-            SeatingCapacity: 4,
-            LuggageCapacity: 2,
-            BaseFare: 4500,
-            DriverAllowance: 350,
-            PerKmRate: 12,
-            TollIncluded: true,
-            TotalFare: 4850,
-            FromCity: from,
-            ToCity: to
-          },
-          {
-            ResultIndex: '2',
-            VehicleName: 'Toyota Innova Crysta Luxury',
-            Category: 'INNOVA_CRYSTA',
-            SeatingCapacity: 6,
-            LuggageCapacity: 4,
-            BaseFare: 7200,
-            DriverAllowance: 400,
-            PerKmRate: 18,
-            TollIncluded: true,
-            TotalFare: 7600,
-            FromCity: from,
-            ToCity: to
-          },
-          {
-            ResultIndex: '3',
-            VehicleName: 'Force Urbania Executive',
-            Category: 'TEMPO_TRAVELLER',
-            SeatingCapacity: 12,
-            LuggageCapacity: 10,
-            BaseFare: 12500,
-            DriverAllowance: 500,
-            PerKmRate: 24,
-            TollIncluded: true,
-            TotalFare: 13000,
-            FromCity: from,
-            ToCity: to
-          }
-        ]
-      };
-    }
+    const resultData = await carProvider.search(req.body, outboundIp);
+    const traceId = resultData?.TraceId || resultData?.Result?.TraceId || `TR-CR-${Date.now()}`;
 
     const session = await TravelSearchSession.create({
       serviceType: 'CAR',
-      provider: isFallback ? 'FLEET_CATALOG' : 'SRDV',
+      provider: 'SRDV',
       searchParams: req.body,
       requestSnapshot: req.body,
       resultSnapshot: resultData,
@@ -2349,7 +2212,7 @@ router.post('/travel/search/car', async (req, res) => {
       success: true,
       sessionId: session.id,
       traceId,
-      isFallback,
+      isFallback: false,
       data: resultData
     });
   } catch (err) {
@@ -2382,11 +2245,28 @@ router.post(['/travel/flight/fare-calendar', '/flights/fare-calendar'], async (r
   }
 });
 
+function normalizeProviderApiResponse(data, action, endpoint) {
+  const errCode = data?.Error?.ErrorCode || data?.Response?.Error?.ErrorCode || data?.Result?.Error?.ErrorCode;
+  const errMsg = data?.Error?.ErrorMessage || data?.Response?.Error?.ErrorMessage || data?.Result?.Error?.ErrorMessage;
+  if (errCode && String(errCode) !== '0' && Number(errCode) !== 25) {
+    return {
+      success: false,
+      provider: 'SRDV',
+      providerErrorCode: String(errCode),
+      providerErrorMessage: errMsg || 'SRDV provider returned an error',
+      action,
+      endpoint,
+      data
+    };
+  }
+  return { success: true, data };
+}
+
 router.post(['/travel/flight/fare-rule', '/flights/fare-rule'], async (req, res) => {
   try {
-    const outboundIp = await getOutboundIp();
-    const data = await flightProvider.fareRule(req.body, outboundIp);
-    res.json({ success: true, data });
+    const data = await flightProvider.fareRule(req.body);
+    const normalized = normalizeProviderApiResponse(data, 'FareRule', 'https://flight.srdvapi.com/v8/rest/FareRule');
+    res.json(normalized);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2394,9 +2274,9 @@ router.post(['/travel/flight/fare-rule', '/flights/fare-rule'], async (req, res)
 
 router.post(['/travel/flight/fare-quote', '/flights/fare-quote'], async (req, res) => {
   try {
-    const outboundIp = await getOutboundIp();
-    const data = await flightProvider.fareQuote(req.body, outboundIp);
-    res.json({ success: true, data });
+    const data = await flightProvider.fareQuote(req.body);
+    const normalized = normalizeProviderApiResponse(data, 'FareQuote', 'https://flight.srdvapi.com/v8/rest/FareQuote');
+    res.json(normalized);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2404,9 +2284,9 @@ router.post(['/travel/flight/fare-quote', '/flights/fare-quote'], async (req, re
 
 router.post(['/travel/flight/seat-map', '/flights/seat-map'], async (req, res) => {
   try {
-    const outboundIp = await getOutboundIp();
-    const data = await flightProvider.seatMap(req.body, outboundIp);
-    res.json({ success: true, data });
+    const data = await flightProvider.seatMap(req.body);
+    const normalized = normalizeProviderApiResponse(data, 'SeatMap', 'https://flight.srdvapi.com/v8/rest/SeatMap');
+    res.json(normalized);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2414,9 +2294,9 @@ router.post(['/travel/flight/seat-map', '/flights/seat-map'], async (req, res) =
 
 router.post(['/travel/flight/ssr', '/flights/ssr'], async (req, res) => {
   try {
-    const outboundIp = await getOutboundIp();
-    const data = await flightProvider.ssr(req.body, outboundIp);
-    res.json({ success: true, data });
+    const data = await flightProvider.ssr(req.body);
+    const normalized = normalizeProviderApiResponse(data, 'SSR', 'https://flight.srdvapi.com/v8/rest/SSR');
+    res.json(normalized);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2425,9 +2305,9 @@ router.post(['/travel/flight/ssr', '/flights/ssr'], async (req, res) => {
 // 7. Detailed Hotel Operations: GetHotelInfo, GetHotelRoom
 router.post(['/travel/hotel/info', '/hotels/info'], async (req, res) => {
   try {
-    const outboundIp = await getOutboundIp();
-    const data = await hotelProvider.hotelInfo(req.body, outboundIp);
-    res.json({ success: true, data });
+    const data = await hotelProvider.hotelInfo(req.body);
+    const normalized = normalizeProviderApiResponse(data, 'GetHotelInfo', 'https://hotel.srdvapi.com/v8/rest/GetHotelInfo');
+    res.json(normalized);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2435,9 +2315,9 @@ router.post(['/travel/hotel/info', '/hotels/info'], async (req, res) => {
 
 router.post(['/travel/hotel/room', '/hotels/room'], async (req, res) => {
   try {
-    const outboundIp = await getOutboundIp();
-    const data = await hotelProvider.hotelRoom(req.body, outboundIp);
-    res.json({ success: true, data });
+    const data = await hotelProvider.hotelRoom(req.body);
+    const normalized = normalizeProviderApiResponse(data, 'GetHotelRoom', 'https://hotel.srdvapi.com/v8/rest/GetHotelRoom');
+    res.json(normalized);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2447,7 +2327,8 @@ router.post(['/travel/hotel/room', '/hotels/room'], async (req, res) => {
 router.post(['/travel/bus/boarding-points', '/buses/boarding-points'], async (req, res) => {
   try {
     const data = await busProvider.boardingPointDetails(req.body);
-    res.json({ success: true, data });
+    const normalized = normalizeProviderApiResponse(data, 'GetBoardingPointDetails', 'https://bus.srdvapi.com/v9/rest/GetBoardingPointDetails');
+    res.json(normalized);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2456,7 +2337,8 @@ router.post(['/travel/bus/boarding-points', '/buses/boarding-points'], async (re
 router.post(['/travel/bus/seat-layout', '/buses/seat-layout'], async (req, res) => {
   try {
     const data = await busProvider.seatLayout(req.body);
-    res.json({ success: true, data });
+    const normalized = normalizeProviderApiResponse(data, 'GetSeatLayOut', 'https://bus.srdvapi.com/v9/rest/GetSeatLayOut');
+    res.json(normalized);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2465,7 +2347,8 @@ router.post(['/travel/bus/seat-layout', '/buses/seat-layout'], async (req, res) 
 router.post(['/travel/bus/block', '/buses/block'], async (req, res) => {
   try {
     const data = await busProvider.block(req.body);
-    res.json({ success: true, data });
+    const normalized = normalizeProviderApiResponse(data, 'Block', 'https://bus.srdvapi.com/v9/rest/Block');
+    res.json(normalized);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

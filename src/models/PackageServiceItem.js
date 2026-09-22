@@ -18,7 +18,7 @@ const PackageServiceItem = sequelize.define(
       allowNull: false
     },
     serviceType: {
-      type: DataTypes.ENUM('FLIGHT', 'HOTEL', 'BUS', 'CAR'),
+      type: DataTypes.STRING,
       allowNull: false
     },
     status: {

@@ -595,6 +595,81 @@ export default function PoliciesForm({
     showToast('Reset policies to standard agency defaults.', 'info');
   };
 
+  // Auto-sync inclusions & supplier policies directly from itinerary services
+  const handleSyncFromServices = () => {
+    const days = packageData?.days || [];
+    const serviceInclusions = [];
+    const hotelPolicies = [];
+    const flightPolicies = [];
+
+    days.forEach((day) => {
+      (day.services || []).forEach((svc) => {
+        if (!svc.selected && svc.selected !== undefined) return;
+        if (svc.type === 'hotel') {
+          const name = svc.data?.name || 'Hotel accommodation';
+          const room = svc.data?.room || svc.data?.roomTypeName || 'Deluxe Room';
+          const meal = svc.data?.meal || 'Breakfast Included';
+          const nights = svc.data?.nights || 1;
+          serviceInclusions.push(`${nights} Night(s) at ${name} (${room}) with ${meal}`);
+          if (svc.data?.cancellationPolicy) {
+            hotelPolicies.push(`${name}: ${svc.data.cancellationPolicy}`);
+          }
+        } else if (svc.type === 'flight') {
+          const airline = svc.data?.airline || 'Commercial Airline';
+          const route = `${svc.data?.from || svc.data?.origin || 'Origin'} to ${svc.data?.to || svc.data?.destination || 'Destination'}`;
+          const flightNum = svc.data?.flightNumber ? `(${svc.data.flightNumber})` : '';
+          const bag = svc.data?.baggage || 'Cabin & Check-in Baggage included as per airline policy';
+          serviceInclusions.push(`Flight travel: ${airline} ${flightNum} - ${route} [${bag}]`);
+          if (svc.data?.refundable !== undefined) {
+            flightPolicies.push(`${airline} ${flightNum}: ${svc.data.refundable ? 'Refundable ticket subject to airline terms' : 'Non-refundable flight fare'}`);
+          }
+        } else if (svc.type === 'cab') {
+          const veh = svc.data?.vehicle || svc.data?.category || 'Dedicated Cab';
+          serviceInclusions.push(`Private AC ${veh} for transfers and itinerary sightseeing (driver allowance, tolls & parking included)`);
+        } else if (svc.type === 'bus') {
+          const op = svc.data?.operator || 'Volvo Bus';
+          const route = `${svc.data?.from || 'Origin'} to ${svc.data?.to || 'Destination'}`;
+          serviceInclusions.push(`Intercity Bus travel with ${op} (${route})`);
+        } else if (svc.type === 'sightseeing') {
+          (svc.data?.items || []).forEach((item) => {
+            if (item.name) serviceInclusions.push(`Sightseeing tour: ${item.name}`);
+          });
+        } else if (svc.type === 'activity') {
+          (svc.data?.items || []).forEach((item) => {
+            if (item.name) serviceInclusions.push(`Activity pass: ${item.name}`);
+          });
+        }
+      });
+    });
+
+    if (serviceInclusions.length === 0) {
+      showToast('No active services found in itinerary to sync. Add services in Day-by-Day builder first.', 'info');
+      return;
+    }
+
+    const mergedInclusions = Array.from(new Set([...serviceInclusions, ...DEFAULT_INCLUSIONS]));
+
+    let updatedNotes = cancellationNotes;
+    if (hotelPolicies.length > 0 || flightPolicies.length > 0) {
+      const extraNotes = [...hotelPolicies, ...flightPolicies].slice(0, 3).join('. ');
+      if (!updatedNotes.includes(extraNotes)) {
+        updatedNotes = `${updatedNotes} Supplier Specifics: ${extraNotes}.`;
+      }
+    }
+
+    setPackageData((prev) => ({
+      ...prev,
+      inclusions: mergedInclusions,
+      cancellationPolicy: {
+        ...(prev.cancellationPolicy || {}),
+        rules: prev.cancellationPolicy?.rules || DEFAULT_CANCELLATION_RULES,
+        notes: updatedNotes
+      }
+    }));
+
+    showToast(`Synced ${serviceInclusions.length} real service inclusion(s) from itinerary!`, 'success');
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12 animate-in fade-in duration-200">
       {/* =====================================================================
@@ -613,7 +688,16 @@ export default function PoliciesForm({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-end md:self-auto">
+        <div className="flex items-center gap-2.5 self-end md:self-auto flex-wrap">
+          <button
+            type="button"
+            onClick={handleSyncFromServices}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-50 border border-orange-200 hover:bg-orange-100 text-xs font-semibold text-orange-700 transition cursor-pointer shadow-2xs"
+            title="Auto-extract inclusions and cancellation terms directly from booked/selected hotels, flights & cabs"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-orange-600" />
+            <span>Sync from Services</span>
+          </button>
           <button
             type="button"
             onClick={handleResetToDefaults}

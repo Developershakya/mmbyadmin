@@ -1,8 +1,9 @@
 import { logApiCall } from '../auditLogger.js';
 import { resolveBusCity } from '../../lib/srdv/cityMappings.js';
 import { DummyBusBookingProvider, DummyCancellationProvider } from './dummy/dummyBookingProvider.js';
+import { normalizeSrdvContext } from '../srdvContext.js';
 
-const BUS_API_URL = process.env.SRDV_BUS_URL || process.env.BUS_API_URL || 'https://bus.srdvapi.com/v5/rest';
+const BUS_API_URL = process.env.SRDV_BUS_URL || process.env.BUS_API_URL || 'https://bus.srdvapi.com/v9/rest';
 const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || '180189';
 const SRDV_USERNAME = process.env.SRDV_USERNAME || 'MakeMy91';
 const SRDV_PASSWORD = process.env.SRDV_PASSWORD || 'shakya@9811';
@@ -149,48 +150,47 @@ export const busProvider = {
   },
 
   async boardingPointDetails(params = {}) {
-    const { traceId, resultIndex = '0' } = params;
-
+    const ctx = normalizeSrdvContext(params);
     const payload = {
       ClientId: SRDV_CLIENT_ID,
       UserName: SRDV_USERNAME,
       Password: SRDV_PASSWORD,
-      TraceId: String(traceId),
-      ResultIndex: String(resultIndex)
+      TraceId: String(ctx.traceId),
+      ResultIndex: String(ctx.resultIndex)
     };
 
-    return await callSrdvBusEndpoint('GetBoardingPointDetails', payload, 'GetBoardingPointDetails', traceId);
+    return await callSrdvBusEndpoint('GetBoardingPointDetails', payload, 'GetBoardingPointDetails', ctx.traceId);
   },
 
   async seatLayout(params = {}) {
-    const { traceId, resultIndex = '0' } = params;
-
+    const ctx = normalizeSrdvContext(params);
     const payload = {
       ClientId: SRDV_CLIENT_ID,
       UserName: SRDV_USERNAME,
       Password: SRDV_PASSWORD,
-      TraceId: String(traceId),
-      ResultIndex: String(resultIndex)
+      TraceId: String(ctx.traceId),
+      ResultIndex: String(ctx.resultIndex)
     };
 
-    return await callSrdvBusEndpoint('GetSeatLayOut', payload, 'GetSeatLayOut', traceId);
+    return await callSrdvBusEndpoint('GetSeatLayOut', payload, 'GetSeatLayOut', ctx.traceId);
   },
 
   async block(params = {}) {
-    const { traceId, resultIndex = '0', passenger = [], boardId = '', dropId = '' } = params;
+    const ctx = normalizeSrdvContext(params);
+    const { passenger = [], boardId = '', dropId = '' } = params;
 
     const payload = {
       ClientId: SRDV_CLIENT_ID,
       UserName: SRDV_USERNAME,
       Password: SRDV_PASSWORD,
-      TraceId: String(traceId),
-      ResultIndex: String(resultIndex),
+      TraceId: String(ctx.traceId),
+      ResultIndex: String(ctx.resultIndex),
       BoardId: String(boardId),
       DropId: String(dropId),
       Passenger: passenger
     };
 
-    return await callSrdvBusEndpoint('Block', payload, 'Block', traceId);
+    return await callSrdvBusEndpoint('Block', payload, 'Block', ctx.traceId);
   },
 
   async book(bookingPayload) {

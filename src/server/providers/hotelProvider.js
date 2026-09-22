@@ -1,6 +1,7 @@
 import { logApiCall } from '../auditLogger.js';
 import { resolveHotelCity } from '../../lib/srdv/cityMappings.js';
 import { DummyHotelBookingProvider, DummyCancellationProvider } from './dummy/dummyBookingProvider.js';
+import { normalizeSrdvContext } from '../srdvContext.js';
 
 const HOTEL_API_URL = process.env.SRDV_HOTEL_URL || process.env.HOTEL_API_URL || 'https://hotel.srdvapi.com/v5/rest';
 const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || '180189';
@@ -164,52 +165,42 @@ export const hotelProvider = {
     return await callSrdvHotelEndpoint('Search', payload, 'Search');
   },
 
-  async hotelInfo(params = {}, endUserIp = '122.161.76.198') {
-    const {
-      traceId,
-      srdvType = '1',
-      srdvIndex = '0',
-      resultIndex = '0',
-      hotelCode
-    } = params;
+  async hotelInfo(params = {}) {
+    const ctx = normalizeSrdvContext(params);
+    const hotelCode = params.hotelCode || ctx.hotelCode;
 
     const payload = {
-      EndUserIp: endUserIp || '122.161.76.198',
+      EndUserIp: '1.1.1.1',
       ClientId: SRDV_CLIENT_ID,
       UserName: SRDV_USERNAME,
       Password: SRDV_PASSWORD,
-      TraceId: String(traceId),
-      SrdvType: String(srdvType),
-      SrdvIndex: String(srdvIndex),
-      ResultIndex: String(resultIndex),
+      TraceId: String(ctx.traceId),
+      SrdvType: String(ctx.srdvType),
+      SrdvIndex: String(ctx.srdvIndex),
+      ResultIndex: String(ctx.resultIndex),
       HotelCode: String(hotelCode)
     };
 
-    return await callSrdvHotelEndpoint('GetHotelInfo', payload, 'GetHotelInfo', traceId);
+    return await callSrdvHotelEndpoint('GetHotelInfo', payload, 'GetHotelInfo', ctx.traceId);
   },
 
-  async hotelRoom(params = {}, endUserIp = '122.161.76.198') {
-    const {
-      traceId,
-      srdvType = '1',
-      srdvIndex = '0',
-      resultIndex = '0',
-      hotelCode
-    } = params;
+  async hotelRoom(params = {}) {
+    const ctx = normalizeSrdvContext(params);
+    const hotelCode = params.hotelCode || ctx.hotelCode;
 
     const payload = {
-      EndUserIp: endUserIp || '122.161.76.198',
+      EndUserIp: '1.1.1.1',
       ClientId: SRDV_CLIENT_ID,
       UserName: SRDV_USERNAME,
       Password: SRDV_PASSWORD,
-      TraceId: String(traceId),
-      SrdvType: String(srdvType),
-      SrdvIndex: String(srdvIndex),
-      ResultIndex: String(resultIndex),
+      TraceId: String(ctx.traceId),
+      SrdvType: String(ctx.srdvType),
+      SrdvIndex: String(ctx.srdvIndex),
+      ResultIndex: String(ctx.resultIndex),
       HotelCode: String(hotelCode)
     };
 
-    return await callSrdvHotelEndpoint('GetHotelRoom', payload, 'GetHotelRoom', traceId);
+    return await callSrdvHotelEndpoint('GetHotelRoom', payload, 'GetHotelRoom', ctx.traceId);
   },
 
   async book(bookingPayload) {

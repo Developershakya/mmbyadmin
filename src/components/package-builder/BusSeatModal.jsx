@@ -15,6 +15,7 @@ import {
   fetchBusBoardingDetailsApi,
   blockBusSeatsApi
 } from '../../lib/packageBuilder/searchApi.js';
+import { normalizeSrdvContext } from '../../lib/srdvContext.js';
 
 const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
 
@@ -46,15 +47,10 @@ export default function BusSeatModal({
     const loadBusDetails = async () => {
       setLoading(true);
       try {
+        const srdvCtx = normalizeSrdvContext(bus);
         const [layoutRes, bpRes] = await Promise.allSettled([
-          fetchBusSeatLayoutApi({
-            traceId: bus.traceId || `TRC-${Date.now()}`,
-            resultIndex: bus.resultIndex || '0'
-          }),
-          fetchBusBoardingDetailsApi({
-            traceId: bus.traceId || `TRC-${Date.now()}`,
-            resultIndex: bus.resultIndex || '0'
-          })
+          fetchBusSeatLayoutApi(srdvCtx),
+          fetchBusBoardingDetailsApi(srdvCtx)
         ]);
 
         if (!isMounted) return;
@@ -68,23 +64,18 @@ export default function BusSeatModal({
           setLowerSeats(rawSeats.filter((s) => !s.IsUpper));
           setUpperSeats(rawSeats.filter((s) => s.IsUpper));
         } else {
-          // Generate default Volvo Multi-Axle sleeper & seater layout
-          const generated = generateDefaultBusLayout(bus.fare || 1400);
-          setLowerSeats(generated.lower);
-          setUpperSeats(generated.upper);
+          setLowerSeats([]);
+          setUpperSeats([]);
         }
 
         // Process Boarding & Dropping points
         const bpData = bpRes.status === 'fulfilled' ? bpRes.value : null;
-        const bPoints = bpData?.BoardingPoints || [
-          { CityPointIndex: 'BP1', CityPointName: 'ISBT Kashmiri Gate (Counter 18)', CityPointTime: '21:00', CityPointLocation: 'Metro Gate 1, Delhi' },
-          { CityPointIndex: 'BP2', CityPointName: 'Majnu Ka Tilla (HP Petrol Pump)', CityPointTime: '21:30', CityPointLocation: 'Outer Ring Road, Delhi' },
-          { CityPointIndex: 'BP3', CityPointName: 'Karnal Bypass (Near GT Road)', CityPointTime: '22:15', CityPointLocation: 'Karnal Bypass, Delhi' }
-        ];
-        const dPoints = bpData?.DroppingPoints || [
-          { CityPointIndex: 'DP1', CityPointName: 'Private Bus Stand, Manali', CityPointTime: '08:30', CityPointLocation: 'Mall Road, Manali' },
-          { CityPointIndex: 'DP2', CityPointName: 'Volvo Bus Stand, Patlikuhl', CityPointTime: '08:00', CityPointLocation: 'Patlikuhl Highway, Manali' }
-        ];
+        const bPoints = Array.isArray(bpData?.BoardingPoints)
+          ? bpData.BoardingPoints
+          : (Array.isArray(bus.boardingPoints) ? bus.boardingPoints : []);
+        const dPoints = Array.isArray(bpData?.DroppingPoints)
+          ? bpData.DroppingPoints
+          : (Array.isArray(bus.droppingPoints) ? bus.droppingPoints : []);
 
         setBoardingPoints(bPoints);
         setDroppingPoints(dPoints);
@@ -96,11 +87,12 @@ export default function BusSeatModal({
           setSelectedDroppingPoint(dPoints[0]);
         }
       } catch (err) {
-        console.warn('Bus seat layout notice, initialized calibrated Volvo layout:', err.message);
+        console.warn('Bus seat layout notice:', err.message);
         if (isMounted) {
-          const generated = generateDefaultBusLayout(bus.fare || 1400);
-          setLowerSeats(generated.lower);
-          setUpperSeats(generated.upper);
+          setLowerSeats([]);
+          setUpperSeats([]);
+          setBoardingPoints(Array.isArray(bus.boardingPoints) ? bus.boardingPoints : []);
+          setDroppingPoints(Array.isArray(bus.droppingPoints) ? bus.droppingPoints : []);
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -113,30 +105,6 @@ export default function BusSeatModal({
       isMounted = false;
     };
   }, [isOpen, bus]);
-
-  const generateDefaultBusLayout = (baseFare = 1400) => {
-    const lower = [];
-    const upper = [];
-    const fare = Number(baseFare);
-
-    for (let r = 1; r <= 6; r++) {
-      // Lower Deck (Seater 2x1)
-      lower.push(
-        { SeatNo: `L${r}A`, Row: r, Column: 1, IsUpper: false, IsSleeper: false, Fare: fare, IsBooked: r === 2, IsLadies: false },
-        { SeatNo: `L${r}B`, Row: r, Column: 2, IsUpper: false, IsSleeper: false, Fare: fare, IsBooked: false, IsLadies: r === 1 },
-        { SeatNo: `L${r}C`, Row: r, Column: 4, IsUpper: false, IsSleeper: false, Fare: fare, IsBooked: r === 4, IsLadies: false }
-      );
-
-      // Upper Deck (Sleeper 2x1)
-      upper.push(
-        { SeatNo: `U${r}A`, Row: r, Column: 1, IsUpper: true, IsSleeper: true, Fare: fare + 300, IsBooked: r === 1, IsLadies: false },
-        { SeatNo: `U${r}B`, Row: r, Column: 2, IsUpper: true, IsSleeper: true, Fare: fare + 300, IsBooked: false, IsLadies: r === 3 },
-        { SeatNo: `U${r}C`, Row: r, Column: 4, IsUpper: true, IsSleeper: true, Fare: fare + 300, IsBooked: false, IsLadies: false }
-      );
-    }
-
-    return { lower, upper };
-  };
 
   const handleToggleSeat = (seat) => {
     if (seat.IsBooked) return;
@@ -251,109 +219,119 @@ export default function BusSeatModal({
                 </div>
               </div>
 
-              {/* Bus Coach Layout Graphic */}
-              <div className="max-w-xs mx-auto border-2 border-slate-300 rounded-3xl p-4 bg-slate-100 shadow-inner space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <span>Back</span>
-                  <span>Driver Cabin 🛞</span>
+              {/* Bus Coach Layout Graphic or Empty State */}
+              {currentDeckSeats.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                  <Bus className="w-10 h-10 text-slate-400 mx-auto" />
+                  <h4 className="font-bold text-slate-800 text-sm">Seat Layout Unavailable</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Live seat layout is not provided by the bus operator for this service. Seats will be allocated directly by the operator upon boarding.
+                  </p>
                 </div>
+              ) : (
+                <div className="max-w-xs mx-auto border-2 border-slate-300 rounded-3xl p-4 bg-slate-100 shadow-inner space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <span>Back</span>
+                    <span>Driver Cabin 🛞</span>
+                  </div>
 
-                {/* Seats Grid */}
-                <div className="space-y-2.5">
-                  {[1, 2, 3, 4, 5, 6].map((rowNum) => {
-                    const rowSeats = currentDeckSeats.filter((s) => s.Row === rowNum);
-                    const leftSeats = rowSeats.filter((s) => s.Column <= 2);
-                    const rightSeats = rowSeats.filter((s) => s.Column > 2);
+                  {/* Seats Grid */}
+                  <div className="space-y-2.5">
+                    {Array.from(new Set(currentDeckSeats.map((s) => s.Row || 1))).sort((a, b) => a - b).map((rowNum) => {
+                      const rowSeats = currentDeckSeats.filter((s) => (s.Row || 1) === rowNum);
+                      const leftSeats = rowSeats.filter((s) => (s.Column || 1) <= 2);
+                      const rightSeats = rowSeats.filter((s) => (s.Column || 1) > 2);
 
-                    return (
-                      <div key={rowNum} className="flex items-center justify-between gap-1">
-                        {/* Left Side (2 seats) */}
-                        <div className="flex gap-2">
-                          {leftSeats.map((seat) => {
-                            const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
-                            const isSleeper = seat.IsSleeper;
-                            const tooltipText = `Seat ${seat.SeatNo} • ${inr(seat.Fare)}${seat.IsLadies ? ' • Ladies' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
+                      return (
+                        <div key={rowNum} className="flex items-center justify-between gap-1">
+                          {/* Left Side (2 seats) */}
+                          <div className="flex gap-2">
+                            {leftSeats.map((seat) => {
+                              const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
+                              const isSleeper = seat.IsSleeper;
+                              const tooltipText = `Seat ${seat.SeatNo} • ${inr(seat.Fare)}${seat.IsLadies ? ' • Ladies' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
 
-                            return (
-                              <div key={seat.SeatNo} className="relative group">
-                                <button
-                                  type="button"
-                                  disabled={seat.IsBooked}
-                                  onClick={() => handleToggleSeat(seat)}
-                                  className={`rounded-lg font-bold text-[10px] flex flex-col items-center justify-center transition cursor-pointer ${
-                                    isSleeper ? 'w-10 h-14' : 'w-9 h-9'
-                                  } ${
-                                    seat.IsBooked
-                                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                      : isSel
-                                      ? 'bg-emerald-600 text-white shadow-xs'
-                                      : seat.IsLadies
-                                      ? 'bg-rose-50 border border-rose-300 text-rose-800 hover:bg-rose-100'
-                                      : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
-                                  }`}
-                                >
-                                  {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo}
-                                  <span className="text-[8px] font-normal opacity-80 mt-0.5">
-                                    {inr(seat.Fare)}
-                                  </span>
-                                </button>
-                                {/* Instant zero-delay custom tooltip */}
-                                <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
-                                  <span>{tooltipText}</span>
-                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                              return (
+                                <div key={seat.SeatNo} className="relative group">
+                                  <button
+                                    type="button"
+                                    disabled={seat.IsBooked}
+                                    onClick={() => handleToggleSeat(seat)}
+                                    className={`rounded-lg font-bold text-[10px] flex flex-col items-center justify-center transition cursor-pointer ${
+                                      isSleeper ? 'w-10 h-14' : 'w-9 h-9'
+                                    } ${
+                                      seat.IsBooked
+                                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                        : isSel
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : seat.IsLadies
+                                        ? 'bg-rose-50 border border-rose-300 text-rose-800 hover:bg-rose-100'
+                                        : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
+                                    }`}
+                                  >
+                                    {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo}
+                                    <span className="text-[8px] font-normal opacity-80 mt-0.5">
+                                      {inr(seat.Fare)}
+                                    </span>
+                                  </button>
+                                  {/* Instant zero-delay custom tooltip */}
+                                  <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
+                                    <span>{tooltipText}</span>
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                              );
+                            })}
+                          </div>
 
-                        {/* Gangway / Aisle */}
-                        <div className="w-6 text-center text-[9px] font-mono text-slate-300">|</div>
+                          {/* Gangway / Aisle */}
+                          <div className="w-6 text-center text-[9px] font-mono text-slate-300">|</div>
 
-                        {/* Right Side (Single seat) */}
-                        <div className="flex gap-2">
-                          {rightSeats.map((seat) => {
-                            const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
-                            const isSleeper = seat.IsSleeper;
-                            const tooltipText = `Seat ${seat.SeatNo} • ${inr(seat.Fare)}${seat.IsLadies ? ' • Ladies' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
+                          {/* Right Side (Single seat) */}
+                          <div className="flex gap-2">
+                            {rightSeats.map((seat) => {
+                              const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
+                              const isSleeper = seat.IsSleeper;
+                              const tooltipText = `Seat ${seat.SeatNo} • ${inr(seat.Fare)}${seat.IsLadies ? ' • Ladies' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
 
-                            return (
-                              <div key={seat.SeatNo} className="relative group">
-                                <button
-                                  type="button"
-                                  disabled={seat.IsBooked}
-                                  onClick={() => handleToggleSeat(seat)}
-                                  className={`rounded-lg font-bold text-[10px] flex flex-col items-center justify-center transition cursor-pointer ${
-                                    isSleeper ? 'w-10 h-14' : 'w-9 h-9'
-                                  } ${
-                                    seat.IsBooked
-                                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                      : isSel
-                                      ? 'bg-emerald-600 text-white shadow-xs'
-                                      : seat.IsLadies
-                                      ? 'bg-rose-50 border border-rose-300 text-rose-800 hover:bg-rose-100'
-                                      : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
-                                  }`}
-                                >
-                                  {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo}
-                                  <span className="text-[8px] font-normal opacity-80 mt-0.5">
-                                    {inr(seat.Fare)}
-                                  </span>
-                                </button>
-                                {/* Instant zero-delay custom tooltip */}
-                                <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
-                                  <span>{tooltipText}</span>
-                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                              return (
+                                <div key={seat.SeatNo} className="relative group">
+                                  <button
+                                    type="button"
+                                    disabled={seat.IsBooked}
+                                    onClick={() => handleToggleSeat(seat)}
+                                    className={`rounded-lg font-bold text-[10px] flex flex-col items-center justify-center transition cursor-pointer ${
+                                      isSleeper ? 'w-10 h-14' : 'w-9 h-9'
+                                    } ${
+                                      seat.IsBooked
+                                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                        : isSel
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : seat.IsLadies
+                                        ? 'bg-rose-50 border border-rose-300 text-rose-800 hover:bg-rose-100'
+                                        : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
+                                    }`}
+                                  >
+                                    {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo}
+                                    <span className="text-[8px] font-normal opacity-80 mt-0.5">
+                                      {inr(seat.Fare)}
+                                    </span>
+                                  </button>
+                                  {/* Instant zero-delay custom tooltip */}
+                                  <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
+                                    <span>{tooltipText}</span>
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Boarding and Dropping Points Selectors */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
@@ -363,20 +341,26 @@ export default function BusSeatModal({
                     <MapPin className="w-3.5 h-3.5 text-blue-600" />
                     <span>Boarding Point</span>
                   </label>
-                  <select
-                    value={selectedBoardingPoint?.CityPointIndex || ''}
-                    onChange={(e) => {
-                      const found = boardingPoints.find((p) => p.CityPointIndex === e.target.value);
-                      setSelectedBoardingPoint(found);
-                    }}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  >
-                    {boardingPoints.map((bp) => (
-                      <option key={bp.CityPointIndex} value={bp.CityPointIndex}>
-                        {bp.CityPointTime} - {bp.CityPointName}
-                      </option>
-                    ))}
-                  </select>
+                  {boardingPoints.length > 0 ? (
+                    <select
+                      value={selectedBoardingPoint?.CityPointIndex || ''}
+                      onChange={(e) => {
+                        const found = boardingPoints.find((p) => p.CityPointIndex === e.target.value);
+                        setSelectedBoardingPoint(found);
+                      }}
+                      className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    >
+                      {boardingPoints.map((bp) => (
+                        <option key={bp.CityPointIndex} value={bp.CityPointIndex}>
+                          {bp.CityPointTime ? `${bp.CityPointTime} - ` : ''}{bp.CityPointName}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-xs italic">
+                      Pickup: {bus?.origin || 'Main origin terminal'}
+                    </div>
+                  )}
                 </div>
 
                 {/* Dropping Point */}
@@ -385,20 +369,26 @@ export default function BusSeatModal({
                     <MapPin className="w-3.5 h-3.5 text-emerald-600" />
                     <span>Dropping Point</span>
                   </label>
-                  <select
-                    value={selectedDroppingPoint?.CityPointIndex || ''}
-                    onChange={(e) => {
-                      const found = droppingPoints.find((p) => p.CityPointIndex === e.target.value);
-                      setSelectedDroppingPoint(found);
-                    }}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  >
-                    {droppingPoints.map((dp) => (
-                      <option key={dp.CityPointIndex} value={dp.CityPointIndex}>
-                        {dp.CityPointTime} - {dp.CityPointName}
-                      </option>
-                    ))}
-                  </select>
+                  {droppingPoints.length > 0 ? (
+                    <select
+                      value={selectedDroppingPoint?.CityPointIndex || ''}
+                      onChange={(e) => {
+                        const found = droppingPoints.find((p) => p.CityPointIndex === e.target.value);
+                        setSelectedDroppingPoint(found);
+                      }}
+                      className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    >
+                      {droppingPoints.map((dp) => (
+                        <option key={dp.CityPointIndex} value={dp.CityPointIndex}>
+                          {dp.CityPointTime ? `${dp.CityPointTime} - ` : ''}{dp.CityPointName}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-xs italic">
+                      Drop-off: {bus?.destination || 'Main destination stand'}
+                    </div>
+                  )}
                 </div>
               </div>
             </>

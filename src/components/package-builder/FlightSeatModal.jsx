@@ -8,9 +8,12 @@ import {
   AlertCircle,
   Loader2,
   Info,
-  User
+  User,
+  Armchair,
+  Luggage
 } from 'lucide-react';
 import { fetchSeatMapApi, fetchSSRApi } from '../../lib/packageBuilder/searchApi.js';
+import { normalizeSrdvContext } from '../../lib/srdvContext.js';
 
 const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
 
@@ -42,51 +45,45 @@ export default function FlightSeatModal({
     const loadSeatAndSSR = async () => {
       setLoading(true);
       try {
+        const srdvCtx = normalizeSrdvContext(flight);
         const [seatRes, ssrRes] = await Promise.allSettled([
-          fetchSeatMapApi({
-            traceId: flight.traceId || `TRC-${Date.now()}`,
-            resultIndex: flight.resultIndex || '0'
-          }),
-          fetchSSRApi({
-            traceId: flight.traceId || `TRC-${Date.now()}`,
-            resultIndex: flight.resultIndex || '0'
-          })
+          fetchSeatMapApi(srdvCtx),
+          fetchSSRApi(srdvCtx)
         ]);
 
         if (!isMounted) return;
 
         // Process seats
+        const seatVal = seatRes.status === 'fulfilled' ? (seatRes.value?.data || seatRes.value) : null;
         const rawSeats =
-          seatRes.status === 'fulfilled' &&
-          seatRes.value?.SeatMap?.Segments?.[0]?.Rows;
+          seatVal?.SeatMap?.Segments?.[0]?.Rows ||
+          seatVal?.Response?.SeatMap?.Segments?.[0]?.Rows ||
+          seatVal?.SeatLayout?.Segments?.[0]?.Rows ||
+          seatVal?.Segments?.[0]?.Rows ||
+          [];
 
         if (Array.isArray(rawSeats) && rawSeats.length > 0) {
           setSeatGrid(rawSeats);
         } else {
-          // Generate 12 realistic aircraft rows (A, B, C | D, E, F)
-          setSeatGrid(generateDefaultSeatMap());
+          setSeatGrid([]);
         }
 
         // Process SSR
-        const ssrData = ssrRes.status === 'fulfilled' ? ssrRes.value : null;
-        const bags = ssrData?.Baggage || [
-          { Code: 'BAG5', Description: 'Additional 5 Kg', Weight: 5, Price: 1500 },
-          { Code: 'BAG10', Description: 'Additional 10 Kg', Weight: 10, Price: 3000 },
-          { Code: 'BAG15', Description: 'Additional 15 Kg', Weight: 15, Price: 4500 }
-        ];
-        const meals = ssrData?.Meal || [
-          { Code: 'VML', Description: 'Grilled Veg Sandwich & Juice', Price: 250 },
-          { Code: 'NVML', Description: 'Chicken Biryani Box', Price: 400 },
-          { Code: 'JML', Description: 'Jain Meal Platter', Price: 300 },
-          { Code: 'FRML', Description: 'Fresh Seasonal Fruit Bowl', Price: 200 }
-        ];
+        const ssrData = ssrRes.status === 'fulfilled' ? (ssrRes.value?.data || ssrRes.value) : null;
+        const rawBags = ssrData?.Baggage || ssrData?.Response?.Baggage || ssrData?.BaggageDynamic || ssrData?.Response?.BaggageDynamic || [];
+        const rawMeals = ssrData?.Meal || ssrData?.Response?.Meal || ssrData?.MealDynamic || ssrData?.Response?.MealDynamic || [];
+
+        const bags = (Array.isArray(rawBags) ? rawBags.flat(Infinity) : []).filter(Boolean);
+        const meals = (Array.isArray(rawMeals) ? rawMeals.flat(Infinity) : []).filter(Boolean);
 
         setBaggageList(bags);
         setMealList(meals);
       } catch (err) {
-        console.warn('Seat/SSR fetch notice, initialized default layout:', err.message);
+        console.warn('Seat/SSR fetch notice:', err.message);
         if (isMounted) {
-          setSeatGrid(generateDefaultSeatMap());
+          setSeatGrid([]);
+          setBaggageList([]);
+          setMealList([]);
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -99,35 +96,6 @@ export default function FlightSeatModal({
       isMounted = false;
     };
   }, [isOpen, flight]);
-
-  const generateDefaultSeatMap = () => {
-    const rows = [];
-    const cols = ['A', 'B', 'C', 'D', 'E', 'F'];
-    for (let r = 1; r <= 10; r++) {
-      const seats = cols.map((col) => {
-        const seatNo = `${r}${col}`;
-        const isWindow = col === 'A' || col === 'F';
-        const isAisle = col === 'C' || col === 'D';
-        const isBooked = (r * 7 + col.charCodeAt(0)) % 5 === 0;
-        let price = 0;
-        if (r === 1) price = 450; // extra legroom
-        else if (isWindow || isAisle) price = 250;
-        else price = 0; // free middle seat
-
-        return {
-          SeatNo: seatNo,
-          Class: 'Economy',
-          Price: price,
-          IsBooked: isBooked,
-          IsWindow: isWindow,
-          IsAisle: isAisle,
-          IsLegroom: r === 1
-        };
-      });
-      rows.push({ RowNumber: r, Seats: seats });
-    }
-    return rows;
-  };
 
   const handleToggleSeat = (seat) => {
     if (seat.IsBooked) return;
@@ -284,93 +252,103 @@ export default function FlightSeatModal({
                     </div>
                   </div>
 
-                  {/* Fuselage Container */}
-                  <div className="max-w-xs mx-auto border-2 border-slate-300 rounded-t-[50px] rounded-b-2xl p-4 bg-slate-100 shadow-inner">
-                    <div className="text-center pb-3 text-[10px] uppercase font-bold text-slate-400 tracking-widest">
-                      Cockpit / Front
+                  {/* Fuselage Container or Real Empty State */}
+                  {seatGrid.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                      <Armchair className="w-10 h-10 text-slate-400 mx-auto" />
+                      <h4 className="font-bold text-slate-800 text-sm">Seat Selection Unavailable</h4>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        Live seat map is not provided by the airline for this specific flight or fare category. Seats will be allotted during airline web check-in or at airport counters.
+                      </p>
                     </div>
+                  ) : (
+                    <div className="max-w-xs mx-auto border-2 border-slate-300 rounded-t-[50px] rounded-b-2xl p-4 bg-slate-100 shadow-inner">
+                      <div className="text-center pb-3 text-[10px] uppercase font-bold text-slate-400 tracking-widest">
+                        Cockpit / Front
+                      </div>
 
-                    <div className="space-y-2">
-                      {seatGrid.map((row) => (
-                        <div key={row.RowNumber} className="flex items-center justify-between gap-1">
-                          <span className="text-[10px] font-mono text-slate-400 w-4 text-center">
-                            {row.RowNumber}
-                          </span>
+                      <div className="space-y-2">
+                        {seatGrid.map((row) => (
+                          <div key={row.RowNumber} className="flex items-center justify-between gap-1">
+                            <span className="text-[10px] font-mono text-slate-400 w-4 text-center">
+                              {row.RowNumber}
+                            </span>
 
-                          {/* Left 3 seats (A, B, C) */}
-                          <div className="flex gap-1">
-                            {row.Seats.slice(0, 3).map((seat) => {
-                              const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
-                              const isLegroom = row.RowNumber <= 2 || seat.SeatType === 'ExtraLegroom';
-                              const tooltipText = `${seat.SeatNo} • ${seat.Price ? `₹${seat.Price}` : 'Free'}${isLegroom ? ' • Legroom' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
-                              return (
-                                <div key={seat.SeatNo} className="relative group">
-                                  <button
-                                    type="button"
-                                    disabled={seat.IsBooked}
-                                    onClick={() => handleToggleSeat(seat)}
-                                    className={`w-7 h-7 rounded-md text-[10px] font-bold flex flex-col items-center justify-center cursor-pointer ${
-                                      seat.IsBooked
-                                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                        : isSel
-                                        ? 'bg-blue-600 text-white shadow-xs'
-                                        : seat.Price > 0
-                                        ? 'bg-blue-50 border border-blue-400 text-blue-900 hover:bg-blue-100'
-                                        : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
-                                    }`}
-                                  >
-                                    {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo.slice(-1)}
-                                  </button>
-                                  {/* Instant zero-delay custom tooltip */}
-                                  <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
-                                    <span>{tooltipText}</span>
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                            {/* Left 3 seats (A, B, C) */}
+                            <div className="flex gap-1">
+                              {row.Seats.slice(0, 3).map((seat) => {
+                                const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
+                                const isLegroom = row.RowNumber <= 2 || seat.SeatType === 'ExtraLegroom';
+                                const tooltipText = `${seat.SeatNo} • ${seat.Price ? `₹${seat.Price}` : 'Free'}${isLegroom ? ' • Legroom' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
+                                return (
+                                  <div key={seat.SeatNo} className="relative group">
+                                    <button
+                                      type="button"
+                                      disabled={seat.IsBooked}
+                                      onClick={() => handleToggleSeat(seat)}
+                                      className={`w-7 h-7 rounded-md text-[10px] font-bold flex flex-col items-center justify-center cursor-pointer ${
+                                        seat.IsBooked
+                                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                          : isSel
+                                          ? 'bg-blue-600 text-white shadow-xs'
+                                          : seat.Price > 0
+                                          ? 'bg-blue-50 border border-blue-400 text-blue-900 hover:bg-blue-100'
+                                          : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
+                                      }`}
+                                    >
+                                      {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo.slice(-1)}
+                                    </button>
+                                    {/* Instant zero-delay custom tooltip */}
+                                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
+                                      <span>{tooltipText}</span>
+                                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                                );
+                              })}
+                            </div>
 
-                          {/* Center Aisle */}
-                          <div className="w-5 text-center text-[9px] font-mono text-slate-300">|</div>
+                            {/* Center Aisle */}
+                            <div className="w-5 text-center text-[9px] font-mono text-slate-300">|</div>
 
-                          {/* Right 3 seats (D, E, F) */}
-                          <div className="flex gap-1">
-                            {row.Seats.slice(3, 6).map((seat) => {
-                              const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
-                              const isLegroom = row.RowNumber <= 2 || seat.SeatType === 'ExtraLegroom';
-                              const tooltipText = `${seat.SeatNo} • ${seat.Price ? `₹${seat.Price}` : 'Free'}${isLegroom ? ' • Legroom' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
-                              return (
-                                <div key={seat.SeatNo} className="relative group">
-                                  <button
-                                    type="button"
-                                    disabled={seat.IsBooked}
-                                    onClick={() => handleToggleSeat(seat)}
-                                    className={`w-7 h-7 rounded-md text-[10px] font-bold flex flex-col items-center justify-center cursor-pointer ${
-                                      seat.IsBooked
-                                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                        : isSel
-                                        ? 'bg-blue-600 text-white shadow-xs'
-                                        : seat.Price > 0
-                                        ? 'bg-blue-50 border border-blue-400 text-blue-900 hover:bg-blue-100'
-                                        : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
-                                    }`}
-                                  >
-                                    {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo.slice(-1)}
-                                  </button>
-                                  {/* Instant zero-delay custom tooltip */}
-                                  <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
-                                    <span>{tooltipText}</span>
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                            {/* Right 3 seats (D, E, F) */}
+                            <div className="flex gap-1">
+                              {row.Seats.slice(3, 6).map((seat) => {
+                                const isSel = selectedSeats.some((s) => s.SeatNo === seat.SeatNo);
+                                const isLegroom = row.RowNumber <= 2 || seat.SeatType === 'ExtraLegroom';
+                                const tooltipText = `${seat.SeatNo} • ${seat.Price ? `₹${seat.Price}` : 'Free'}${isLegroom ? ' • Legroom' : ''}${seat.IsBooked ? ' • Booked' : ''}`;
+                                return (
+                                  <div key={seat.SeatNo} className="relative group">
+                                    <button
+                                      type="button"
+                                      disabled={seat.IsBooked}
+                                      onClick={() => handleToggleSeat(seat)}
+                                      className={`w-7 h-7 rounded-md text-[10px] font-bold flex flex-col items-center justify-center cursor-pointer ${
+                                        seat.IsBooked
+                                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                          : isSel
+                                          ? 'bg-blue-600 text-white shadow-xs'
+                                          : seat.Price > 0
+                                          ? 'bg-blue-50 border border-blue-400 text-blue-900 hover:bg-blue-100'
+                                          : 'bg-white border border-slate-300 text-slate-800 hover:border-blue-400'
+                                      }`}
+                                    >
+                                      {isSel ? <Check className="w-3.5 h-3.5" /> : seat.SeatNo.slice(-1)}
+                                    </button>
+                                    {/* Instant zero-delay custom tooltip */}
+                                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex group-focus-within:flex z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg items-center gap-1 transition-none">
+                                      <span>{tooltipText}</span>
+                                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -380,39 +358,49 @@ export default function FlightSeatModal({
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5 text-xs text-blue-900">
                     <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                     <p>
-                      Standard ticket includes <strong>15 Kg check-in</strong> and <strong>7 Kg cabin</strong> baggage. Select pre-paid excess baggage below to avoid higher airport rates.
+                      Select optional pre-paid airline excess baggage below to add to your booking.
                     </p>
                   </div>
 
-                  <div className="space-y-2 pt-2">
-                    {baggageList.map((bag) => {
-                      const isSelected = selectedBaggage?.Code === bag.Code;
-                      return (
-                        <div
-                          key={bag.Code}
-                          onClick={() => handleSelectBaggage(bag)}
-                          className={`p-3.5 rounded-xl border transition flex items-center justify-between cursor-pointer ${
-                            isSelected
-                              ? 'bg-blue-50 border-blue-600 shadow-xs'
-                              : 'bg-white border-slate-200 hover:border-blue-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                              isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'
-                            }`}>
-                              {isSelected && <Check className="w-3 h-3" />}
+                  {baggageList.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                      <Luggage className="w-10 h-10 text-slate-400 mx-auto" />
+                      <h4 className="font-bold text-slate-800 text-sm">No baggage/SSR data available</h4>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        Additional pre-paid baggage options are not provided by the airline for this flight.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-2">
+                      {baggageList.map((bag) => {
+                        const isSelected = selectedBaggage?.Code === bag.Code;
+                        return (
+                          <div
+                            key={bag.Code}
+                            onClick={() => handleSelectBaggage(bag)}
+                            className={`p-3.5 rounded-xl border transition flex items-center justify-between cursor-pointer ${
+                              isSelected
+                                ? 'bg-blue-50 border-blue-600 shadow-xs'
+                                : 'bg-white border-slate-200 hover:border-blue-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                                isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'
+                              }`}>
+                                {isSelected && <Check className="w-3 h-3" />}
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-900 text-xs">{bag.Description}</p>
+                                <span className="text-[11px] text-slate-500">Weight: +{bag.Weight} Kg check-in</span>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-bold text-slate-900 text-xs">{bag.Description}</p>
-                              <span className="text-[11px] text-slate-500">Weight: +{bag.Weight} Kg check-in</span>
-                            </div>
+                            <span className="font-bold text-sm text-slate-900">{inr(bag.Price)}</span>
                           </div>
-                          <span className="font-bold text-sm text-slate-900">{inr(bag.Price)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -422,37 +410,47 @@ export default function FlightSeatModal({
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
                     <Utensils className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                     <p>
-                      Pre-order delicious fresh meals &amp; snacks prepared by airline chefs and delivered hot right to your seat.
+                      Pre-order delicious meals and refreshments for your flight.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    {mealList.map((meal) => {
-                      const isSelected = selectedMeals.some((m) => m.Code === meal.Code);
-                      return (
-                        <div
-                          key={meal.Code}
-                          onClick={() => handleToggleMeal(meal)}
-                          className={`p-3 rounded-xl border transition flex items-center justify-between cursor-pointer ${
-                            isSelected
-                              ? 'bg-amber-50/70 border-amber-500 shadow-xs'
-                              : 'bg-white border-slate-200 hover:border-amber-300'
-                          }`}
-                        >
-                          <div className="space-y-0.5">
-                            <p className="font-bold text-slate-900 text-xs">{meal.Description}</p>
-                            <span className="text-xs font-bold text-amber-700">{inr(meal.Price)}</span>
-                          </div>
+                  {mealList.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                      <Utensils className="w-10 h-10 text-slate-400 mx-auto" />
+                      <h4 className="font-bold text-slate-800 text-sm">No meal/SSR data available</h4>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        In-flight meal pre-booking is not supported by the airline for this flight.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                      {mealList.map((meal) => {
+                        const isSelected = selectedMeals.some((m) => m.Code === meal.Code);
+                        return (
+                          <div
+                            key={meal.Code}
+                            onClick={() => handleToggleMeal(meal)}
+                            className={`p-3 rounded-xl border transition flex items-center justify-between cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-50/70 border-amber-500 shadow-xs'
+                                : 'bg-white border-slate-200 hover:border-amber-300'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <p className="font-bold text-slate-900 text-xs">{meal.Description}</p>
+                              <span className="text-xs font-bold text-amber-700">{inr(meal.Price)}</span>
+                            </div>
 
-                          <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                            isSelected ? 'border-amber-600 bg-amber-600 text-white' : 'border-slate-300'
-                          }`}>
-                            {isSelected && <Check className="w-3 h-3" />}
+                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                              isSelected ? 'border-amber-600 bg-amber-600 text-white' : 'border-slate-300'
+                            }`}>
+                              {isSelected && <Check className="w-3 h-3" />}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </>

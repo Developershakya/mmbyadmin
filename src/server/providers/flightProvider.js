@@ -1,5 +1,6 @@
 import { logApiCall } from '../auditLogger.js';
 import { DummyFlightBookingProvider, DummyCancellationProvider } from './dummy/dummyBookingProvider.js';
+import { normalizeSrdvContext } from '../srdvContext.js';
 
 const FLIGHT_API_URL = process.env.SRDV_FLIGHT_URL || process.env.FLIGHT_API_URL || 'https://flight.srdvapi.com/v8/rest';
 const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || '180189';
@@ -203,92 +204,68 @@ export const flightProvider = {
     return await callSrdvEndpoint('GetCalendarFare', payload, 'FareCalendar');
   },
 
-  async fareRule(params = {}, endUserIp = '122.161.76.198') {
-    const {
-      traceId,
-      srdvType = '1',
-      srdvIndex = '0',
-      resultIndex = '0'
-    } = params;
-
+  async fareRule(params = {}) {
+    const ctx = normalizeSrdvContext(params);
     const payload = {
-      EndUserIp: endUserIp || '122.161.76.198',
+      EndUserIp: '1.1.1.1',
       ClientId: SRDV_CLIENT_ID,
       UserName: SRDV_USERNAME,
       Password: SRDV_PASSWORD,
-      TraceId: String(traceId),
-      SrdvType: String(srdvType),
-      SrdvIndex: String(srdvIndex),
-      ResultIndex: String(resultIndex)
+      TraceId: String(ctx.traceId),
+      SrdvType: String(ctx.srdvType),
+      SrdvIndex: String(ctx.srdvIndex),
+      ResultIndex: String(ctx.resultIndex)
     };
 
-    return await callSrdvEndpoint('FareRule', payload, 'FareRule', traceId);
+    return await callSrdvEndpoint('FareRule', payload, 'FareRule', ctx.traceId);
   },
 
-  async fareQuote(params = {}, endUserIp = '122.161.76.198') {
-    const {
-      traceId,
-      srdvType = '1',
-      srdvIndex = '0',
-      resultIndex = '0'
-    } = params;
-
+  async fareQuote(params = {}) {
+    const ctx = normalizeSrdvContext(params);
     const payload = {
-      EndUserIp: endUserIp || '122.161.76.198',
+      EndUserIp: '1.1.1.1',
       ClientId: SRDV_CLIENT_ID,
       UserName: SRDV_USERNAME,
       Password: SRDV_PASSWORD,
-      TraceId: String(traceId),
-      SrdvType: String(srdvType),
-      SrdvIndex: String(srdvIndex),
-      ResultIndex: String(resultIndex)
+      TraceId: String(ctx.traceId),
+      SrdvType: String(ctx.srdvType),
+      SrdvIndex: String(ctx.srdvIndex),
+      ResultIndex: String(ctx.resultIndex)
     };
 
-    return await callSrdvEndpoint('FareQuote', payload, 'FareQuote', traceId);
+    return await callSrdvEndpoint('FareQuote', payload, 'FareQuote', ctx.traceId);
   },
 
-  async seatMap(params = {}, endUserIp = '122.161.76.198') {
-    const {
-      traceId,
-      srdvType = '1',
-      srdvIndex = '0',
-      resultIndex = '0'
-    } = params;
-
+  async seatMap(params = {}) {
+    const ctx = normalizeSrdvContext(params);
     const payload = {
-      EndUserIp: endUserIp || '122.161.76.198',
+      EndUserIp: '1.1.1.1',
       ClientId: SRDV_CLIENT_ID,
       UserName: SRDV_USERNAME,
       Password: SRDV_PASSWORD,
-      TraceId: String(traceId),
-      SrdvType: String(srdvType),
-      SrdvIndex: String(srdvIndex),
-      ResultIndex: String(resultIndex)
+      TraceId: String(ctx.traceId),
+      SrdvType: String(ctx.srdvType),
+      SrdvIndex: String(ctx.srdvIndex),
+      ResultIndex: String(ctx.resultIndex)
     };
 
-    return await callSrdvEndpoint('SeatMap', payload, 'SeatMap', traceId);
+    return await callSrdvEndpoint('SeatMap', payload, 'SeatMap', ctx.traceId);
   },
 
-  async ssr(params = {}, endUserIp = '122.161.76.198') {
-    const {
-      traceId,
-      srdvType = '1',
-      srdvIndex = '0',
-      resultIndex = '0'
-    } = params;
-
+  async ssr(params = {}) {
+    const ctx = normalizeSrdvContext(params);
     const payload = {
-      EndUserIp: endUserIp || '122.161.76.198',
+      EndUserIp: '1.1.1.1',
       ClientId: SRDV_CLIENT_ID,
       UserName: SRDV_USERNAME,
       Password: SRDV_PASSWORD,
-      TraceId: String(traceId),
-      SrdvType: String(srdvType),
-      SrdvIndex: String(srdvIndex),
-      ResultIndex: String(resultIndex)
+      TraceId: String(ctx.traceId),
+      SrdvType: String(ctx.srdvType),
+      SrdvIndex: String(ctx.srdvIndex),
+      ResultIndex: String(ctx.resultIndex)
     };
 
-    return await callSrdvEndpoint('SSR', payload, 'SSR', traceId);
+    return await callSrdvEndpoint('SSR', payload, 'SSR', ctx.traceId);
   },
 
   async book(bookingPayload) {

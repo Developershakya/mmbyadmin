@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, MapPin, Clock, Bus, Loader2, Navigation } from 'lucide-react';
 import { fetchBusBoardingDetailsApi } from '../../lib/packageBuilder/searchApi.js';
+import { normalizeSrdvContext } from '../../lib/srdvContext.js';
 
 export default function BusBoardingDetailsModal({
   isOpen,
@@ -18,28 +19,26 @@ export default function BusBoardingDetailsModal({
     const loadDetails = async () => {
       setLoading(true);
       try {
-        const res = await fetchBusBoardingDetailsApi({
-          traceId: bus.traceId || `TRC-${Date.now()}`,
-          resultIndex: bus.resultIndex || '0'
-        });
+        const res = await fetchBusBoardingDetailsApi(normalizeSrdvContext(bus));
 
         if (!isMounted) return;
 
-        const bp = res?.BoardingPoints || [
-          { CityPointIndex: 'BP1', CityPointName: 'ISBT Kashmiri Gate, Counter 18', CityPointTime: '21:00', CityPointLocation: 'Metro Gate 1, Delhi' },
-          { CityPointIndex: 'BP2', CityPointName: 'Majnu Ka Tilla, HP Petrol Pump', CityPointTime: '21:30', CityPointLocation: 'Outer Ring Road, Delhi' },
-          { CityPointIndex: 'BP3', CityPointName: 'Karnal Bypass, GT Road', CityPointTime: '22:15', CityPointLocation: 'Karnal Bypass, Delhi' }
-        ];
+        const bp = Array.isArray(res?.BoardingPoints)
+          ? res.BoardingPoints
+          : (Array.isArray(bus.boardingPoints) ? bus.boardingPoints : []);
 
-        const dp = res?.DroppingPoints || [
-          { CityPointIndex: 'DP1', CityPointName: 'Private Bus Stand, Manali', CityPointTime: '08:30', CityPointLocation: 'Mall Road, Manali' },
-          { CityPointIndex: 'DP2', CityPointName: 'Volvo Bus Stand, Patlikuhl', CityPointTime: '08:00', CityPointLocation: 'Patlikuhl Highway, Manali' }
-        ];
+        const dp = Array.isArray(res?.DroppingPoints)
+          ? res.DroppingPoints
+          : (Array.isArray(bus.droppingPoints) ? bus.droppingPoints : []);
 
         setBoardingPoints(bp);
         setDroppingPoints(dp);
       } catch (err) {
         console.warn('Boarding details notice:', err.message);
+        const bp = Array.isArray(bus.boardingPoints) ? bus.boardingPoints : [];
+        const dp = Array.isArray(bus.droppingPoints) ? bus.droppingPoints : [];
+        setBoardingPoints(bp);
+        setDroppingPoints(dp);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -96,22 +95,28 @@ export default function BusBoardingDetailsModal({
                   <span>Pickup / Boarding Points</span>
                 </h4>
 
-                <div className="space-y-2">
-                  {boardingPoints.map((bp, i) => (
-                    <div
-                      key={i}
-                      className="p-3 bg-blue-50/50 border border-blue-200/80 rounded-xl flex items-start justify-between gap-3"
-                    >
-                      <div>
-                        <p className="font-bold text-slate-900 text-xs">{bp.CityPointName}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{bp.CityPointLocation}</p>
+                {boardingPoints.length > 0 ? (
+                  <div className="space-y-2">
+                    {boardingPoints.map((bp, i) => (
+                      <div
+                        key={i}
+                        className="p-3 bg-blue-50/50 border border-blue-200/80 rounded-xl flex items-start justify-between gap-3"
+                      >
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">{bp.CityPointName || bp.LocationName || 'Boarding Point'}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{bp.CityPointLocation || bp.Address || ''}</p>
+                        </div>
+                        <span className="font-bold text-blue-700 bg-white px-2 py-1 rounded-md border border-blue-200 shrink-0">
+                          {bp.CityPointTime || bp.Time || ''}
+                        </span>
                       </div>
-                      <span className="font-bold text-blue-700 bg-white px-2 py-1 rounded-md border border-blue-200 shrink-0">
-                        {bp.CityPointTime}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center bg-slate-50 border border-slate-200 rounded-xl text-slate-500 italic">
+                    Specific boarding stops not specified by operator. Pickup at main city origin depot.
+                  </div>
+                )}
               </div>
 
               {/* Dropping Points */}
@@ -121,22 +126,28 @@ export default function BusBoardingDetailsModal({
                   <span>Drop-Off Points</span>
                 </h4>
 
-                <div className="space-y-2">
-                  {droppingPoints.map((dp, i) => (
-                    <div
-                      key={i}
-                      className="p-3 bg-emerald-50/50 border border-emerald-200/80 rounded-xl flex items-start justify-between gap-3"
-                    >
-                      <div>
-                        <p className="font-bold text-slate-900 text-xs">{dp.CityPointName}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{dp.CityPointLocation}</p>
+                {droppingPoints.length > 0 ? (
+                  <div className="space-y-2">
+                    {droppingPoints.map((dp, i) => (
+                      <div
+                        key={i}
+                        className="p-3 bg-emerald-50/50 border border-emerald-200/80 rounded-xl flex items-start justify-between gap-3"
+                      >
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">{dp.CityPointName || dp.LocationName || 'Dropping Point'}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{dp.CityPointLocation || dp.Address || ''}</p>
+                        </div>
+                        <span className="font-bold text-emerald-700 bg-white px-2 py-1 rounded-md border border-emerald-200 shrink-0">
+                          {dp.CityPointTime || dp.Time || ''}
+                        </span>
                       </div>
-                      <span className="font-bold text-emerald-700 bg-white px-2 py-1 rounded-md border border-emerald-200 shrink-0">
-                        {dp.CityPointTime}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center bg-slate-50 border border-slate-200 rounded-xl text-slate-500 italic">
+                    Specific dropping stops not specified by operator. Drop-off at destination central bus stand.
+                  </div>
+                )}
               </div>
             </>
           )}

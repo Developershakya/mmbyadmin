@@ -117,16 +117,38 @@ export default function CustomerPreviewView({
       const d = svc.data || {};
       if (svc.type === 'hotel') {
         hotelsList.push({ ...d, dayIndex: dayIdx, dayTitle: day.title, location: d.location || day.location || packageData.destination });
-        baseTotal += Number(d.price || 0) * Number(d.nights || 1);
+        const apiTotal = d.totalPrice ?? d.totalFare;
+        if (apiTotal != null) {
+          baseTotal += Number(apiTotal) || 0;
+        } else {
+          baseTotal += Number(d.price || 0) * Number(d.nights || 1);
+        }
       } else if (svc.type === 'flight') {
         flightsList.push({ ...d, dayIndex: dayIdx, dayTitle: day.title });
-        baseTotal += (Number(d.fare || 0) + Number(d.tax || 0)) * totalTravelers;
+        const apiTotal = d.totalFare ?? d.totalPrice;
+        if (apiTotal != null && !d.isManual) {
+          baseTotal += Number(apiTotal) || 0;
+        } else if (d.apiSelected) {
+          baseTotal += Number(d.fare || d.price || 0);
+        } else {
+          baseTotal += (Number(d.fare || 0) + Number(d.tax || 0)) * totalTravelers;
+        }
       } else if (svc.type === 'cab') {
         cabsList.push({ ...d, dayIndex: dayIdx, dayTitle: day.title });
-        baseTotal += Number(d.price || 0);
+        baseTotal += Number((d.totalPrice ?? d.price) || 0);
       } else if (svc.type === 'bus') {
         busesList.push({ ...d, dayIndex: dayIdx, dayTitle: day.title });
-        baseTotal += Number(d.price || 0) * totalTravelers;
+        const apiTotal = d.totalPrice ?? d.totalFare;
+        if (apiTotal != null && !d.isManual) {
+          baseTotal += Number(apiTotal) || 0;
+        } else if (Array.isArray(d.selectedSeats) && d.selectedSeats.length > 0) {
+          const seatSum = d.selectedSeats.reduce((acc, s) => acc + (Number(s.Fare) || 0), 0);
+          baseTotal += seatSum > 0 ? seatSum : Number(d.price || 0);
+        } else if (d.apiSelected) {
+          baseTotal += Number(d.price || 0);
+        } else {
+          baseTotal += Number(d.price || 0) * totalTravelers;
+        }
       } else if (svc.type === 'sightseeing') {
         (d.items || []).forEach((item) => {
           sightseeingList.push({ ...item, dayIndex: dayIdx, dayTitle: day.title });

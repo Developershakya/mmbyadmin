@@ -49,13 +49,47 @@ export default function HotelRoomModal({
 
         if (Array.isArray(rawList) && rawList.length > 0) {
           setRooms(rawList);
+        } else if (hotel?.room || hotel?.roomType) {
+          setRooms([{
+            RoomIndex: 1,
+            RoomTypeCode: hotel.roomTypeCode || 'STD',
+            RoomTypeName: hotel.room || hotel.roomType || 'Standard Room',
+            BedTypeCode: hotel.bedType || 'Standard Bedding',
+            MealType: hotel.meal || hotel.mealType || 'EP',
+            Inclusions: Array.isArray(hotel.inclusions) ? hotel.inclusions : [hotel.meal ? `${hotel.meal} Plan` : 'Room Only'],
+            Price: {
+              RoomPrice: Number(hotel.price || hotel.fare || 0),
+              Tax: Number(hotel.tax || 0),
+              TotalFare: Number(hotel.totalPrice || hotel.fare || hotel.price || 0)
+            },
+            CancellationPolicy: hotel.cancellationPolicy || 'As per supplier cancellation terms',
+            Amenities: Array.isArray(hotel.amenities) ? hotel.amenities : []
+          }]);
         } else {
-          setRooms(generateFallbackRooms(hotel));
+          setRooms([]);
         }
       } catch (err) {
-        console.warn('Hotel rooms fetch notice, using calibrated room categories:', err.message);
+        console.warn('Hotel rooms fetch notice:', err.message);
         if (isMounted) {
-          setRooms(generateFallbackRooms(hotel));
+          if (hotel?.room || hotel?.roomType) {
+            setRooms([{
+              RoomIndex: 1,
+              RoomTypeCode: hotel.roomTypeCode || 'STD',
+              RoomTypeName: hotel.room || hotel.roomType || 'Standard Room',
+              BedTypeCode: hotel.bedType || 'Standard Bedding',
+              MealType: hotel.meal || hotel.mealType || 'EP',
+              Inclusions: Array.isArray(hotel.inclusions) ? hotel.inclusions : [hotel.meal ? `${hotel.meal} Plan` : 'Room Only'],
+              Price: {
+                RoomPrice: Number(hotel.price || hotel.fare || 0),
+                Tax: Number(hotel.tax || 0),
+                TotalFare: Number(hotel.totalPrice || hotel.fare || hotel.price || 0)
+              },
+              CancellationPolicy: hotel.cancellationPolicy || 'As per supplier cancellation terms',
+              Amenities: Array.isArray(hotel.amenities) ? hotel.amenities : []
+            }]);
+          } else {
+            setRooms([]);
+          }
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -68,57 +102,6 @@ export default function HotelRoomModal({
       isMounted = false;
     };
   }, [isOpen, hotel]);
-
-  const generateFallbackRooms = (h) => {
-    const basePrice = Number(h.price || h.fare || 3800);
-    return [
-      {
-        RoomIndex: 1,
-        RoomTypeCode: 'DLX-01',
-        RoomTypeName: 'Deluxe Valley View Room',
-        BedTypeCode: '1 King Bed or 2 Twin Beds',
-        MealType: 'CP',
-        Inclusions: ['Breakfast Included (CP Plan)', 'Complimentary Wi-Fi', 'Welcome Drink on Arrival'],
-        Price: {
-          RoomPrice: basePrice,
-          Tax: Math.round(basePrice * 0.12),
-          TotalFare: Math.round(basePrice * 1.12)
-        },
-        CancellationPolicy: 'Free cancellation up to 72 hours prior to check-in. Non-refundable after that.',
-        Amenities: ['Balcony with Himalayan View', 'Smart LED TV', 'Tea / Coffee Maker', 'Ensuite Marble Bath']
-      },
-      {
-        RoomIndex: 2,
-        RoomTypeCode: 'SUP-02',
-        RoomTypeName: 'Super Deluxe Panoramic Suite',
-        BedTypeCode: '1 King Bed',
-        MealType: 'MAP',
-        Inclusions: ['Breakfast & Dinner Included (MAP Plan)', 'Complimentary Wi-Fi', 'Fruit Basket'],
-        Price: {
-          RoomPrice: Math.round(basePrice * 1.35),
-          Tax: Math.round(basePrice * 1.35 * 0.12),
-          TotalFare: Math.round(basePrice * 1.35 * 1.12)
-        },
-        CancellationPolicy: 'Free cancellation up to 48 hours prior to check-in.',
-        Amenities: ['Private Jacuzzi', 'Pine Valley View', 'Fireplace', 'Mini Bar', 'Butler Service']
-      },
-      {
-        RoomIndex: 3,
-        RoomTypeCode: 'EXE-03',
-        RoomTypeName: 'Executive Family Duplex Villa',
-        BedTypeCode: '2 King Beds (Duplex)',
-        MealType: 'AP',
-        Inclusions: ['All Meals Included (AP Plan: Breakfast, Lunch, Dinner)', 'Complimentary Wi-Fi', 'Bonfire Evening'],
-        Price: {
-          RoomPrice: Math.round(basePrice * 1.8),
-          Tax: Math.round(basePrice * 1.8 * 0.12),
-          TotalFare: Math.round(basePrice * 1.8 * 1.12)
-        },
-        CancellationPolicy: 'Free cancellation up to 5 days prior to check-in.',
-        Amenities: ['Two Separate Bedrooms', 'Living Room', 'Kitchenette', 'Private Lawn', 'Dedicated Butler']
-      }
-    ];
-  };
 
   const selectedRoom = rooms[selectedRoomIndex] || rooms[0];
 
@@ -200,6 +183,14 @@ export default function HotelRoomModal({
             <div className="py-16 text-center text-slate-500 space-y-2">
               <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
               <p className="text-xs font-medium">Fetching available room inventory &amp; meal plans...</p>
+            </div>
+          ) : rooms.length === 0 ? (
+            <div className="py-16 text-center text-slate-500 space-y-3 bg-slate-50 rounded-2xl border border-slate-200 p-6">
+              <Bed className="w-10 h-10 text-slate-400 mx-auto" />
+              <h4 className="font-bold text-slate-800 text-sm">No Room Categories Available</h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                No room inventory was returned by the hotel supplier for this property. Please choose another hotel from the search results.
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -322,8 +313,9 @@ export default function HotelRoomModal({
             </button>
             <button
               type="button"
+              disabled={rooms.length === 0}
               onClick={handleSave}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
             >
               Confirm Room Selection
             </button>

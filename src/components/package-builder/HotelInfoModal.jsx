@@ -39,15 +39,11 @@ export default function HotelInfoModal({
         if (!isMounted) return;
 
         const info = res?.HotelDetails || res?.data?.HotelDetails || res?.hotel || null;
-        if (info) {
-          setDetails(info);
-        } else {
-          setDetails(generateFallbackHotelDetails(hotel));
-        }
+        setDetails(extractHotelDetails(hotel, info));
       } catch (err) {
-        console.warn('Hotel info fetch notice, showing calibrated property details:', err.message);
+        console.warn('Hotel info fetch notice:', err.message);
         if (isMounted) {
-          setDetails(generateFallbackHotelDetails(hotel));
+          setDetails(extractHotelDetails(hotel, null));
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -61,43 +57,20 @@ export default function HotelInfoModal({
     };
   }, [isOpen, hotel]);
 
-  const generateFallbackHotelDetails = (h) => {
+  const extractHotelDetails = (h, info) => {
     return {
-      HotelName: h.name || h.hotelName || 'Luxury Resort & Spa',
-      StarRating: Number(h.rating || h.starRating || 4),
-      Address: h.address || 'Log Huts Area, Near Mall Road, Manali, Himachal Pradesh',
-      PinCode: '175131',
-      PhoneNumber: '+91 1902 253228',
-      CheckInTime: '12:00 PM',
-      CheckOutTime: '11:00 AM',
-      Description:
-        h.description ||
-        'Surrounded by pristine Himalayan cedar forests and apple orchards, this premier property combines timeless mountain charm with world-class hospitality. Features expansive heated rooms, multi-cuisine dining, panoramic views, and wellness treatments.',
-      HotelPolicy:
-        'Valid Government ID (Passport, Aadhaar, Driving License) is strictly required for all guests during check-in | PAN Card is not accepted as valid address proof | Check-in from 12:00 PM and check-out by 11:00 AM | Early check-in or late checkout is subject to availability and hotel discretion | Outside food and alcoholic beverages are strictly prohibited in public areas | Quiet hours enforced between 10:30 PM and 07:00 AM | Pets are strictly not allowed on the property premises.',
-      Attractions: [
-        'Hadimba Devi Temple (1.2 km)',
-        'Mall Road & Tibetan Monastery (2.5 km)',
-        'Vashisht Hot Springs (4.2 km)',
-        'Jogini Waterfall Trek (4.8 km)',
-        'Solang Valley Adventure Hub (12.5 km)'
-      ],
-      Facilities: [
-        'Complimentary High-Speed Wi-Fi',
-        '24x7 In-Room Dining',
-        'Multi-Cuisine Fine Dining Restaurant',
-        'Heated Indoor Pool & Hot Tub',
-        'Ayurvedic Wellness Spa',
-        'Complimentary Valet Parking',
-        'Travel Desk & Guided Excursions',
-        'Kids Play Zone & Activity Center'
-      ],
-      Images: [
-        h.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=1000&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=1000&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1590490360182-c33d57733427?q=80&w=1000&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?q=80&w=1000&auto=format&fit=crop'
-      ]
+      HotelName: info?.HotelName || h?.name || h?.hotelName || 'Hotel',
+      StarRating: Number(info?.StarRating || h?.rating || h?.starRating || 0),
+      Address: info?.Address || h?.address || h?.location || '',
+      PinCode: info?.PinCode || '',
+      PhoneNumber: info?.PhoneNumber || '',
+      CheckInTime: info?.CheckInTime || '12:00 PM',
+      CheckOutTime: info?.CheckOutTime || '11:00 AM',
+      Description: info?.Description || h?.description || '',
+      HotelPolicy: info?.HotelPolicy || h?.policy || '',
+      Attractions: Array.isArray(info?.Attractions) ? info.Attractions : [],
+      Facilities: Array.isArray(info?.Facilities) ? info.Facilities : (Array.isArray(h?.amenities) ? h.amenities : []),
+      Images: Array.isArray(info?.Images) && info.Images.length > 0 ? info.Images : (h?.image ? [h.image] : [])
     };
   };
 
@@ -106,11 +79,11 @@ export default function HotelInfoModal({
   // Split policies by delimiter '|'
   const rawPolicies = details?.HotelPolicy || '';
   const policyItems = rawPolicies
-    .split('|')
+    .split(/\||\r?\n/)
     .map((p) => p.trim())
     .filter((p) => p.length > 5);
 
-  const images = details?.Images?.length ? details.Images : [hotel?.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=1000&auto=format&fit=crop'];
+  const images = details?.Images?.length ? details.Images : (hotel?.image ? [hotel.image] : []);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
@@ -207,25 +180,37 @@ export default function HotelInfoModal({
               {/* Property Overview */}
               <div className="space-y-2">
                 <h4 className="font-bold text-slate-900 text-sm">About Property</h4>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  {details?.Description}
-                </p>
+                {details?.Description ? (
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {details.Description}
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">
+                    Property description not provided by supplier.
+                  </p>
+                )}
               </div>
 
               {/* Facilities Chips */}
               <div className="space-y-2">
                 <h4 className="font-bold text-slate-900 text-sm">Amenities &amp; Facilities</h4>
-                <div className="flex flex-wrap gap-2">
-                  {(details?.Facilities || []).map((fac, idx) => (
-                    <span
-                      key={idx}
-                      className="px-3 py-1.5 rounded-xl bg-blue-50/70 border border-blue-200/80 text-blue-900 text-xs font-semibold flex items-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-                      {fac}
-                    </span>
-                  ))}
-                </div>
+                {details?.Facilities?.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {details.Facilities.map((fac, idx) => (
+                      <span
+                        key={idx}
+                        className="px-3 py-1.5 rounded-xl bg-blue-50/70 border border-blue-200/80 text-blue-900 text-xs font-semibold flex items-center gap-1.5"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                        {fac}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">
+                    Amenities and facility details not provided by supplier for this property.
+                  </p>
+                )}
               </div>
 
               {/* Hotel Policies (Delimited by '|') */}
@@ -234,14 +219,20 @@ export default function HotelInfoModal({
                   <ShieldAlert className="w-4 h-4 text-amber-600" />
                   <span>Hotel Policies &amp; House Rules</span>
                 </h4>
-                <ul className="space-y-2 text-xs text-slate-700">
-                  {policyItems.map((item, idx) => (
-                    <li key={idx} className="flex items-start gap-2 leading-relaxed">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
+                {policyItems.length > 0 ? (
+                  <ul className="space-y-2 text-xs text-slate-700">
+                    {policyItems.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2 leading-relaxed">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-slate-500 italic">
+                    Standard check-in and hotel policies apply. Specific property house rules not provided by supplier.
+                  </p>
+                )}
               </div>
 
               {/* Nearby Attractions */}

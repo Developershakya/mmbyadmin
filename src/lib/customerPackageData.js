@@ -78,18 +78,40 @@ export function getCustomerFacingPackageData(rawPackageData = {}) {
       if (!svc.selected) return;
       if (svc.type === 'flight') {
         countFlights++;
-        flights += (Number(svc.data?.fare) || 0) * totalTravelers;
+        const apiTotal = svc.data?.totalFare ?? svc.data?.totalPrice;
+        if (apiTotal != null && !svc.data?.isManual) {
+          flights += Number(apiTotal) || 0;
+        } else if (svc.data?.apiSelected) {
+          flights += Number(svc.data?.fare || svc.data?.price || 0);
+        } else {
+          flights += (Number(svc.data?.fare || 0) + Number(svc.data?.tax || 0)) * totalTravelers;
+        }
       } else if (svc.type === 'hotel') {
         countHotels++;
-        const price = Number(svc.data?.price) || 0;
-        const nights = Number(svc.data?.nights) || 1;
-        hotels += price * nights;
+        const apiTotal = svc.data?.totalPrice ?? svc.data?.totalFare;
+        if (apiTotal != null) {
+          hotels += Number(apiTotal) || 0;
+        } else {
+          const price = Number(svc.data?.price) || 0;
+          const nights = Number(svc.data?.nights) || 1;
+          hotels += price * nights;
+        }
       } else if (svc.type === 'cab') {
         countCabs++;
-        cabs += Number(svc.data?.price) || 0;
+        cabs += Number(svc.data?.totalPrice ?? svc.data?.price) || 0;
       } else if (svc.type === 'bus') {
         countBuses++;
-        buses += (Number(svc.data?.price) || 0) * totalTravelers;
+        const apiTotal = svc.data?.totalPrice ?? svc.data?.totalFare;
+        if (apiTotal != null && !svc.data?.isManual) {
+          buses += Number(apiTotal) || 0;
+        } else if (Array.isArray(svc.data?.selectedSeats) && svc.data.selectedSeats.length > 0) {
+          const seatSum = svc.data.selectedSeats.reduce((acc, s) => acc + (Number(s.Fare) || 0), 0);
+          buses += seatSum > 0 ? seatSum : Number(svc.data?.price || 0);
+        } else if (svc.data?.apiSelected) {
+          buses += Number(svc.data?.price || 0);
+        } else {
+          buses += (Number(svc.data?.price) || 0) * totalTravelers;
+        }
       } else if (svc.type === 'sightseeing') {
         (svc.data?.items || []).forEach((item) => {
           countSightseeing++;

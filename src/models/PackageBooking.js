@@ -53,7 +53,7 @@ const PackageBooking = sequelize.define(
       defaultValue: 1
     },
     totalAmount: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.DECIMAL,
       allowNull: false,
       defaultValue: 0
     },

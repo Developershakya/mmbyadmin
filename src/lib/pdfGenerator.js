@@ -280,27 +280,35 @@ export function generatePackagePdf(pkg, filename = 'TravelPro-Holiday-Package.pd
           const d = svc.data || {};
           const route = d.from && d.to ? ` | ${d.from} -> ${d.to}` : '';
           const timing = d.departure || d.arrival ? ` | ${d.departure || ''} - ${d.arrival || ''}` : '';
-          const fareStr = d.fare ? ` | Fare: Rs. ${Number(d.fare).toLocaleString('en-IN')}` : '';
+          const totalFlightFare = d.totalFare ?? d.totalPrice ?? (d.fare ? (Number(d.fare) + Number(d.tax || 0)) : null);
+          const fareStr = totalFlightFare ? ` | Fare: Rs. ${Number(totalFlightFare).toLocaleString('en-IN')}` : '';
           svcDetails = `${d.airline || 'Flight'} ${d.flightNumber || ''}${route}${timing}${fareStr}`.trim();
         } else if (svc.type === 'hotel') {
           const d = svc.data || {};
           const starStr = d.stars ? ` (${d.stars} Star)` : '';
           const roomStr = d.room ? ` | ${d.room}` : '';
           const mealStr = d.meal ? ` | ${d.meal}` : '';
-          const priceStr = d.price ? ` | Rs. ${Number(d.price).toLocaleString('en-IN')}/night` : '';
+          const totalHotelCost = d.totalPrice ?? d.totalFare;
+          const priceStr = totalHotelCost != null
+            ? ` | Total: Rs. ${Number(totalHotelCost).toLocaleString('en-IN')}`
+            : (d.price ? ` | Rs. ${Number(d.price).toLocaleString('en-IN')}/night` : '');
           svcDetails = `${d.name || 'Hotel Stay'}${starStr}${roomStr}${mealStr}${priceStr}`.trim();
         } else if (svc.type === 'cab') {
           const d = svc.data || {};
           const catStr = d.category ? ` (${d.category})` : '';
           const routeStr = d.pickup && d.drop ? ` | ${d.pickup} -> ${d.drop}` : '';
-          const priceStr = d.price ? ` | Rs. ${Number(d.price).toLocaleString('en-IN')}` : '';
+          const cabTotal = d.totalPrice ?? d.totalFare ?? d.price;
+          const priceStr = cabTotal ? ` | Rs. ${Number(cabTotal).toLocaleString('en-IN')}` : '';
           svcDetails = `${d.vehicle || 'Cab'}${catStr}${routeStr}${priceStr}`.trim();
         } else if (svc.type === 'bus') {
           const d = svc.data || {};
           const typeStr = d.busType ? ` (${d.busType})` : '';
           const routeStr = d.from && d.to ? ` | ${d.from} -> ${d.to}` : '';
           const timeStr = d.departure || d.arrival ? ` | ${d.departure || ''} - ${d.arrival || ''}` : '';
-          const priceStr = d.price ? ` | Rs. ${Number(d.price).toLocaleString('en-IN')}/seat` : '';
+          const busTotal = d.totalPrice ?? d.totalFare;
+          const priceStr = busTotal != null
+            ? ` | Total: Rs. ${Number(busTotal).toLocaleString('en-IN')}`
+            : (d.price ? ` | Rs. ${Number(d.price).toLocaleString('en-IN')}/seat` : '');
           svcDetails = `${d.operator || 'Bus'}${typeStr}${routeStr}${timeStr}${priceStr}`.trim();
         } else if (svc.type === 'sightseeing') {
           const items = svc.data?.items || [];

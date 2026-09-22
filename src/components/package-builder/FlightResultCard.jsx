@@ -15,25 +15,22 @@ import {
   Loader2
 } from 'lucide-react';
 import { fetchFareRuleApi } from '../../lib/packageBuilder/searchApi.js';
+import { normalizeSrdvContext } from '../../lib/srdvContext.js';
 
 const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
 
-// Helper to parse messy airline GDS fare rule text into structured items
+// Helper to parse airline GDS fare rule text into structured items without fake fallbacks
 export function parseFareRulesText(rawText = '', airline = '', fare = 4500) {
   if (!rawText || rawText.trim().length === 0) {
     return {
-      cancellation: `Before 72 hrs: ₹3,000 | 24 to 72 hrs: ₹3,500 | Within 24 hrs: Non-refundable`,
-      dateChange: `Permitted up to 4 hrs before departure at ₹2,750 plus fare difference`,
-      noShow: `₹4,000 fee or non-refundable if within 4 hrs of departure`,
-      seatPolicy: `Free at web check-in or chargeable for preferred/legroom seats`,
-      baggage: `Cabin: 7 Kg (1 piece) | Check-in: 15 Kg (1 piece)`,
-      meals: `Available for pre-booking or purchase on-board`,
-      bullets: [
-        'Cancellation allowed up to 4 hours prior to scheduled departure.',
-        'Date change fees are subject to airline fare difference.',
-        'Web check-in opens 48 hours before departure.',
-        'Valid photo ID required at the airport check-in counter.'
-      ]
+      cancellation: 'Not provided by supplier',
+      dateChange: 'Not provided by supplier',
+      noShow: 'Not provided by supplier',
+      seatPolicy: 'As per airline seat selection policy',
+      baggage: 'As indicated on flight itinerary',
+      meals: 'As per selected cabin class',
+      bullets: [],
+      empty: true
     };
   }
 
@@ -41,16 +38,16 @@ export function parseFareRulesText(rawText = '', airline = '', fare = 4500) {
   let cancellation = '';
   let dateChange = '';
   let noShow = '';
-  let baggage = 'Cabin: 7 Kg | Check-in: 15 Kg';
-  let seatPolicy = 'Free at web check-in or chargeable for preferred seats';
-  let meals = 'Available on pre-order or purchase on-board';
+  let baggage = 'As per ticket allowance';
+  let seatPolicy = 'As per airline seat selection policy';
+  let meals = 'As per airline service terms';
 
   // Extract cancellation
   const cancelMatch = text.match(/cancel[a-z\s:]+([^.\n]+)/i);
   if (cancelMatch) {
     cancellation = cancelMatch[1].trim();
   } else {
-    cancellation = `₹3,000 fee (>72 hrs), ₹3,500 (24-72 hrs), non-refundable (<4 hrs)`;
+    cancellation = 'Refer to airline fare rule terms';
   }
 
   // Extract date change
@@ -58,7 +55,7 @@ export function parseFareRulesText(rawText = '', airline = '', fare = 4500) {
   if (changeMatch) {
     dateChange = changeMatch[2].trim();
   } else {
-    dateChange = `₹2,750 + fare difference up to 4 hrs before departure`;
+    dateChange = 'Subject to airline date change policy';
   }
 
   // Extract no show
@@ -66,7 +63,7 @@ export function parseFareRulesText(rawText = '', airline = '', fare = 4500) {
   if (noShowMatch) {
     noShow = noShowMatch[1].trim();
   } else {
-    noShow = `₹4,000 fee or non-refundable`;
+    noShow = 'Refer to airline no-show policy';
   }
 
   // Extract baggage
@@ -83,9 +80,7 @@ export function parseFareRulesText(rawText = '', airline = '', fare = 4500) {
 
   const bullets = rawLines.slice(0, 5);
   if (bullets.length === 0) {
-    bullets.push('Cancellation permitted up to 4 hours prior to scheduled departure.');
-    bullets.push('Airline reissue / date change penalty applies plus fare difference.');
-    bullets.push('Complimentary hand baggage allowance up to 7 kg.');
+    bullets.push('Refer to detailed fare rule text provided by airline.');
   }
 
   return {
@@ -106,30 +101,19 @@ export default function FlightResultCard({
 }) {
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('DETAILS'); // 'DETAILS' | 'FARE' | 'RULES'
-  const [fareRuleOpen, setFareRuleOpen] = useState(false);
   const [fareRuleLoading, setFareRuleLoading] = useState(false);
   const [parsedRules, setParsedRules] = useState(null);
 
   const airlineCode = flight.airlineCode || flight.airline?.slice(0, 2).toUpperCase() || '6E';
   const logoUrl = flight.airlineLogo || `https://assets.duffel.com/img/airlines/for-light-background/full-color-logo/${airlineCode}.svg`;
 
-  const handleToggleFareRules = async () => {
-    if (fareRuleOpen) {
-      setFareRuleOpen(false);
-      return;
-    }
-
-    setFareRuleOpen(true);
-    if (parsedRules) return; // already loaded
+  const fetchFareRulesIfNeeded = async () => {
+    if (parsedRules || fareRuleLoading) return; // already loaded or loading
 
     setFareRuleLoading(true);
     try {
-      const res = await fetchFareRuleApi({
-        traceId: flight.traceId || `TRC-${Date.now()}`,
-        resultIndex: flight.resultIndex || '0',
-        srdvIndex: flight.srdvIndex || '0',
-        srdvType: flight.srdvType || '1'
-      });
+      const srdvCtx = normalizeSrdvContext(flight);
+      const res = await fetchFareRuleApi(srdvCtx);
 
       const rawRuleText =
         res?.FareRules?.[0]?.FareRuleDetail ||
@@ -253,18 +237,6 @@ export default function FlightResultCard({
           >
             {isRefundable ? 'Refundable' : 'Non-Refundable'}
           </span>
-
-          <span className="text-slate-400">·</span>
-
-          <button
-            type="button"
-            onClick={handleToggleFareRules}
-            className="text-blue-600 hover:text-blue-800 font-semibold cursor-pointer flex items-center gap-1"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Fare Rules</span>
-            {fareRuleOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
         </div>
 
         <button
@@ -276,53 +248,6 @@ export default function FlightResultCard({
           {detailsExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </button>
       </div>
-
-      {/* Inline Quick Fare Rules Accordion */}
-      {fareRuleOpen && (
-        <div className="p-4 bg-amber-50/50 border-t border-amber-200/70 text-xs space-y-3 animate-in fade-in duration-150">
-          <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
-            <h5 className="font-bold text-amber-950 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-amber-600" />
-              <span>Fare Rules &amp; Cancellation Policy ({flight.airline})</span>
-            </h5>
-            {fareRuleLoading && (
-              <span className="flex items-center gap-1 text-amber-700 text-[11px]">
-                <Loader2 className="w-3 h-3 animate-spin" /> Fetching GDS policy...
-              </span>
-            )}
-          </div>
-
-          {parsedRules ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="p-3 bg-white rounded-xl border border-amber-200 shadow-2xs space-y-1">
-                <span className="text-[11px] font-bold text-slate-500 uppercase block">Cancellation Fee</span>
-                <p className="text-xs text-slate-800 font-medium">{parsedRules.cancellation}</p>
-              </div>
-
-              <div className="p-3 bg-white rounded-xl border border-amber-200 shadow-2xs space-y-1">
-                <span className="text-[11px] font-bold text-slate-500 uppercase block">Date Change Fee</span>
-                <p className="text-xs text-slate-800 font-medium">{parsedRules.dateChange}</p>
-              </div>
-
-              <div className="p-3 bg-white rounded-xl border border-amber-200 shadow-2xs space-y-1">
-                <span className="text-[11px] font-bold text-slate-500 uppercase block">Baggage &amp; Meals</span>
-                <p className="text-xs text-slate-800 font-medium">{parsedRules.baggage}</p>
-                <p className="text-[11px] text-slate-500">{parsedRules.meals}</p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-slate-500">Loading airline fare rule details...</p>
-          )}
-
-          {parsedRules?.bullets?.length > 0 && (
-            <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px] pt-1">
-              {parsedRules.bullets.map((b, i) => (
-                <li key={i}>{b}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
 
       {/* Expandable Tabbed Flight Details Panel */}
       {detailsExpanded && (
@@ -355,7 +280,7 @@ export default function FlightResultCard({
               type="button"
               onClick={() => {
                 setActiveTab('RULES');
-                handleToggleFareRules();
+                fetchFareRulesIfNeeded();
               }}
               className={`pb-2 transition cursor-pointer border-b-2 ${
                 activeTab === 'RULES'
@@ -431,10 +356,26 @@ export default function FlightResultCard({
           {/* TAB 3: FARE RULES */}
           {activeTab === 'RULES' && (
             <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2 text-xs">
-              <p className="font-bold text-slate-900">Airline Ticket Penalties:</p>
-              <p className="text-slate-600">Cancellation: {parsedRules?.cancellation || 'Standard airline policy applies'}</p>
-              <p className="text-slate-600">Date Change: {parsedRules?.dateChange || 'Allowed with fee + fare difference'}</p>
-              <p className="text-slate-600">No-Show: {parsedRules?.noShow || 'Ticket value forfeited'}</p>
+              {fareRuleLoading ? (
+                <div className="flex items-center gap-2 text-slate-500 py-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                  <span>Loading airline fare rules...</span>
+                </div>
+              ) : (
+                <>
+                  <p className="font-bold text-slate-900">Airline Fare Rules & Policies:</p>
+                  <p className="text-slate-600">Cancellation: {parsedRules?.cancellation || 'Not provided by supplier'}</p>
+                  <p className="text-slate-600">Date Change: {parsedRules?.dateChange || 'Not provided by supplier'}</p>
+                  <p className="text-slate-600">No-Show: {parsedRules?.noShow || 'Not provided by supplier'}</p>
+                  {parsedRules?.bullets?.length > 0 && (
+                    <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px] pt-2 border-t border-slate-100">
+                      {parsedRules.bullets.map((b, i) => (
+                        <li key={i}>{b}</li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>

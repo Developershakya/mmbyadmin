@@ -77,6 +77,20 @@ export async function fetchFareCalendarApi(params = {}) {
   return json.data || json;
 }
 
+export async function fetchFareQuoteApi(params = {}) {
+  const res = await fetch('/api/flights/fare-quote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch fare quote');
+  }
+  const json = await res.json();
+  return json.data || json;
+}
+
 export async function fetchFareRuleApi(params = {}) {
   const res = await fetch('/api/flights/fare-rule', {
     method: 'POST',

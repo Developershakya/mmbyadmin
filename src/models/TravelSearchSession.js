@@ -15,7 +15,7 @@ const TravelSearchSession = sequelize.define(
       defaultValue: 'usr_admin_1'
     },
     serviceType: {
-      type: DataTypes.ENUM('FLIGHT', 'HOTEL', 'BUS', 'CAR'),
+      type: DataTypes.STRING,
       allowNull: false
     },
     provider: {

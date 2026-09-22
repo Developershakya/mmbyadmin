@@ -27,7 +27,7 @@ const Payment = sequelize.define(
       allowNull: true
     },
     serviceType: {
-      type: DataTypes.ENUM('FLIGHT', 'HOTEL', 'BUS', 'CAR', 'PACKAGE'),
+      type: DataTypes.STRING,
       allowNull: false
     },
     gateway: {
@@ -48,7 +48,7 @@ const Payment = sequelize.define(
       allowNull: true
     },
     amount: {
-      type: DataTypes.DECIMAL(12, 2),
+      type: DataTypes.DECIMAL,
       allowNull: false
     },
     currency: {
@@ -70,7 +70,7 @@ const Payment = sequelize.define(
       allowNull: true
     },
     refundAmount: {
-      type: DataTypes.DECIMAL(12, 2),
+      type: DataTypes.DECIMAL,
       allowNull: true,
       defaultValue: 0
     },
