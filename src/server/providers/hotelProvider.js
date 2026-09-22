@@ -38,11 +38,18 @@ function formatHotelDate(dateInput, defaultDaysAhead = 14) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-async function callSrdvHotelEndpoint(endpointPath, payload, actionName, traceId = null) {
-  let fullUrl = HOTEL_API_URL.replace(/\/+$/, '');
-  if (!fullUrl.endsWith('/rest')) {
-    fullUrl = `${fullUrl}/rest`;
+function getHotelRestBaseUrl() {
+  const raw = process.env.SRDV_HOTEL_URL || 'https://hotel.srdvtest.com/v8/rest/Search';
+  let url = raw.trim().replace(/\/+$/, '');
+  url = url.replace(/\/(search|gethotelinfo|gethotelroom)$/i, '');
+  if (!url.endsWith('/rest')) {
+    url = `${url}/rest`;
   }
+  return url;
+}
+
+async function callSrdvHotelEndpoint(endpointPath, payload, actionName, traceId = null) {
+  const fullUrl = getHotelRestBaseUrl();
   const targetUrl = `${fullUrl}/${endpointPath.replace(/^\/+/, '')}`;
   const requestUrl = PROXY_URL ? `${PROXY_URL}?target=${encodeURIComponent(targetUrl)}` : targetUrl;
 

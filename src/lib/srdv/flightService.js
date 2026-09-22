@@ -224,14 +224,34 @@ function parseFlightGroup(item, fIdx, traceId, searchContext = {}, isReturn = fa
     const tax = Number(fare.Tax || Math.round(offeredFare - baseFare));
 
     const finalPrice = Math.round(offeredFare || publishedFare);
-    const resultIndex = fareItem.ResultIndex || `R_${fIdx}_${fareIdx}`;
+    const resolvedResultIndex = fareItem.ResultIndex || item.ResultIndex || `R_${fIdx}_${fareIdx}`;
+    const resolvedSrdvType = fareItem.SrdvType || item.SrdvType || 'MixAPI';
+    const resolvedSrdvIndex = fareItem.SrdvIndex || item.SrdvIndex || String(fIdx);
 
     mappedFares.push({
-      id: `FL-${resultIndex}`,
-      resultIndex: String(resultIndex),
+      id: `FL-${resolvedResultIndex}`,
+      resultIndex: String(resolvedResultIndex),
       traceId: String(traceId || ''),
-      srdvType: 'flight',
-      srdvIndex: fareItem.SrdvIndex || String(fIdx),
+      srdvType: String(resolvedSrdvType),
+      srdvIndex: String(resolvedSrdvIndex),
+      srdvContext: {
+        traceId: String(traceId || ''),
+        resultIndex: String(resolvedResultIndex),
+        srdvType: String(resolvedSrdvType),
+        srdvIndex: String(resolvedSrdvIndex)
+      },
+      legs: [
+        {
+          traceId: String(traceId || ''),
+          resultIndex: String(resolvedResultIndex),
+          srdvType: String(resolvedSrdvType),
+          srdvIndex: String(resolvedSrdvIndex),
+          origin: originCode,
+          destination: destCode,
+          departureTime: depTime,
+          arrivalTime: arrTime
+        }
+      ],
       isLCC: Boolean(fareItem.IsLCC),
       isReturn,
       airline: airlineName,

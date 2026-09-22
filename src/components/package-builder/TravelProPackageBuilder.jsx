@@ -1193,6 +1193,7 @@ export default function TravelProPackageBuilder({
     if (!dayId) return;
 
     const flightPayload = {
+      ...flightData,
       from: flightData.from || flightData.fromCode || 'DEL',
       fromName: flightData.fromName || 'Origin',
       to: flightData.to || flightData.toCode || 'DEST',
@@ -1206,7 +1207,27 @@ export default function TravelProPackageBuilder({
       fare: Number(flightData.fare) || 0,
       tax: Number(flightData.tax) || 0,
       flightImage: flightData.flightImage || flightData.image || null,
-      apiSelected: flightData.apiSelected !== false
+      apiSelected: flightData.apiSelected !== false,
+      traceId: flightData.traceId || flightData.TraceId || '',
+      resultIndex: flightData.resultIndex || flightData.ResultIndex || '',
+      srdvType: flightData.srdvType || flightData.SrdvType || '',
+      srdvIndex: flightData.srdvIndex || flightData.SrdvIndex || '',
+      srdvContext: flightData.srdvContext || {
+        traceId: flightData.traceId || flightData.TraceId || '',
+        resultIndex: flightData.resultIndex || flightData.ResultIndex || '',
+        srdvType: flightData.srdvType || flightData.SrdvType || '',
+        srdvIndex: flightData.srdvIndex || flightData.SrdvIndex || ''
+      },
+      legs: Array.isArray(flightData.legs) && flightData.legs.length > 0
+        ? flightData.legs
+        : [
+            {
+              traceId: flightData.traceId || flightData.TraceId || '',
+              resultIndex: flightData.resultIndex || flightData.ResultIndex || '',
+              srdvType: flightData.srdvType || flightData.SrdvType || '',
+              srdvIndex: flightData.srdvIndex || flightData.SrdvIndex || ''
+            }
+          ]
     };
 
     if (serviceId) {
@@ -1237,6 +1258,7 @@ export default function TravelProPackageBuilder({
     if (!dayId) return;
 
     const hotelPayload = {
+      ...hotelData,
       name: hotelData.name || 'Hotel Stay',
       stars: hotelData.stars || 4,
       room: hotelData.room || hotelData.roomType || 'Standard Room',
@@ -1324,6 +1346,7 @@ export default function TravelProPackageBuilder({
     if (!dayId) return;
 
     const busPayload = {
+      ...busData,
       operator: busData.operator || 'Bus Operator',
       busType: busData.busType || 'AC Sleeper',
       from: busData.from || packageData.originCity || 'Origin',

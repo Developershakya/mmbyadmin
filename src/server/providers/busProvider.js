@@ -37,11 +37,18 @@ function formatBusDate(dateInput, defaultDaysAhead = 14) {
   return ymd;
 }
 
-async function callSrdvBusEndpoint(endpointPath, payload, actionName, traceId = null) {
-  let fullUrl = BUS_API_URL.replace(/\/+$/, '');
-  if (!fullUrl.endsWith('/rest')) {
-    fullUrl = `${fullUrl}/rest`;
+function getBusRestBaseUrl() {
+  const raw = process.env.SRDV_BUS_URL || 'https://bus.srdvtest.com/v9/rest/Search';
+  let url = raw.trim().replace(/\/+$/, '');
+  url = url.replace(/\/(search|seatlayout|boardingpointdetails)$/i, '');
+  if (!url.endsWith('/rest')) {
+    url = `${url}/rest`;
   }
+  return url;
+}
+
+async function callSrdvBusEndpoint(endpointPath, payload, actionName, traceId = null) {
+  const fullUrl = getBusRestBaseUrl();
   const targetUrl = `${fullUrl}/${endpointPath.replace(/^\/+/, '')}`;
   const requestUrl = PROXY_URL ? `${PROXY_URL}?target=${encodeURIComponent(targetUrl)}` : targetUrl;
 

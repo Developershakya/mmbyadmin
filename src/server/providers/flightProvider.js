@@ -5,9 +5,19 @@ import { normalizeSrdvContext } from '../srdvContext.js';
 const FLIGHT_API_URL = process.env.SRDV_FLIGHT_URL || process.env.FLIGHT_API_URL || 'https://flight.srdvapi.com/v8/rest';
 const SRDV_CLIENT_ID = process.env.SRDV_CLIENT_ID || '180189';
 const SRDV_USERNAME = process.env.SRDV_USERNAME || 'MakeMy91';
-const SRDV_PASSWORD = process.env.SRDV_PASSWORD || 'shakya@9811';
+const SRDV_PASSWORD = process.env.SRDV_PASSWORD || 'MakeMy@910';
 const SRDV_API_TOKEN = process.env.SRDV_API_TOKEN || '';
 const PROXY_URL = process.env.SRDV_PROXY_URL || process.env.FORWARD_PROXY_URL || '';
+
+function getFlightRestBaseUrl() {
+  const raw = process.env.SRDV_FLIGHT_URL || process.env.FLIGHT_API_URL || 'https://flight.srdvapi.com/v8/rest';
+  let url = raw.trim().replace(/\/+$/, '');
+  url = url.replace(/\/(search|farerule|farequote|seatmap|ssr|getcalendarfare)$/i, '');
+  if (!url.endsWith('/rest')) {
+    url = `${url}/rest`;
+  }
+  return url;
+}
 
 function formatFlightDate(dateInput, defaultDaysAhead = 14) {
   const now = new Date();
@@ -36,10 +46,7 @@ function formatFlightDate(dateInput, defaultDaysAhead = 14) {
 }
 
 async function callSrdvEndpoint(endpointPath, payload, actionName, traceId = null) {
-  let fullUrl = FLIGHT_API_URL.replace(/\/+$/, '');
-  if (!fullUrl.endsWith('/rest')) {
-    fullUrl = `${fullUrl}/rest`;
-  }
+  const fullUrl = getFlightRestBaseUrl();
   const targetUrl = `${fullUrl}/${endpointPath.replace(/^\/+/, '')}`;
   const requestUrl = PROXY_URL ? `${PROXY_URL}?target=${encodeURIComponent(targetUrl)}` : targetUrl;
 

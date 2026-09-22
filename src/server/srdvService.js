@@ -191,28 +191,56 @@ export function generateNormalizedFallbackFlights(meta) {
     { code: 'QP', name: 'Akasa Air', dep: '18:10', arr: '21:00', dur: '2h 50m', stops: '1 Stop via IXC', fare: 4100 },
   ];
 
-  const list = carriers.map((c, idx) => ({
-    id: `FLIGHT-SRDV-${origin}-${destination}-${idx + 1}`,
-    airline: c.name,
-    airlineCode: c.code,
-    flightNumber: `${c.code}-${400 + idx * 23}`,
-    fromCode: origin.toUpperCase(),
-    fromCity: origin === 'DEL' ? 'Delhi' : origin,
-    toCode: destination.toUpperCase(),
-    toCity: destination === 'KUU' ? 'Kullu / Manali' : destination,
-    depTime: c.dep,
-    arrTime: c.arr,
-    duration: c.dur,
-    stops: c.stops,
-    price: c.fare,
-    baseFare: Math.round(c.fare * 0.78),
-    tax: Math.round(c.fare * 0.22),
-    cabinClass: 'Economy',
-    isRefundable: true,
-    baggage: '15 Kg Check-in + 7 Kg Cabin',
-    traceId: Date.now(),
-    source: 'SRDV Sandbox Verified'
-  }));
+  const simTraceId = `TR-${Date.now()}`;
+  const list = carriers.map((c, idx) => {
+    const resIndex = `OB${idx + 1}`;
+    const sIndex = `${idx + 1}`;
+    const sType = 'MixAPI';
+
+    return {
+      id: `FLIGHT-SRDV-${origin}-${destination}-${idx + 1}`,
+      airline: c.name,
+      airlineCode: c.code,
+      flightNumber: `${c.code}-${400 + idx * 23}`,
+      fromCode: origin.toUpperCase(),
+      fromCity: origin === 'DEL' ? 'Delhi' : origin,
+      toCode: destination.toUpperCase(),
+      toCity: destination === 'KUU' ? 'Kullu / Manali' : destination,
+      depTime: c.dep,
+      arrTime: c.arr,
+      duration: c.dur,
+      stops: c.stops,
+      price: c.fare,
+      baseFare: Math.round(c.fare * 0.78),
+      tax: Math.round(c.fare * 0.22),
+      cabinClass: 'Economy',
+      isRefundable: true,
+      baggage: '15 Kg Check-in + 7 Kg Cabin',
+      traceId: simTraceId,
+      resultIndex: resIndex,
+      srdvType: sType,
+      srdvIndex: sIndex,
+      srdvContext: {
+        traceId: simTraceId,
+        resultIndex: resIndex,
+        srdvType: sType,
+        srdvIndex: sIndex
+      },
+      legs: [
+        {
+          traceId: simTraceId,
+          resultIndex: resIndex,
+          srdvType: sType,
+          srdvIndex: sIndex,
+          origin: origin.toUpperCase(),
+          destination: destination.toUpperCase(),
+          departureTime: c.dep,
+          arrivalTime: c.arr
+        }
+      ],
+      source: 'SRDV Sandbox Verified'
+    };
+  });
 
   return {
     success: true,
