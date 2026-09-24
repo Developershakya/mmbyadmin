@@ -1,0 +1,754 @@
+import React, { useState } from "react";
+import {
+  Plane,
+  Clock,
+  ArrowRight,
+  ShieldCheck,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  AlertCircle,
+  CheckCircle2,
+  Briefcase,
+  Coffee,
+  Info,
+  Loader2,
+} from "lucide-react";
+
+const hasSrdvError = (payload) => {
+  const error = payload?.Error;
+  if (error && typeof error === "object") {
+    const codeValue = error.ErrorCode ?? error.errorCode;
+    const code = Number(codeValue ?? 0);
+    const message = String(error.ErrorMessage || error.message || "").trim();
+    return code !== 0 || !!message;
+  }
+
+  if (payload?.error) return true;
+  return false;
+};
+
+const getSrdvErrorMessage = (payload) => {
+  const error = payload?.Error;
+  if (error && typeof error === "object") {
+    const codeValue = error.ErrorCode ?? error.errorCode;
+    const code = Number(codeValue ?? 0);
+    const message = String(error.ErrorMessage || error.message || "").trim();
+    if (code !== 0 || message) {
+      return `Error Code: ${codeValue ?? "Unknown"}\n\n${message || "SRDV returned an error."}`;
+    }
+  }
+  if (payload?.error) return payload.error;
+  return null;
+};
+
+const getFareRuleHtml = (payload) => {
+  const candidates = [
+    payload?.FareRules?.[0]?.FareRuleDetail,
+    payload?.data?.FareRules?.[0]?.FareRuleDetail,
+    payload?.fareRuleDetail,
+    payload?.data?.fareRuleDetail,
+    payload?.Results?.[0]?.FareRuleDetail,
+    payload?.data?.Results?.[0]?.FareRuleDetail,
+    payload?.SpecialRule,
+    payload?.data?.SpecialRule,
+    payload?.Results?.[0]?.SpecialRule,
+    payload?.data?.Results?.[0]?.SpecialRule,
+  ];
+
+  const firstValid = candidates.find(
+    (value) => typeof value === "string" && value.trim().length > 0,
+  );
+  if (!firstValid) return "";
+
+  return firstValid;
+};
+
+const readJsonResponse = async (response) => {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
+};
+
+const fetchDirectSrdv = async (path, payload) => {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await readJsonResponse(response);
+  if (!response.ok) {
+    const message =
+      getSrdvErrorMessage(data) ||
+      data?.message ||
+      `SRDV request failed with status ${response.status}`;
+    const err = new Error(message);
+    err.status = response.status;
+    err.payload = data;
+    throw err;
+  }
+
+  return data;
+};
+
+const inr = (n) => "₹" + Math.round(n || 0).toLocaleString("en-IN");
+
+const normalizeStopsDisplay = (stopsValue) => {
+  if (typeof stopsValue === "number") {
+    return stopsValue === 0
+      ? "Non Stop"
+      : `${stopsValue} Stop${stopsValue > 1 ? "s" : ""}`;
+  }
+
+  if (typeof stopsValue === "string") {
+    const raw = stopsValue.trim();
+    if (!raw) return "Non Stop";
+
+    const lower = raw.toLowerCase();
+    if (
+      lower === "direct" ||
+      lower === "non-stop" ||
+      lower === "non stop" ||
+      lower === "nonstop" ||
+      lower === "0 stop" ||
+      lower === "0 stops"
+    ) {
+      return "Non Stop";
+    }
+
+    const match = raw.match(/(\d+)\s*stop/i);
+    if (match) {
+      const count = Number(match[1]);
+      return count === 0 ? "Non Stop" : `${count} Stop${count > 1 ? "s" : ""}`;
+    }
+
+    if (lower.includes("via")) return raw;
+    return raw;
+  }
+
+  return "Non Stop";
+};
+
+const getStopsCount = (stopsValue) => {
+  if (typeof stopsValue === "number") return Math.max(0, stopsValue);
+
+  if (typeof stopsValue === "string") {
+    const raw = stopsValue.trim();
+    if (!raw) return 0;
+
+    const lower = raw.toLowerCase();
+    if (
+      lower === "direct" ||
+      lower === "non-stop" ||
+      lower === "non stop" ||
+      lower === "nonstop" ||
+      lower === "0 stop" ||
+      lower === "0 stops"
+    )
+      return 0;
+
+    const match = raw.match(/(\d+)\s*stop/i);
+    if (match) return Number(match[1]);
+
+    if (lower.includes("via")) {
+      const viaMatch = raw.match(/(\d+)/);
+      return viaMatch ? Number(viaMatch[1]) : 1;
+    }
+  }
+
+  return 0;
+};
+
+const getStopSummary = (flight) => {
+  const stopValue =
+    flight?.stops ?? flight?.stopsLabel ?? flight?.stopLabel ?? "";
+  const viaValue =
+    flight?.via ||
+    flight?.stopAirport ||
+    flight?.layoverAirport ||
+    flight?.transitAirport ||
+    flight?.connectingAirport ||
+    flight?.viaAirport ||
+    "";
+
+  const strValue = String(stopValue || "").trim();
+  const viaText = String(viaValue || "").trim();
+
+  let label = normalizeStopsDisplay(stopValue);
+  let via = "";
+
+  if (viaText) {
+    via = viaText.toUpperCase().startsWith("VIA ")
+      ? viaText.toUpperCase()
+      : `via ${viaText.toUpperCase()}`;
+  } else if (strValue) {
+    const viaMatch = strValue.match(/via\s+([A-Za-z0-9-]+)/i);
+    if (viaMatch) {
+      via = `via ${viaMatch[1].toUpperCase()}`;
+    }
+  }
+
+  const count = getStopsCount(stopValue);
+  if (count === 0) {
+    return { label: "Non Stop", via: "" };
+  }
+
+  const countLabel = `${count} Stop${count > 1 ? "s" : ""}`;
+  return {
+    label: via ? countLabel : normalizeStopsDisplay(stopValue),
+    via:
+      via ||
+      (strValue && strValue.toLowerCase().includes("via") ? "via transit" : ""),
+  };
+};
+
+// Helper to parse airline GDS fare rule text into structured items without fake fallbacks
+export function parseFareRulesText(rawText = "", airline = "", fare = 4500) {
+  if (!rawText || rawText.trim().length === 0) {
+    return {
+      cancellation: "Not provided by supplier",
+      dateChange: "Not provided by supplier",
+      noShow: "Not provided by supplier",
+      seatPolicy: "As per airline seat selection policy",
+      baggage: "As indicated on flight itinerary",
+      meals: "As per selected cabin class",
+      bullets: [],
+      empty: true,
+    };
+  }
+
+  const text = String(rawText);
+  let cancellation = "";
+  let dateChange = "";
+  let noShow = "";
+  let baggage = "As per ticket allowance";
+  let seatPolicy = "As per airline seat selection policy";
+  let meals = "As per airline service terms";
+
+  // Extract cancellation
+  const cancelMatch = text.match(/cancel[a-z\s:]+([^.\n]+)/i);
+  if (cancelMatch) {
+    cancellation = cancelMatch[1].trim();
+  } else {
+    cancellation = "Refer to airline fare rule terms";
+  }
+
+  // Extract date change
+  const changeMatch = text.match(
+    /(date\s*change|reschedul)[a-z\s:]+([^.\n]+)/i,
+  );
+  if (changeMatch) {
+    dateChange = changeMatch[2].trim();
+  } else {
+    dateChange = "Subject to airline date change policy";
+  }
+
+  // Extract no show
+  const noShowMatch = text.match(/no[-\s]?show[a-z\s:]+([^.\n]+)/i);
+  if (noShowMatch) {
+    noShow = noShowMatch[1].trim();
+  } else {
+    noShow = "Refer to airline no-show policy";
+  }
+
+  // Extract baggage
+  const bagMatch = text.match(/baggage[a-z\s:]+([^.\n]+)/i);
+  if (bagMatch) {
+    baggage = bagMatch[1].trim();
+  }
+
+  // Split lines into clean bullets
+  const rawLines = text
+    .split(/\r?\n|\|/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 10 && !l.includes("***") && !l.includes("---"));
+
+  const bullets = rawLines.slice(0, 5);
+  if (bullets.length === 0) {
+    bullets.push("Refer to detailed fare rule text provided by airline.");
+  }
+
+  return {
+    cancellation,
+    dateChange,
+    noShow,
+    seatPolicy,
+    baggage,
+    meals,
+    bullets,
+  };
+}
+
+export default function FlightResultCard({
+  flight,
+  onSelect,
+  isSelecting = false,
+}) {
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState("DETAILS"); // 'DETAILS' | 'FARE' | 'RULES'
+  const [fareRuleLoading, setFareRuleLoading] = useState(false);
+  const [parsedRules, setParsedRules] = useState(null);
+  const [fareRuleHtml, setFareRuleHtml] = useState("");
+
+  const airlineCode =
+    flight.airlineCode || flight.airline?.slice(0, 2).toUpperCase() || "6E";
+  const logoUrl =
+    flight.airlineLogo ||
+    `https://assets.duffel.com/img/airlines/for-light-background/full-color-logo/${airlineCode}.svg`;
+  // naya state (component ke top pe, existing states ke saath)
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState("");
+
+  // Select click -> pehle Fare Quote API call, uske baad hi onSelect()
+  const handleSelectClick = async () => {
+    setQuoteError("");
+    setQuoteLoading(true);
+    try {
+      const payload = {
+        srdvType: flight?.srdvType || flight?.SrdvType,
+        srdvIndex: flight?.srdvIndex || flight?.SrdvIndex,
+        traceId: flight?.traceId || flight?.TraceId,
+        resultIndex: flight?.resultIndex || flight?.ResultIndex,
+      };
+
+      const quoteRes = await fetchDirectSrdv(
+        "/api/admin-srdv/flights/fare-quote",
+        payload,
+      );
+      const q = quoteRes?.Results || quoteRes; // real shape: { Results: {...} }
+
+      // Fare Quote se aaya hua real data flight object me merge karo
+      const enrichedFlight = {
+        ...flight,
+        fareQuoted: true,
+        fareQuote: q,
+        isRefundable: q?.IsRefundable ?? flight.isRefundable,
+        isLCC: q?.IsLCC ?? flight.isLCC,
+        seatSelectAllowed: q?.SeatSelectAllowed !== false,
+        holdAllowed: Boolean(q?.HoldAllowed),
+        singleSlotBooking: q?.SingleSlotBooking,
+        fareBreakdown: q?.FareBreakdown || [],
+        fare: Number(q?.Fare?.BaseFare) || flight.fare,
+        tax:
+          (Number(q?.Fare?.Tax) || 0) + (Number(q?.Fare?.YQTax) || 0) ||
+          flight.tax,
+        totalFare: Number(q?.Fare?.OfferedFare) || flight.totalFare,
+        offeredFare: Number(q?.Fare?.OfferedFare) || undefined,
+        publishedFare: Number(q?.Fare?.PublishedFare) || undefined,
+      };
+
+      onSelect(enrichedFlight);
+    } catch (err) {
+      // getSrdvErrorMessage already ErrorCode "0" ko error nahi maanta (code !== 0 || message)
+      const msg =
+        getSrdvErrorMessage(err.payload || {}) ||
+        err.message ||
+        "Fare quote failed.";
+      setQuoteError(msg);
+      alert(msg);
+    } finally {
+      setQuoteLoading(false);
+    }
+  };
+  const fetchFareRulesIfNeeded = async () => {
+    if (parsedRules || fareRuleLoading) return; // already loaded or loading
+
+    setFareRuleLoading(true);
+    try {
+      console.log("flight ", flight);
+      const res = await fetchDirectSrdv("/api/admin-srdv/flights/fare-rule", {
+        srdvType: flight?.srdvType || flight?.SrdvType,
+        srdvIndex: flight?.srdvIndex || flight?.SrdvIndex,
+        traceId: flight?.traceId || flight?.TraceId,
+        resultIndex: flight?.resultIndex || flight?.ResultIndex,
+      });
+
+      const rawRuleText =
+        getFareRuleHtml(res) ||
+        res?.FareRules?.[0]?.FareRuleDetail ||
+        res?.data?.FareRules?.[0]?.FareRuleDetail ||
+        res?.fareRuleDetail ||
+        "";
+
+      if (rawRuleText) {
+        setFareRuleHtml(rawRuleText);
+      } else {
+        setFareRuleHtml("");
+      }
+
+      const parsed = parseFareRulesText(
+        rawRuleText,
+        flight.airline,
+        flight.fare,
+      );
+      setParsedRules(parsed);
+    } catch (err) {
+      console.warn(
+        "Fare rule API notice, using calibrated rules:",
+        err.message,
+      );
+      const errorText = getSrdvErrorMessage(err.payload || {}) || err.message;
+      if (errorText) {
+        alert(errorText);
+      }
+      const fallbackParsed = parseFareRulesText(
+        "",
+        flight.airline,
+        flight.fare,
+      );
+      setParsedRules(fallbackParsed);
+    } finally {
+      setFareRuleLoading(false);
+    }
+  };
+
+  const isRefundable =
+    flight.isRefundable !== false && flight.refundable !== false;
+  const seatsLeft = flight.seatsLeft || flight.availableSeats || 5;
+  const stopCount = getStopsCount(flight?.stops);
+  const stopLabel = normalizeStopsDisplay(flight?.stops);
+  const stopSummary = getStopSummary(flight);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-blue-400 hover:shadow-md transition duration-150">
+      {/* Main Flight Summary Row (Screenshot 3 layout) */}
+      <div className="p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        {/* Airline Info */}
+        <div className="flex items-center gap-3 min-w-[170px]">
+          <img
+            src={logoUrl}
+            alt={flight.airline}
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src =
+                "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?q=80&w=120&auto=format&fit=crop";
+            }}
+            className="w-10 h-10 object-contain rounded-lg bg-slate-50 p-1 border border-slate-100 shrink-0"
+          />
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h4 className="font-bold text-sm text-[#0F172A]">
+                {flight.airline || "IndiGo"}
+              </h4>
+            </div>
+            <p className="text-xs text-slate-500 font-mono font-medium">
+              {flight.airlineCode || "6E"} {flight.flightNumber || "2074"}
+            </p>
+          </div>
+        </div>
+
+        {/* Departure, Duration, Arrival */}
+        <div className="flex items-center gap-4 sm:gap-6 flex-1 justify-center max-w-md">
+          {/* Departure */}
+          <div className="text-right">
+            <span className="text-lg font-bold text-[#0F172A] block leading-none">
+              {flight.departureTime || flight.departure || "22:45"}
+            </span>
+            <span className="text-xs font-semibold text-slate-500 uppercase">
+              {flight.origin || flight.from || "DEL"}
+            </span>
+          </div>
+
+          {/* Route & Duration Graphic */}
+          <div className="flex flex-col items-center min-w-[90px] sm:min-w-[120px]">
+            <span className="text-[11px] text-slate-500 font-medium">
+              {flight.duration || "2h 40m"}
+            </span>
+            <div className="w-full flex items-center my-1">
+              <div className="w-2 h-2 rounded-full border border-blue-500 bg-white"></div>
+              <div className="flex-1 h-[1.5px] bg-slate-300 relative">
+                <Plane className="w-3 h-3 text-blue-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-90" />
+              </div>
+              <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] font-bold text-emerald-600">
+                {stopSummary.label || stopLabel}
+              </span>
+              {stopSummary.via && (
+                <span className="text-[9px] text-slate-500 font-medium">
+                  {stopSummary.via}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Arrival */}
+          <div className="text-left">
+            <span className="text-lg font-bold text-[#0F172A] block leading-none">
+              {flight.arrivalTime || flight.arrival || "01:25"}
+            </span>
+            <span className="text-xs font-semibold text-slate-500 uppercase">
+              {flight.destination || flight.to || "BOM"}
+            </span>
+          </div>
+        </div>
+
+        {/* Price & Select Button */}
+        <div className="flex items-center gap-4 self-end md:self-center">
+          <div className="text-right">
+            <div className="text-base sm:text-lg font-black text-[#0F172A] leading-tight">
+              {inr(flight.fare || flight.price || 4672)}
+              <span className="text-[11px] font-normal text-slate-500 block">
+                per adult
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 block">
+              + {inr(flight.tax || 650)} taxes
+            </span>
+            {seatsLeft <= 9 && (
+              <span className="text-[10px] font-semibold text-amber-600 block mt-0.5">
+                {seatsLeft} seats left at this price
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSelectClick}
+            disabled={isSelecting || quoteLoading}
+            className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-xs transition duration-150 cursor-pointer disabled:opacity-75 flex items-center gap-1.5 shrink-0"
+          >
+            {isSelecting || quoteLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : null}
+            <span>{quoteLoading ? "CHECKING FARE..." : "SELECT"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Badges & Quick Action Strip */}
+      <div className="px-4 sm:px-5 py-2 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span
+            className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ${
+              isRefundable
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                : "bg-slate-100 text-slate-600 border border-slate-200"
+            }`}
+          >
+            {isRefundable ? "Refundable" : "Non-Refundable"}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setDetailsExpanded(!detailsExpanded)}
+          className="text-slate-600 hover:text-blue-600 font-semibold cursor-pointer flex items-center gap-1"
+        >
+          <span>
+            {detailsExpanded ? "Hide Flight Details" : "View Flight Details"}
+          </span>
+          {detailsExpanded ? (
+            <ChevronUp className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5" />
+          )}
+        </button>
+      </div>
+      {quoteError && (
+        <div className="px-4 sm:px-5 py-2 bg-red-50 border-t border-red-100 text-[11px] text-red-700 font-medium">
+          {quoteError}
+        </div>
+      )}
+
+      {/* Expandable Tabbed Flight Details Panel */}
+      {detailsExpanded && (
+        <div className="p-4 sm:p-5 border-t border-slate-200 bg-slate-50/70 space-y-4 animate-in fade-in duration-150">
+          {/* Tabs */}
+          <div className="flex border-b border-slate-200 gap-4 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setActiveTab("DETAILS")}
+              className={`pb-2 transition cursor-pointer border-b-2 ${
+                activeTab === "DETAILS"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              FLIGHT DETAILS
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("FARE")}
+              className={`pb-2 transition cursor-pointer border-b-2 ${
+                activeTab === "FARE"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              FARE SUMMARY
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("RULES");
+                fetchFareRulesIfNeeded();
+              }}
+              className={`pb-2 transition cursor-pointer border-b-2 ${
+                activeTab === "RULES"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              FARE RULES
+            </button>
+          </div>
+
+          {/* TAB 1: FLIGHT DETAILS */}
+          {activeTab === "DETAILS" && (
+            <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-900">
+                    {flight.airline}
+                  </span>
+                  <span className="text-slate-500 font-mono">
+                    ({flight.airlineCode || "6E"}{" "}
+                    {flight.flightNumber || "2074"})
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-slate-600">
+                  <span className="flex items-center gap-1">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-400" /> Cabin:
+                    7 Kg
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-400" />{" "}
+                    Check-in: 15 Kg
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                <div>
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">
+                    Departure
+                  </span>
+                  <p className="font-bold text-slate-900 text-sm">
+                    {flight.departureTime || flight.departure || "22:45"}
+                  </p>
+                  <p className="text-slate-600 font-medium">
+                    {flight.originCity || "Delhi"} ({flight.origin || "DEL"})
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Terminal {flight.departureTerminal || "3"}
+                  </p>
+                </div>
+
+                <div className="text-center sm:border-x border-slate-100 sm:px-2 flex flex-col justify-center items-center">
+                  <Clock className="w-4 h-4 text-slate-400 mb-1" />
+                  <span className="font-semibold text-slate-700">
+                    {flight.duration || "2h 40m"}
+                  </span>
+                  <span className="text-[10px] text-emerald-600 font-bold">
+                    {stopSummary.label || stopLabel}
+                  </span>
+                  {stopSummary.via ? (
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {stopSummary.via}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 mt-1">
+                      Airbus A320
+                    </span>
+                  )}
+                </div>
+
+                <div className="sm:text-right">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">
+                    Arrival
+                  </span>
+                  <p className="font-bold text-slate-900 text-sm">
+                    {flight.arrivalTime || flight.arrival || "01:25"}
+                  </p>
+                  <p className="text-slate-600 font-medium">
+                    {flight.destinationCity || "Mumbai"} (
+                    {flight.destination || "BOM"})
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Terminal {flight.arrivalTerminal || "2"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: FARE SUMMARY */}
+          {activeTab === "FARE" && (
+            <div className="p-4 bg-white rounded-xl border border-slate-200 max-w-md space-y-2 text-xs">
+              <div className="flex justify-between text-slate-600">
+                <span>Base Fare (1 Adult)</span>
+                <span className="font-medium text-slate-900">
+                  {inr(flight.fare || 4022)}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Airline Taxes &amp; Surcharges</span>
+                <span className="font-medium text-slate-900">
+                  {inr(flight.tax || 650)}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>User Development Fee (UDF)</span>
+                <span className="font-medium text-slate-900">Included</span>
+              </div>
+              <div className="border-t border-slate-200 pt-2 flex justify-between font-bold text-sm text-slate-900">
+                <span>Total Fare (per adult)</span>
+                <span className="text-blue-600">
+                  {inr((flight.fare || 4022) + (flight.tax || 650))}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: FARE RULES */}
+          {activeTab === "RULES" && (
+            <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-3 text-xs">
+              {fareRuleLoading ? (
+                <div className="flex items-center gap-2 text-slate-500 py-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                  <span>Loading airline fare rules...</span>
+                </div>
+              ) : fareRuleHtml ? (
+                <div
+                  className="overflow-x-auto text-slate-700 leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: fareRuleHtml }}
+                />
+              ) : (
+                <>
+                  <p className="font-bold text-slate-900">
+                    Airline Fare Rules & Policies:
+                  </p>
+                  <p className="text-slate-600">
+                    Cancellation:{" "}
+                    {parsedRules?.cancellation || "Not provided by supplier"}
+                  </p>
+                  <p className="text-slate-600">
+                    Date Change:{" "}
+                    {parsedRules?.dateChange || "Not provided by supplier"}
+                  </p>
+                  <p className="text-slate-600">
+                    No-Show: {parsedRules?.noShow || "Not provided by supplier"}
+                  </p>
+                  {parsedRules?.bullets?.length > 0 && (
+                    <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px] pt-2 border-t border-slate-100">
+                      {parsedRules.bullets.map((b, i) => (
+                        <li key={i}>{b}</li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

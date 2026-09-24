@@ -1,5 +1,4 @@
 import "@/styles/globals.css";
-
 export const metadata = {
   title: "Make My Bharat Yatra",
   description: "Customized Tour Packages and Holidays",
@@ -8,7 +7,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+      </body>
     </html>
   );
 }

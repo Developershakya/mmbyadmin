@@ -381,17 +381,39 @@ export default function Packages() {
       return [...prev, day];
     });
   };
-  const handleOptionSearch = async (p,i)=>{
-    setSelect((prev) => (prev === i ? null : i))
-    // try {
-      
+  const handleOptionSearch = async (p, i) => {
+    setSelect((prev) => (prev === i ? null : i));
+    if(selectOption != null) return;
+    try {
+      const [originResponse, destinationResponse] = await Promise.all([
+        fetch(`../api/cities/airports?code=${origin}`),
+        fetch(`../api/cities/airports?code=${destination}`),
+      ]);
 
-      
-    // }catch(error){
-    //   console.log(error.mesasge)
-    // }
+      // const [originData, destinationData] = await Promise.all([
+      //   originResponse.json(),
+      //   destinationResponse.json(),
+      // ]);
+
+      // console.log("origin", originData);
+      // console.log("destination", destinationData);
+      console.log("origin", await originResponse.json());
+      // console.log("destination", destinationData);
+      const response = await fetch("/api/flights", {
+        method: POST,
+        body: {
+          adultCount: adult,
+          childCount: child,
+          infantCount: infant,
+          journeyType: 1,
+          segments,
+        },
+      });
+    } catch (error) {
+      console.log(error.message);
+    }
     
-  }
+  };
 
   useEffect(() => {
     function handleOutClick(e) {
@@ -818,9 +840,7 @@ export default function Packages() {
                   return (
                     <div
                       key={`${p.packageName}-${i}`}
-                      onClick={(p) =>
-                        handleOptionSearch(p,i)
-                      }
+                      onClick={(p) => handleOptionSearch(p, i)}
                       className={` bg-white min-w-[350px]  relative rounded-xl  shadow-md overflow-hidden`}
                     >
                       <div
@@ -846,7 +866,9 @@ export default function Packages() {
                               <div className="">
                                 <h2 className="font-bold">With Flight</h2>
                                 <p className="flex items-center gap-1 text-sm text-gray-500 font-mono">
-                                  Starting from <span className="w-0.5 h-0.5 rounded-full bg-gray-500"></span><span>{p.coverLocation[0]}</span>
+                                  Starting from{" "}
+                                  <span className="w-0.5 h-0.5 rounded-full bg-gray-500"></span>
+                                  <span>{p.coverLocation[0]}</span>
                                 </p>
                               </div>
                               <div className="text-right">
@@ -885,7 +907,9 @@ export default function Packages() {
                               <div className="">
                                 <h2 className="font-bold">Without Flight</h2>
                                 <p className="flex items-center gap-1 text-sm text-gray-500 font-mono">
-                                  Starting from <span className="w-0.5 h-0.5 rounded-full bg-gray-500"></span><span>{p.coverLocation[0]}</span>
+                                  Starting from{" "}
+                                  <span className="w-0.5 h-0.5 rounded-full bg-gray-500"></span>
+                                  <span>{p.coverLocation[0]}</span>
                                 </p>
                               </div>
                               <div className="text-right">

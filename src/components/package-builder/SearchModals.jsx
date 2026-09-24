@@ -1,0 +1,3173 @@
+import React, { useState, useRef } from "react";
+import {
+  X,
+  Search,
+  Loader2,
+  Plane,
+  Building2,
+  Car,
+  Bus,
+  Check,
+  Star,
+  Clock,
+  ArrowRight,
+  AlertCircle,
+  Upload,
+  Image as ImageIcon,
+  Edit3,
+  Sparkles,
+  Trash2,
+  Copy,
+  ShieldAlert,
+} from "lucide-react";
+import AutocompleteInput from "./AutocompleteInput.jsx";
+import FlightResultCard from "./FlightResultCard.jsx";
+import FareCalendarStrip from "./FareCalendarStrip.jsx";
+
+// INR Currency Formatter
+const inr = (n) => "₹" + Math.round(n || 0).toLocaleString("en-IN");
+
+// Dynamic future date helper to ensure SRDV API requests always use valid dates
+const getFutureDateStr = (daysAhead = 14) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  return d.toISOString().split("T")[0];
+};
+
+/* =========================================================================
+   REAL SRDV API RESPONSE MAPPERS (no guessing, no generic normalizer)
+   Each mapper matches the exact contract SRDV actually returns.
+   ========================================================================= */
+
+const fmtTime = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+};
+
+const fmtDuration = (mins) => {
+  const m = Number(mins) || 0;
+  if (!m) return "";
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${h}h ${mm}m`;
+};
+
+/* ---- FLIGHTS ----
+   Real shape:
+   { Error, TraceId, SrdvType, Origin, Destination,
+     Results: [ [ optionObj, optionObj, ... ] ] }
+   optionObj: {
+     FareDataMultiple: [ { SrdvIndex, ResultIndex, Source, OfferedFare, Fare:{BaseFare,Tax,YQTax,...},
+                            IsRefundable, IsLCC, FareSegments:[{AirlineCode,AirlineName,FlightNumber,
+                            FromAirportCode,ToAirportCode,Baggage,CabinBaggage,FareClass,CabinClassName,
+                            NoOfSeatAvailable,...}] } ],
+     Segments: [ [ { Airline:{AirlineCode,AirlineName,FlightNumber}, Origin:{AirportCode,CityName,Terminal},
+                     DepTime, Destination:{AirportCode,CityName,Terminal}, ArrTime, Duration, GroundTime } ] ],
+     OfferedFare
+   }
+   Results[0] = outbound option list (for round trip, Results[1] = return option list). */
+const mapFlightOption = (option, traceId, srdvType) => {
+  const fareBuckets = Array.isArray(option?.FareDataMultiple)
+    ? option.FareDataMultiple
+    : option?.FareDataMultiple
+      ? [option.FareDataMultiple]
+      : [];
+  const primaryFare = fareBuckets[0] || option?.FareData || {};
+  const segGroups = Array.isArray(option?.Segments) ? option.Segments : [];
+  const firstLeg = Array.isArray(segGroups[0]) ? segGroups[0] : segGroups;
+  const firstSeg = firstLeg[0] || {};
+  const lastSeg = firstLeg[firstLeg.length - 1] || firstSeg;
+  const fareSeg = Array.isArray(primaryFare?.FareSegments)
+    ? primaryFare.FareSegments[0] || {}
+    : {};
+
+  const flightMinutes = firstLeg.reduce(
+    (acc, s) => acc + (Number(s.Duration) || 0),
+    0,
+  );
+  const groundMinutes = firstLeg
+    .slice(0, -1)
+    .reduce((acc, s) => acc + (Number(s.GroundTime) || 0), 0);
+
+  const fallbackFare =
+    Number(primaryFare?.OfferedFare ?? option?.OfferedFare ?? 0) || 0;
+
+  return {
+    // preserve the complete original SRDV object for downstream APIs and selection state
+    raw: option,
+    originalFlight: option,
+    airline: firstSeg.Airline?.AirlineName || fareSeg.AirlineName || "",
+    airlineCode: firstSeg.Airline?.AirlineCode || fareSeg.AirlineCode || "",
+    flightNumber: firstSeg.Airline?.FlightNumber || fareSeg.FlightNumber || "",
+    from: firstSeg.Origin?.AirportCode || fareSeg.FromAirportCode || "",
+    fromName: firstSeg.Origin?.CityName || fareSeg.FromCity || "",
+    to: lastSeg.Destination?.AirportCode || fareSeg.ToAirportCode || "",
+    toName: lastSeg.Destination?.CityName || fareSeg.ToCity || "",
+    departure: fmtTime(firstSeg.DepTime),
+    arrival: fmtTime(lastSeg.ArrTime),
+    departureIso: firstSeg.DepTime || "",
+    arrivalIso: lastSeg.ArrTime || "",
+    duration: fmtDuration(flightMinutes + groundMinutes),
+    stops: Math.max(firstLeg.length - 1, 0),
+    cabin: fareSeg.CabinClassName || "Economy",
+    baggage: fareSeg.Baggage || "",
+    cabinBaggage: fareSeg.CabinBaggage || "",
+
+    fare: Number(primaryFare?.Fare?.BaseFare) || fallbackFare,
+    tax:
+      (Number(primaryFare?.Fare?.Tax) || 0) +
+      (Number(primaryFare?.Fare?.YQTax) || 0),
+    totalFare:
+      Number(primaryFare?.OfferedFare ?? option?.OfferedFare) || fallbackFare,
+    isRefundable: Boolean(primaryFare?.IsRefundable),
+    isLCC: Boolean(primaryFare?.IsLCC),
+    seatsLeft: fareSeg.NoOfSeatAvailable ?? "",
+    source: primaryFare?.Source || "",
+
+    // keep all fare buckets returned by SRDV for any fare-picker or follow-up API use
+    fareOptions: fareBuckets.map((f) => ({
+      srdvIndex: f.SrdvIndex,
+      resultIndex: f.ResultIndex,
+      source: f.Source,
+      offeredFare: f.OfferedFare,
+      publishedFare: f.Fare?.PublishedFare,
+      isRefundable: f.IsRefundable,
+      fareClass: f.FareSegments?.[0]?.FareClass || "",
+      baggage: f.FareSegments?.[0]?.Baggage || "",
+      cabinBaggage: f.FareSegments?.[0]?.CabinBaggage || "",
+      rawFare: f,
+    })),
+
+    resultIndex: primaryFare?.ResultIndex || option?.ResultIndex || "",
+    srdvIndex: primaryFare?.SrdvIndex || option?.SrdvIndex || "",
+    traceId: traceId ?? "",
+    srdvType: srdvType || "",
+    segments: segGroups,
+    FareDataMultiple: fareBuckets,
+    FareSegments: primaryFare?.FareSegments || option?.FareSegments || [],
+    SrdvIndex: primaryFare?.SrdvIndex || option?.SrdvIndex || "",
+    ResultIndex: primaryFare?.ResultIndex || option?.ResultIndex || "",
+    TraceId: traceId ?? "",
+    SrdvType: srdvType || "",
+  };
+};
+
+const mapFlightApiResponse = (payload) => {
+  const resultGroups = Array.isArray(payload?.Results) ? payload.Results : [];
+  const allOptions = resultGroups.flatMap((group) => {
+    if (!Array.isArray(group)) return [];
+    return group.filter(Boolean);
+  });
+
+  console.log(
+    "SRDV raw results:",
+    resultGroups.length,
+    "groups;",
+    allOptions.length,
+    "items",
+  );
+  return allOptions.map((opt) =>
+    mapFlightOption(opt, payload?.TraceId, payload?.SrdvType),
+  );
+};
+
+/* ---- HOTELS ----
+   NOT YET CONFIRMED. No real hotel JSON was supplied, so this mapper follows the same
+   envelope convention SRDV uses for cabs/buses ({ Error, Result: { TraceId, HotelResults:[...] } }).
+   Replace field names below the moment you share an actual /hotels/search sample —
+   until then treat this as a placeholder, not a verified contract. */
+const mapHotelOption = (h, traceId) => ({
+  name: h.HotelName || "",
+  location: h.HotelAddress || "",
+  stars: Number(h.StarRating) || 0,
+  category: h.HotelCategory || "",
+  description: h.HotelDescription || "",
+  promotion: h.HotelPromotion || "",
+  policy: h.HotelPolicy || "",
+  price:
+    Number(
+      h.Price?.OfferedPriceRoundedOff ??
+        h.Price?.OfferedPrice ??
+        h.Price?.PublishedPrice,
+    ) || 0,
+  publishedPrice:
+    Number(h.Price?.PublishedPriceRoundedOff ?? h.Price?.PublishedPrice) || 0,
+  discount: Number(h.Price?.Discount) || 0,
+  image: h.HotelPicture || "",
+  latitude: h.Latitude || "",
+  longitude: h.Longitude || "",
+  contactNo: h.HotelContactNo || "",
+  rating: Number(h.StarRating) || 0,
+  reviews: 0,
+  resultIndex: h.ResultIndex || "",
+  srdvIndex: h.SrdvIndex || "",
+  hotelCode: h.HotelCode || "",
+  traceId,
+});
+
+const mapHotelApiResponse = (payload) => {
+  const list = Array.isArray(payload?.Results)
+    ? payload.Results
+    : Array.isArray(payload?.Result?.Results)
+      ? payload.Result.Results
+      : [];
+  return list.map((h) =>
+    mapHotelOption(h, payload?.TraceId ?? payload?.Result?.TraceId),
+  );
+};
+
+/* ---- CABS ----
+   Real shape:
+   { Error, Result: { TraceID, RequestData, TaxiData: [
+       { SrdvIndex, Category, Image, Availability, SeatingCapacity, LuggageCapacity,
+         AirConditioner, CarNos, Fare:{ TotalAmount, AdvanceAmount, OutStationPerKmRate,
+         OutStationDriverAllowance, Refundable,... } } ] } } */
+const mapCabOption = (t, traceId) => ({
+  vehicle: (t.Category || "").replace(/_/g, " "),
+  category: t.Category || "",
+  image: t.Image || "",
+  seats: t.SeatingCapacity ?? 4,
+  luggage: t.LuggageCapacity ?? 2,
+  ac: Boolean(t.AirConditioner),
+  availability: Number(t.Availability) || 0,
+  price: Number(t.Fare?.TotalAmount) || 0,
+  advanceAmount: Number(t.Fare?.AdvanceAmount) || 0,
+  perKmRate: t.Fare?.OutStationPerKmRate ?? "",
+  driverAllowance: t.Fare?.OutStationDriverAllowance ?? "",
+  isRefundable: Boolean(t.Fare?.Refundable),
+  srdvIndex: t.SrdvIndex || "",
+  carNos: t.CarNos || [],
+  traceId,
+});
+
+const mapCabApiResponse = (payload) => {
+  const list = Array.isArray(payload?.Result?.TaxiData)
+    ? payload.Result.TaxiData
+    : [];
+  return list.map((t) =>
+    mapCabOption(t, payload?.Result?.TraceID ?? payload?.Result?.TraceId),
+  );
+};
+
+/* ---- BUSES ----
+   Real shape:
+   { Error, TraceId, Result: { TraceId, BusResults: [ {   // (single object in the sample given,
+       ResultIndex, DepartureTime, ArrivalTime, BusType, TravelName, AvailableSeats,   // treated as array-or-object below)
+       RouteId, IdProofRequired, MTicketEnabled, MaxSeatsPerTicket,
+       BoardingPoints:[{CityPointName,CityPointLocation,CityPointTime}],
+       DroppingPoints:[{CityPointName,CityPointLocation,CityPointTime}],
+       CancellationPolicies:[{CancellationCharge,PolicyString,...}],
+       Price:{ BasePrice, OfferedPrice, PublishedPrice, Tax, Discount, GST } } ] } } */
+const mapBusOption = (b, traceId) => ({
+  operator: b.TravelName || "",
+  busType: b.BusType || "",
+  departure: fmtTime(b.DepartureTime),
+  arrival: fmtTime(b.ArrivalTime),
+  departureIso: b.DepartureTime || "",
+  arrivalIso: b.ArrivalTime || "",
+  seatsLeft: b.AvailableSeats ?? "",
+  price:
+    Number(
+      b.Price?.OfferedPriceRoundedOff ??
+        b.Price?.OfferedPrice ??
+        b.Price?.PublishedPrice,
+    ) || 0,
+  basePrice: Number(b.Price?.BasePrice) || 0,
+  resultIndex: b.ResultIndex ?? "",
+  routeId: b.RouteId || "",
+  boardingPoints: b.BoardingPoints || [],
+  droppingPoints: b.DroppingPoints || [],
+  cancellationPolicies: b.CancellationPolicies || [],
+  idProofRequired: Boolean(b.IdProofRequired),
+  mTicketEnabled: Boolean(b.MTicketEnabled),
+  maxSeatsPerTicket: b.MaxSeatsPerTicket ?? "",
+  traceId,
+});
+
+const mapBusApiResponse = (payload) => {
+  const raw = payload?.Result?.BusResults;
+  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return list.map((b) =>
+    mapBusOption(b, payload?.Result?.TraceId ?? payload?.TraceId),
+  );
+};
+
+/* =========================================================================
+   1. FLIGHT SEARCH & MANUAL ENTRY MODAL (WITH IMAGE UPLOAD)
+   ========================================================================= */
+export function FlightSearchModal({
+  isOpen,
+  onClose,
+  onSelectFlight,
+  initialData = {},
+  showToast,
+}) {
+  const [activeTab, setActiveTab] = useState("api"); // 'api' | 'manual'
+
+  // API Search State
+  const [fromCode, setFromCode] = useState(initialData.from || "DEL");
+  const [fromName, setFromName] = useState(initialData.fromName || "Delhi");
+  const [toCode, setToCode] = useState(initialData.to || "BOM");
+  const [toName, setToName] = useState(initialData.toName || "Mumbai");
+  const [date, setDate] = useState(
+    initialData.departureDate || getFutureDateStr(14),
+  );
+  const [adults, setAdults] = useState(
+    initialData.adults || initialData.pax || 1,
+  );
+  const [children, setChildren] = useState(initialData.children || 0);
+  const [infants, setInfants] = useState(initialData.infants || 0);
+  const [nonStopOnly, setNonStopOnly] = useState(
+    initialData.nonStopOnly || false,
+  );
+  const [cabinClass, setCabinClass] = useState(
+    String(initialData.flightCabinClass || "0"),
+  ); // docs: Economy = 0
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [results, setResults] = useState([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [ipErrorInfo, setIpErrorInfo] = useState(null);
+  const [copiedTemplate, setCopiedTemplate] = useState(false);
+  const flightSearchIdRef = useRef(null);
+
+  // Manual Entry State
+  const [manualAirline, setManualAirline] = useState(
+    initialData.airline || "IndiGo",
+  );
+  const [manualFlightNumber, setManualFlightNumber] = useState(
+    initialData.flightNumber || "6E 204",
+  );
+  const [manualFrom, setManualFrom] = useState(
+    initialData.fromName || initialData.from || "Delhi (DEL)",
+  );
+  const [manualTo, setManualTo] = useState(
+    initialData.toName || initialData.to || "Bhuntar / Kullu (KUU)",
+  );
+  const [manualDeparture, setManualDeparture] = useState(
+    initialData.departure || "09:20",
+  );
+  const [manualArrival, setManualArrival] = useState(
+    initialData.arrival || "11:35",
+  );
+  const [manualDuration, setManualDuration] = useState(
+    initialData.duration || "2h 15m",
+  );
+  const [manualCabin, setManualCabin] = useState(
+    initialData.cabin || "Economy",
+  );
+  const [manualFare, setManualFare] = useState(initialData.fare || 5500);
+  const [manualTax, setManualTax] = useState(initialData.tax || 650);
+  const [flightImage, setFlightImage] = useState(initialData.flightImage || "");
+  const [flightImageName, setFlightImageName] = useState("");
+
+  const fileInputRef = useRef(null);
+
+  if (!isOpen) return null;
+
+  // Handle local file image upload
+  const handleImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        if (showToast) showToast("Image file size must be under 5MB", "error");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setFlightImage(reader.result);
+        setFlightImageName(file.name);
+        if (showToast)
+          showToast("Flight image attached successfully!", "success");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const executeFlightSearch = async (searchParams = {}) => {
+    const originAirport = searchParams.fromName || fromName;
+    const destAirport = searchParams.toName || toName;
+    const originIata =
+      searchParams.fromCode ||
+      fromCode ||
+      originAirport.slice(0, 3).toUpperCase();
+    const destIata =
+      searchParams.toCode || toCode || destAirport.slice(0, 3).toUpperCase();
+    const flightDate = searchParams.date || date;
+    const numAdults = Math.max(1, Number(searchParams.adults ?? adults) || 1);
+    const numChildren = Math.max(
+      0,
+      Number(searchParams.children ?? children) || 0,
+    );
+    const numInfants = Math.max(
+      0,
+      Number(searchParams.infants ?? infants) || 0,
+    );
+    const isDirect = Boolean(searchParams.nonStopOnly ?? nonStopOnly);
+    const cabinCode = Number(searchParams.cabinClass ?? cabinClass ?? 0) || 0;
+    const departureDateTime = `${flightDate}T00:00:00`;
+    const arrivalDate = new Date(`${flightDate}T00:00:00`);
+    arrivalDate.setDate(arrivalDate.getDate() + 4);
+    const arrivalDateTime = arrivalDate.toISOString().slice(0, 19);
+
+    if (!originAirport.trim()) {
+      setError("Origin airport is required.");
+      return;
+    }
+    if (!destAirport.trim()) {
+      setError("Destination airport is required.");
+      return;
+    }
+    if (numAdults + numChildren + numInfants > 9) {
+      setError(
+        "Total passengers (Adults + Children + Infants) cannot exceed 9.",
+      );
+      return;
+    }
+    if (numInfants > numAdults) {
+      setError("Number of infants cannot exceed the number of adults.");
+      return;
+    }
+
+    const toSrdvError = (payload = {}) => {
+      if (payload?.Error?.ErrorCode && payload.Error.ErrorCode !== "0") {
+        return `Error Code: ${payload.Error.ErrorCode || "Unknown"}\n\n${payload.Error.ErrorMessage || "SRDV returned an error."}`;
+      }
+      if (payload?.error) return payload.error;
+      return null;
+    };
+
+    const searchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    flightSearchIdRef.current = searchId;
+
+    setError("");
+    setIpErrorInfo(null);
+    setResults([]);
+    setLoading(true);
+    setHasSearched(true);
+
+    try {
+      const flightResponse = await fetch("/api/admin-srdv/flights/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: originIata,
+          destination: destIata,
+          departureDate: departureDateTime,
+          preferredArrivalTime: arrivalDateTime,
+          adultCount: numAdults,
+          childCount: numChildren,
+          infantCount: numInfants,
+          directFlight: isDirect,
+          flightCabinClass: cabinCode,
+        }),
+      });
+
+      const flightData = await flightResponse.json().catch(() => ({}));
+      if (flightSearchIdRef.current !== searchId) return;
+
+      const srdvError = toSrdvError(flightData);
+      if (!flightResponse.ok || srdvError) {
+        throw Object.assign(
+          new Error(
+            srdvError ||
+              `Flight API failed with status ${flightResponse.status}`,
+          ),
+          {
+            isIpError: Boolean(flightData?.isIpError),
+            serverOutboundIp: flightData?.serverOutboundIp || "34.34.254.22",
+            whitelistedIp: flightData?.whitelistedIp || "122.161.76.198",
+            payload: flightData,
+          },
+        );
+      }
+
+      // Straight SRDV -> UI mapping, no guessing: Results[0] is the flat list of
+      // flight options for this search (each option already carries its own
+      // TraceId/ResultIndex/SrdvIndex needed for fare-rule / seat-map / booking calls).
+      const flightResults = mapFlightApiResponse(flightData);
+      setResults(flightResults);
+      if (flightResults.length === 0 && showToast) {
+        showToast(
+          "No flights found for this route and criteria. Use Manual Entry instead.",
+          "info",
+        );
+      }
+    } catch (err) {
+      if (flightSearchIdRef.current !== searchId) return;
+
+      console.error("Flight search failed:", err);
+      const isIpIssue =
+        err.isIpError ||
+        err.message?.includes("Error 900") ||
+        err.message?.includes("not authorized") ||
+        err.message?.includes("SRDV Flight API [Error 900]");
+
+      if (isIpIssue) {
+        setIpErrorInfo({
+          serverIp: err.serverOutboundIp || "34.34.254.22",
+          whitelistedIp: err.whitelistedIp || "122.161.76.198",
+        });
+      }
+      setError(err.message || "Failed to search flights from SRDV API.");
+      if (showToast) {
+        showToast(
+          isIpIssue
+            ? "SRDV Error 900: Server IP (34.34.254.22) not in SRDV whitelist"
+            : `Flight API: ${err.message}`,
+          "error",
+        );
+      }
+    } finally {
+      if (flightSearchIdRef.current === searchId) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleSearch = () => {
+    executeFlightSearch();
+  };
+
+  const handleCopyWhitelistText = () => {
+    const text = `Subject: Request to Whitelist Server IP for Client ID: 180189 (MakeMy91)
+
+Dear SRDV Support Team,
+
+Please whitelist our application server IP address in your firewall for our account credentials:
+- Client ID: 180189
+- Username: MakeMy91
+- Server Outbound IP to Whitelist: ${ipErrorInfo?.serverIp || "34.34.254.22"}
+- Registered Office IP: 122.161.76.198
+
+Currently, our API calls are returning: "Error 900: you are not authorized to access" because our cloud server outbound IP (${ipErrorInfo?.serverIp || "34.34.254.22"}) needs to be added to the account whitelist.
+
+Kindly confirm once updated.
+
+Thank you,
+Team MakeMy91`;
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+    }
+    setCopiedTemplate(true);
+    setTimeout(() => setCopiedTemplate(false), 3000);
+    if (showToast)
+      showToast(
+        "Copied SRDV whitelist request message to clipboard!",
+        "success",
+      );
+  };
+
+  const handleAddManualFlight = () => {
+    if (!manualAirline.trim()) {
+      setError("Please provide Airline Name.");
+      return;
+    }
+    if (!manualFrom.trim() || !manualTo.trim()) {
+      setError("Please provide Origin and Destination airports.");
+      return;
+    }
+
+    const payload = {
+      airline: manualAirline.trim(),
+      flightNumber: manualFlightNumber.trim() || "Custom",
+      from:
+        manualFrom.length <= 4
+          ? manualFrom.toUpperCase()
+          : manualFrom.slice(0, 3).toUpperCase(),
+      fromName: manualFrom,
+      to:
+        manualTo.length <= 4
+          ? manualTo.toUpperCase()
+          : manualTo.slice(0, 3).toUpperCase(),
+      toName: manualTo,
+      departure: manualDeparture,
+      arrival: manualArrival,
+      duration: manualDuration,
+      cabin: manualCabin,
+      fare: Number(manualFare) || 0,
+      tax: Number(manualTax) || 0,
+      flightImage: flightImage || null,
+      isManual: true,
+      apiSelected: false,
+    };
+
+    onSelectFlight(payload);
+    onClose();
+    if (showToast) showToast("Flight added manually to itinerary!", "success");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-150">
+      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0 bg-slate-50/50">
+          <div className="flex items-center gap-2.5">
+            <span className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+              <Plane className="w-5 h-5" />
+            </span>
+            <div>
+              <h2 className="text-base font-bold text-[#0F172A]">
+                Flight Details
+              </h2>
+              <p className="text-xs text-slate-500">
+                Live API Search or Custom Manual Entry
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tab Toggle: API Search vs Manual Entry */}
+        <div className="px-6 pt-4 pb-2 border-b border-slate-200 shrink-0 bg-white">
+          <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl max-w-md">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("api");
+                setError("");
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "api"
+                  ? "bg-white text-blue-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Search via API</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("manual");
+                setError("");
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "manual"
+                  ? "bg-white text-blue-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Add Flight Manually</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Scrollable Body */}
+        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          {ipErrorInfo && (
+            <div className="p-4 bg-amber-50/90 border border-amber-200 rounded-xl space-y-3 text-xs">
+              <div className="flex items-start gap-2.5">
+                <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="font-bold text-amber-900 text-sm">
+                    SRDV Flight API [Error 900]: IP Not Authorized
+                  </h4>
+                  <p className="text-amber-800 leading-relaxed">
+                    Your SRDV account (<strong>MakeMy91</strong> / Client ID:{" "}
+                    <strong>180189</strong>) is registered with your broadband
+                    IP:{" "}
+                    <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono font-semibold">
+                      122.161.76.198
+                    </code>
+                    . Because this application runs in Google Cloud, outgoing
+                    requests connect from server IP:{" "}
+                    <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono font-semibold">
+                      {ipErrorInfo.serverIp}
+                    </code>
+                    , which is blocked by SRDV's firewall.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200/60">
+                <button
+                  type="button"
+                  onClick={handleCopyWhitelistText}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>
+                    {copiedTemplate
+                      ? "Copied to Clipboard!"
+                      : "Copy Whitelist Request Text"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("manual");
+                    setError("");
+                  }}
+                  className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium rounded-lg transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Add Flight Manually</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {error && !ipErrorInfo && (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2.5 text-xs text-red-700">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="font-medium">{error}</span>
+            </div>
+          )}
+
+          {/* TAB 1: API SEARCH */}
+          {activeTab === "api" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                <div className="lg:col-span-2">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Origin Airport <span className="text-red-500">*</span>
+                  </label>
+                  <AutocompleteInput
+                    value={fromName}
+                    onChange={(e) => setFromName(e.target.value)}
+                    onSelect={(item) => {
+                      setFromName(item.label);
+                      setFromCode(item.code);
+                    }}
+                    suggestUrl="/api/cities/airports"
+                    placeholder="Search origin (e.g. Delhi, DEL)"
+                    iconType="airport"
+                  />
+                </div>
+
+                <div className="lg:col-span-2">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Destination Airport <span className="text-red-500">*</span>
+                  </label>
+                  <AutocompleteInput
+                    value={toName}
+                    onChange={(e) => setToName(e.target.value)}
+                    onSelect={(item) => {
+                      setToName(item.label);
+                      setToCode(item.code);
+                    }}
+                    suggestUrl="/api/cities/airports"
+                    placeholder="Search destination (e.g. Kullu, KUU)"
+                    iconType="airport"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Departure Date
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Adults (12+ yrs)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="9"
+                    value={adults}
+                    onChange={(e) =>
+                      setAdults(
+                        Math.max(1, Math.min(9, Number(e.target.value) || 1)),
+                      )
+                    }
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Children (2-11 yrs)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="8"
+                    value={children}
+                    onChange={(e) =>
+                      setChildren(
+                        Math.max(0, Math.min(8, Number(e.target.value) || 0)),
+                      )
+                    }
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Infants (&lt;2 yrs)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={adults}
+                    value={infants}
+                    onChange={(e) =>
+                      setInfants(
+                        Math.max(
+                          0,
+                          Math.min(adults, Number(e.target.value) || 0),
+                        ),
+                      )
+                    }
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Cabin Class
+                  </label>
+                  <select
+                    value={cabinClass}
+                    onChange={(e) => setCabinClass(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition bg-white"
+                  >
+                    <option value="1">1 - All Cabins</option>
+                    <option value="2">2 - Economy</option>
+                    <option value="3">3 - Premium Economy</option>
+                    <option value="4">4 - Business</option>
+                    <option value="5">5 - Premium Business</option>
+                    <option value="6">6 - First Class</option>
+                  </select>
+                </div>
+
+                <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center justify-between py-1 px-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={nonStopOnly}
+                      onChange={(e) => setNonStopOnly(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                    />
+                    <span>Non-stop flights only (Direct Flights)</span>
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Total: {adults + children + infants} passenger
+                    {adults + children + infants !== 1 ? "s" : ""} (Max 9)
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSearch}
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-75"
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
+                )}
+                <span>
+                  {loading
+                    ? "Querying Live Airline GDS..."
+                    : "Search Flights via API"}
+                </span>
+              </button>
+
+              {/* Fare Calendar Strip above results */}
+              <FareCalendarStrip
+                origin={fromCode || fromName.slice(0, 3).toUpperCase()}
+                destination={toCode || toName.slice(0, 3).toUpperCase()}
+                selectedDate={date}
+                onSelectDate={(newDate) => {
+                  setDate(newDate);
+                  executeFlightSearch({ date: newDate });
+                }}
+              />
+
+              {/* Results Container */}
+              <div className="space-y-3 pt-2">
+                {loading && (
+                  <div className="flex flex-col items-center justify-center py-10 text-slate-500 text-xs gap-3">
+                    <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                    <span className="font-medium">
+                      Fetching real-time flights &amp; published fares...
+                    </span>
+                  </div>
+                )}
+
+                {!loading && hasSearched && results.length === 0 && (
+                  <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                    <p className="text-xs text-slate-600">
+                      No direct flights found for this route from the API.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("manual");
+                        setManualFrom(fromName);
+                        setManualTo(toName);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition cursor-pointer shadow-xs"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Add Flight Details Manually Instead</span>
+                    </button>
+                  </div>
+                )}
+
+                {!loading &&
+                  results?.map((flight, idx) => (
+                    <FlightResultCard
+                      key={flight.resultIndex || `flight-${idx}`}
+                      flight={flight}
+                      onSelect={(chosenFlight) => {
+                        const cabinLabelMap = {
+                          1: "All",
+                          2: "Economy",
+                          3: "Premium Economy",
+                          4: "Business",
+                          5: "Premium Business",
+                          6: "First",
+                        };
+                        onSelectFlight({
+                          ...chosenFlight,
+                          from:
+                            chosenFlight.from ||
+                            fromCode ||
+                            fromName.slice(0, 3).toUpperCase(),
+                          fromName: chosenFlight.fromName || fromName,
+                          to:
+                            chosenFlight.to ||
+                            toCode ||
+                            toName.slice(0, 3).toUpperCase(),
+                          toName: chosenFlight.toName || toName,
+                          cabin:
+                            chosenFlight.cabin ||
+                            cabinLabelMap[cabinClass] ||
+                            "Economy",
+                          adults,
+                          children,
+                          infants,
+                          apiSelected: true,
+                        });
+                        onClose();
+                        if (showToast) {
+                          showToast(
+                            `Added ${chosenFlight.airline || "Flight"} to itinerary!`,
+                            "success",
+                          );
+                        }
+                      }}
+                    />
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: MANUAL ENTRY FORM WITH FLIGHT IMAGE UPLOAD */}
+          {activeTab === "manual" && (
+            <div className="space-y-4">
+              <div className="p-3.5 bg-blue-50/70 border border-blue-200/70 rounded-xl text-xs text-blue-900 leading-relaxed">
+                <span className="font-bold">Manual Flight Entry:</span> Enter
+                your flight details directly or upload a flight ticket/voucher
+                image. Both data and image will be saved and rendered in the
+                customer itinerary.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Airline Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={manualAirline}
+                    onChange={(e) => setManualAirline(e.target.value)}
+                    placeholder="e.g. IndiGo, Air India, Vistara"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Flight Number
+                  </label>
+                  <input
+                    type="text"
+                    value={manualFlightNumber}
+                    onChange={(e) => setManualFlightNumber(e.target.value)}
+                    placeholder="e.g. 6E 204"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Origin (From) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={manualFrom}
+                    onChange={(e) => setManualFrom(e.target.value)}
+                    placeholder="e.g. Delhi (DEL)"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Destination (To) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={manualTo}
+                    onChange={(e) => setManualTo(e.target.value)}
+                    placeholder="e.g. Bhuntar / Kullu (KUU)"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Departure Time
+                  </label>
+                  <input
+                    type="text"
+                    value={manualDeparture}
+                    onChange={(e) => setManualDeparture(e.target.value)}
+                    placeholder="e.g. 09:20 AM"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Arrival Time
+                  </label>
+                  <input
+                    type="text"
+                    value={manualArrival}
+                    onChange={(e) => setManualArrival(e.target.value)}
+                    placeholder="e.g. 11:35 AM"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Duration
+                  </label>
+                  <input
+                    type="text"
+                    value={manualDuration}
+                    onChange={(e) => setManualDuration(e.target.value)}
+                    placeholder="e.g. 2h 15m"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Cabin Class
+                  </label>
+                  <select
+                    value={manualCabin}
+                    onChange={(e) => setManualCabin(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  >
+                    <option>Economy</option>
+                    <option>Premium Economy</option>
+                    <option>Business</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Fare per Person (INR)
+                  </label>
+                  <input
+                    type="number"
+                    value={manualFare}
+                    onChange={(e) => setManualFare(Number(e.target.value) || 0)}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Taxes (INR)
+                  </label>
+                  <input
+                    type="number"
+                    value={manualTax}
+                    onChange={(e) => setManualTax(Number(e.target.value) || 0)}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition"
+                  />
+                </div>
+              </div>
+
+              {/* FLIGHT IMAGE UPLOAD SECTION */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs font-bold text-[#0F172A]">
+                      Optional Flight Image / Ticket Upload
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">
+                    PNG, JPG, WebP up to 5MB
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageFileChange}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full py-2.5 px-4 border border-dashed border-purple-300 hover:border-purple-500 bg-white rounded-xl text-xs font-semibold text-purple-700 hover:bg-purple-50/50 transition cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Browse Flight Image / Ticket</span>
+                    </button>
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      value={
+                        flightImage && !flightImage.startsWith("data:")
+                          ? flightImage
+                          : ""
+                      }
+                      onChange={(e) => setFlightImage(e.target.value)}
+                      placeholder="Or enter Flight Image URL..."
+                      className="w-full border border-slate-200 bg-white rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition"
+                    />
+                  </div>
+                </div>
+
+                {flightImage && (
+                  <div className="relative inline-block mt-2 border border-slate-200 rounded-xl overflow-hidden shadow-xs bg-white p-1">
+                    <img
+                      src={flightImage}
+                      alt="Flight Attachment"
+                      className="h-28 w-auto object-cover rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFlightImage("");
+                        setFlightImageName("");
+                      }}
+                      className="absolute top-2 right-2 p-1 rounded-full bg-red-600 text-white hover:bg-red-700 transition cursor-pointer shadow-xs"
+                      title="Remove image"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    {flightImageName && (
+                      <p className="text-[10px] text-slate-500 px-1 pt-1 truncate max-w-xs">
+                        {flightImageName}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddManualFlight}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Add Manual Flight to Day Itinerary</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   2. HOTEL SEARCH & MANUAL ENTRY MODAL
+   ========================================================================= */
+export function HotelSearchModal({
+  isOpen,
+  onClose,
+  onSelectHotel,
+  initialData = {},
+  showToast,
+}) {
+  const [activeTab, setActiveTab] = useState("api"); // 'api' | 'manual'
+
+  const [destinationCode, setDestinationCode] = useState("");
+  // API Search State
+  const [destination, setDestination] = useState(
+    initialData.location || "Manali",
+  );
+  const [checkIn, setCheckIn] = useState(
+    initialData.checkIn || getFutureDateStr(14),
+  );
+  const [checkOut, setCheckOut] = useState(
+    initialData.checkOut || getFutureDateStr(16),
+  );
+  const [category, setCategory] = useState(initialData.category || "Any");
+  const [rooms, setRooms] = useState([
+    { adults: 2, children: 0, childAges: [] },
+  ]);
+
+  // Compute stay nights from check-in and check-out dates
+  const calculateStayNights = (inDate, outDate) => {
+    const d1 = new Date(inDate);
+    const d2 = new Date(outDate);
+    const diff = Math.ceil((d2 - d1) / (1000 * 60 * 60 * 24));
+    return Math.max(1, isNaN(diff) ? 1 : diff);
+  };
+  const nights = calculateStayNights(checkIn, checkOut);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [results, setResults] = useState([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const hotelSearchIdRef = useRef(null);
+  // Room count changer
+  const handleRoomCountChange = (count) => {
+    const newCount = Math.max(1, Math.min(5, Number(count) || 1));
+    setRooms((prev) => {
+      if (newCount > prev.length) {
+        const added = Array.from({ length: newCount - prev.length }, () => ({
+          adults: 2,
+          children: 0,
+          childAges: [],
+        }));
+        return [...prev, ...added];
+      }
+      return prev.slice(0, newCount);
+    });
+  };
+
+  const updateRoomField = (roomIdx, field, val) => {
+    setRooms((prev) =>
+      prev.map((r, i) => {
+        if (i !== roomIdx) return r;
+        if (field === "children") {
+          const numChildren = Math.max(0, Math.min(3, Number(val) || 0));
+          const updatedAges = (r.childAges || []).slice(0, numChildren);
+          while (updatedAges.length < numChildren) {
+            updatedAges.push(5);
+          }
+          return { ...r, children: numChildren, childAges: updatedAges };
+        }
+        return { ...r, [field]: val };
+      }),
+    );
+  };
+
+  const updateChildAge = (roomIdx, childIdx, age) => {
+    setRooms((prev) =>
+      prev.map((r, i) => {
+        if (i !== roomIdx) return r;
+        const newAges = [...(r.childAges || [])];
+        newAges[childIdx] = Number(age) || 5;
+        return { ...r, childAges: newAges };
+      }),
+    );
+  };
+
+  // Manual Entry State
+  const [manualName, setManualName] = useState(
+    initialData.name || "Snow Valley Luxury Resort",
+  );
+  const [manualLocation, setManualLocation] = useState(
+    initialData.location || "Manali",
+  );
+  const [manualStars, setManualStars] = useState(initialData.stars || 4);
+  const [manualRoom, setManualRoom] = useState(
+    initialData.room || "Deluxe Mountain View Room",
+  );
+  const [manualMeal, setManualMeal] = useState(
+    initialData.meal || "Breakfast Included (CP Plan)",
+  );
+  const [manualPrice, setManualPrice] = useState(initialData.price || 4200);
+  const [manualNights, setManualNights] = useState(initialData.nights || 1);
+  const [manualImage, setManualImage] = useState(
+    initialData.image ||
+      "https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=600&auto=format&fit=crop",
+  );
+  const [hotelImageName, setHotelImageName] = useState("");
+  const hotelFileInputRef = useRef(null);
+
+  if (!isOpen) return null;
+
+  const handleHotelImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        if (showToast) showToast("Image file size must be under 5MB", "error");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setManualImage(reader.result);
+        setHotelImageName(file.name);
+        if (showToast) showToast("Hotel photo attached!", "success");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!destination.trim()) {
+      setError("Hotel destination is required.");
+      return;
+    }
+
+    const searchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    hotelSearchIdRef.current = searchId;
+
+    setError("");
+    setResults([]);
+    setLoading(true);
+    setHasSearched(true);
+
+    try {
+      const starRating =
+        category === "5 Star"
+          ? 5
+          : category === "4 Star"
+            ? 4
+            : category === "3 Star"
+              ? 3
+              : 0;
+      const roomGuests = rooms.map((r) => ({
+        NoOfAdults: Math.max(1, Number(r.adults) || 1),
+        NoOfChild: Math.max(0, Number(r.children) || 0),
+        ChildAge: (r.childAges || [])
+          .slice(0, Number(r.children) || 0)
+          .map(Number),
+      }));
+
+      const totalGuests = rooms.reduce(
+        (acc, r) => acc + Number(r.adults) + Number(r.children),
+        0,
+      );
+
+      const hotelResponse = await fetch("/api/admin-srdv/hotels/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          destination: destinationCode || destination,
+          checkIn,
+          checkOut,
+          nights,
+          NoOfRooms: rooms.length,
+          RoomGuests: roomGuests,
+          guestCount: totalGuests,
+          GuestNationality: "IN",
+          starRating,
+        }),
+      });
+
+      if (!hotelResponse.ok) {
+        const errorPayload = await hotelResponse.json().catch(() => ({}));
+        throw new Error(
+          errorPayload.error ||
+            `Hotel API failed with status ${hotelResponse.status}`,
+        );
+      }
+
+      const hotelData = await hotelResponse.json();
+      if (hotelSearchIdRef.current !== searchId) return;
+
+      const srdvErr = hotelData?.Error;
+      if (
+        srdvErr &&
+        (Number(srdvErr.ErrorCode ?? 0) !== 0 ||
+          String(srdvErr.ErrorMessage || "").trim())
+      ) {
+        throw new Error(
+          `Error Code: ${srdvErr.ErrorCode}\n${srdvErr.ErrorMessage}`,
+        );
+      }
+
+      const hotelResults = mapHotelApiResponse(hotelData);
+      // console.log("Hotel search results:", hotelResults);
+      setResults(hotelResults);
+      setResults(hotelResults);
+    } catch (err) {
+      if (hotelSearchIdRef.current !== searchId) return;
+
+      console.error("Hotel search failed:", err);
+      setError(err.message || "Failed to search hotels from SRDV API.");
+      if (showToast) {
+        showToast(`Hotel API: ${err.message}`, "error");
+      }
+    } finally {
+      if (hotelSearchIdRef.current === searchId) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleAddManualHotel = () => {
+    if (!manualName.trim()) {
+      setError("Hotel Name is required.");
+      return;
+    }
+
+    const payload = {
+      name: manualName.trim(),
+      location: manualLocation.trim() || destination,
+      stars: Number(manualStars) || 4,
+      roomType: manualRoom,
+      room: manualRoom,
+      mealPlan: manualMeal,
+      meal: manualMeal,
+      price: Number(manualPrice) || 3500,
+      nights: Number(manualNights) || 1,
+      image:
+        manualImage ||
+        "https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=600&auto=format&fit=crop",
+      rating: 4.5,
+      reviews: 950,
+      isManual: true,
+      apiSelected: false,
+    };
+
+    onSelectHotel(payload);
+    onClose();
+    if (showToast) showToast(`Added ${manualName} to Day!`, "success");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-150">
+      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0 bg-slate-50/50">
+          <div className="flex items-center gap-2.5">
+            <span className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+              <Building2 className="w-5 h-5" />
+            </span>
+            <div>
+              <h2 className="text-base font-bold text-[#0F172A]">
+                Hotel &amp; Accommodations
+              </h2>
+              <p className="text-xs text-slate-500">
+                Live Hotel Search or Custom Manual Entry
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tab Toggle */}
+        <div className="px-6 pt-4 pb-2 border-b border-slate-200 shrink-0 bg-white">
+          <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl max-w-md">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("api");
+                setError("");
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "api"
+                  ? "bg-white text-indigo-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Search via API</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("manual");
+                setError("");
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "manual"
+                  ? "bg-white text-indigo-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Add Hotel Manually</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="p-6 overflow-y-auto space-y-4 flex-1">
+          {error && (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-700">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="font-medium">{error}</span>
+            </div>
+          )}
+
+          {/* TAB 1: API SEARCH */}
+          {activeTab === "api" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Destination City <span className="text-red-500">*</span>
+                  </label>
+                  <AutocompleteInput
+                    value={destination}
+                    onChange={(e) => {
+                      setDestination(e.target.value);
+                      setDestinationCode("");
+                    }}
+                    onSelect={(item) => {
+                      setDestination(item.label);
+                      setDestinationCode(item.code || item.id);
+                    }}
+                    suggestUrl="/api/cities/hotel"
+                    placeholder="Search city (e.g. Manali, Goa, Jaipur)"
+                    iconType="hotel"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Check-in Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={checkIn}
+                    onChange={(e) => setCheckIn(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Check-out Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={checkOut}
+                    onChange={(e) => setCheckOut(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Number of Rooms
+                  </label>
+                  <select
+                    value={rooms.length}
+                    onChange={(e) => handleRoomCountChange(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition bg-white"
+                  >
+                    <option value="1">1 Room</option>
+                    <option value="2">2 Rooms</option>
+                    <option value="3">3 Rooms</option>
+                    <option value="4">4 Rooms</option>
+                    <option value="5">5 Rooms</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Category / Star Rating
+                  </label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition bg-white"
+                  >
+                    <option>Any</option>
+                    <option>5 Star</option>
+                    <option>4 Star</option>
+                    <option>3 Star</option>
+                  </select>
+                </div>
+
+                {/* Per-Room Guests Breakdown */}
+                <div className="sm:col-span-2 lg:col-span-4 bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-slate-800">
+                      Room &amp; Guest Breakdown ({rooms.length} Room
+                      {rooms.length > 1 ? "s" : ""}, {nights} Night
+                      {nights > 1 ? "s" : ""})
+                    </p>
+                    <span className="text-[11px] text-slate-500">
+                      Total:{" "}
+                      {rooms.reduce(
+                        (acc, r) => acc + Number(r.adults) + Number(r.children),
+                        0,
+                      )}{" "}
+                      Guests
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {rooms.map((room, rIdx) => (
+                      <div
+                        key={`room-${rIdx}`}
+                        className="bg-white border border-slate-200 rounded-lg p-3 space-y-2.5 shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                          <span className="text-xs font-bold text-indigo-700">
+                            Room {rIdx + 1}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {room.adults} Adult(s)
+                            {room.children > 0
+                              ? `, ${room.children} Child`
+                              : ""}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600 mb-1 block">
+                              Adults (12+ yrs)
+                            </label>
+                            <select
+                              value={room.adults}
+                              onChange={(e) =>
+                                updateRoomField(
+                                  rIdx,
+                                  "adults",
+                                  Number(e.target.value) || 1,
+                                )
+                              }
+                              className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-xs font-medium text-slate-800 focus:border-indigo-500 outline-none"
+                            >
+                              <option value="1">1 Adult</option>
+                              <option value="2">2 Adults</option>
+                              <option value="3">3 Adults</option>
+                              <option value="4">4 Adults</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600 mb-1 block">
+                              Children (0-11 yrs)
+                            </label>
+                            <select
+                              value={room.children}
+                              onChange={(e) =>
+                                updateRoomField(
+                                  rIdx,
+                                  "children",
+                                  Number(e.target.value) || 0,
+                                )
+                              }
+                              className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-xs font-medium text-slate-800 focus:border-indigo-500 outline-none"
+                            >
+                              <option value="0">0 Children</option>
+                              <option value="1">1 Child</option>
+                              <option value="2">2 Children</option>
+                              <option value="3">3 Children</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Child Age Selectors if room has children */}
+                        {room.children > 0 && (
+                          <div className="pt-1 border-t border-dashed border-slate-200 space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Child Ages at Check-in
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              {Array.from({ length: room.children }).map(
+                                (_, cIdx) => (
+                                  <div
+                                    key={`child-age-${rIdx}-${cIdx}`}
+                                    className="flex items-center gap-1"
+                                  >
+                                    <span className="text-[10px] text-slate-500 font-medium">
+                                      Child {cIdx + 1}:
+                                    </span>
+                                    <select
+                                      value={room.childAges?.[cIdx] ?? 5}
+                                      onChange={(e) =>
+                                        updateChildAge(
+                                          rIdx,
+                                          cIdx,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="border border-slate-200 rounded px-1.5 py-1 text-[11px] font-medium text-slate-800 bg-white"
+                                    >
+                                      {Array.from(
+                                        { length: 12 },
+                                        (_, i) => i + 1,
+                                      ).map((age) => (
+                                        <option key={age} value={age}>
+                                          {age} yr{age > 1 ? "s" : ""}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSearch}
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-75"
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
+                )}
+                <span>
+                  {loading
+                    ? "Searching SRDV Hotels..."
+                    : "Search Hotels via API"}
+                </span>
+              </button>
+
+              {/* Results List */}
+              <div className="space-y-3 pt-2">
+                {loading && (
+                  <div className="flex flex-col items-center justify-center py-10 text-slate-500 text-xs gap-3">
+                    <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                    <span className="font-medium">
+                      Connecting to hotel inventory &amp; best rates...
+                    </span>
+                  </div>
+                )}
+
+                {!loading && hasSearched && results.length === 0 && (
+                  <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                    <p className="text-xs text-slate-600">
+                      No hotels returned by API for "{destination}".
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("manual");
+                        setManualLocation(destination);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition cursor-pointer shadow-xs"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Add Hotel Details Manually</span>
+                    </button>
+                  </div>
+                )}
+
+                {!loading &&
+                  results?.map((hotel) => (
+                    <div
+                      key={hotel.hotelCode || hotel.resultIndex}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-200 rounded-2xl p-4 hover:border-indigo-400 hover:shadow-sm transition bg-white"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <img
+                          src={
+                            hotel.image ||
+                            "https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=300&auto=format&fit=crop"
+                          }
+                          alt={hotel.name}
+                          className="w-16 h-16 rounded-xl object-cover shrink-0 bg-slate-100 border border-slate-100"
+                        />
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-sm text-[#0F172A] truncate">
+                            {hotel.name}
+                          </h4>
+                          <div className="flex items-center gap-1 text-amber-500 text-xs mt-0.5">
+                            {"★".repeat(hotel.stars || 4)}
+                            <span className="text-slate-500 ml-1 text-[11px]">
+                              {hotel.rating || 4.2} ({hotel.reviews || 500}{" "}
+                              reviews)
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            {hotel.roomType || "Deluxe Room"} ·{" "}
+                            {hotel.mealPlan || "Breakfast Included"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center sm:flex-col sm:items-end justify-between sm:justify-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                        <div>
+                          <p className="font-bold text-[#0F172A] text-base text-right">
+                            {inr(hotel.price)}
+                            <span className="text-xs font-normal text-slate-500">
+                              {" "}
+                              / night
+                            </span>
+                          </p>
+                          <span className="text-[10px] text-emerald-700 font-semibold block text-right">
+                            Instant Confirmation
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            onSelectHotel({
+                              ...hotel,
+                              destination,
+                              checkIn,
+                              checkOut,
+                              nights,
+                              guests: rooms.reduce(
+                                (acc, r) =>
+                                  acc + Number(r.adults) + Number(r.children),
+                                0,
+                              ),
+                              roomsCount: rooms.length,
+                              apiSelected: true,
+                            });
+                            onClose();
+                            if (showToast) {
+                              showToast(
+                                `Added ${hotel.name} to Day!`,
+                                "success",
+                              );
+                            }
+                          }}
+                          className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                        >
+                          Select Hotel
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: MANUAL ENTRY FORM */}
+          {activeTab === "manual" && (
+            <div className="space-y-4">
+              <div className="p-3.5 bg-indigo-50/70 border border-indigo-200/70 rounded-xl text-xs text-indigo-900 leading-relaxed">
+                <span className="font-bold">Manual Hotel Entry:</span> Fill in
+                the details of the hotel, resort, or homestay. It will be added
+                to the itinerary and pricing automatically.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Hotel Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={manualName}
+                    onChange={(e) => setManualName(e.target.value)}
+                    placeholder="e.g. goSTOPS Mussoorie Clock Tower"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Destination / City
+                  </label>
+                  <input
+                    type="text"
+                    value={manualLocation}
+                    onChange={(e) => setManualLocation(e.target.value)}
+                    placeholder="e.g. Mussoorie / Manali"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Star Rating
+                  </label>
+                  <select
+                    value={manualStars}
+                    onChange={(e) => setManualStars(Number(e.target.value))}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                  >
+                    <option value={5}>5 Star Luxury</option>
+                    <option value={4}>4 Star Premium</option>
+                    <option value={3}>3 Star Standard</option>
+                    <option value={2}>2 Star Budget</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Room Category
+                  </label>
+                  <input
+                    type="text"
+                    value={manualRoom}
+                    onChange={(e) => setManualRoom(e.target.value)}
+                    placeholder="e.g. 1 Super Deluxe Room, 2 Pax"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Meal Plan
+                  </label>
+                  <input
+                    type="text"
+                    value={manualMeal}
+                    onChange={(e) => setManualMeal(e.target.value)}
+                    placeholder="e.g. ROOM ONLY (EP) or Breakfast Included (CP)"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Price per Night (INR)
+                  </label>
+                  <input
+                    type="number"
+                    value={manualPrice}
+                    onChange={(e) =>
+                      setManualPrice(Number(e.target.value) || 0)
+                    }
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="text-xs font-semibold text-slate-700 block">
+                    Hotel Photo (Upload File or Enter URL)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      ref={hotelFileInputRef}
+                      onChange={handleHotelImageFileChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => hotelFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold cursor-pointer text-xs transition"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Photo</span>
+                    </button>
+                    <input
+                      type="text"
+                      value={
+                        manualImage && !manualImage.startsWith("data:")
+                          ? manualImage
+                          : ""
+                      }
+                      onChange={(e) => setManualImage(e.target.value)}
+                      placeholder="Or paste image URL (https://...)"
+                      className="flex-1 min-w-[200px] border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                    />
+                  </div>
+
+                  {manualImage && (
+                    <div className="relative inline-block mt-1.5 border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white p-1">
+                      <img
+                        src={manualImage}
+                        alt="Hotel Preview"
+                        className="h-24 w-auto object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualImage("");
+                          setHotelImageName("");
+                        }}
+                        className="absolute top-2 right-2 p-1 rounded-full bg-red-600 text-white hover:bg-red-700 transition cursor-pointer shadow-xs"
+                        title="Remove photo"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                      {hotelImageName && (
+                        <p className="text-[10px] text-slate-500 px-1 pt-0.5 truncate max-w-xs">
+                          {hotelImageName}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddManualHotel}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Add Manual Hotel to Day Itinerary</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   3. CAB / CAR SEARCH & MANUAL ENTRY MODAL
+   ========================================================================= */
+export function CabSearchModal({
+  isOpen,
+  onClose,
+  onSelectCab,
+  initialData = {},
+  showToast,
+}) {
+  const [activeTab, setActiveTab] = useState("api"); // 'api' | 'manual'
+
+  // API Search State
+  const [pickup, setPickup] = useState(initialData.pickup || "Kullu Airport");
+  const [drop, setDrop] = useState(initialData.drop || "Manali Hotel");
+  const [date, setDate] = useState(initialData.date || getFutureDateStr(14));
+  const [time, setTime] = useState(initialData.time || "12:30 PM");
+  const [vehicleType, setVehicleType] = useState(initialData.category || "Any");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [results, setResults] = useState([]);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // Manual Entry State
+  const [manualVehicle, setManualVehicle] = useState(
+    initialData.vehicle || "Toyota Etios / Dzire",
+  );
+  const [manualCategory, setManualCategory] = useState(
+    initialData.category || "Sedan",
+  );
+  const [manualSeats, setManualSeats] = useState(initialData.seats || 4);
+  const [manualAc, setManualAc] = useState(true);
+  const [manualPickup, setManualPickup] = useState(
+    initialData.pickup || "Mussoorie / Delhi",
+  );
+  const [manualDrop, setManualDrop] = useState(
+    initialData.drop || "Khajjiar / Manali",
+  );
+  const [manualPrice, setManualPrice] = useState(initialData.price || 1500);
+  const [manualImage, setManualImage] = useState(
+    initialData.image || initialData.voucherImage || "",
+  );
+  const [cabImageName, setCabImageName] = useState("");
+  const cabFileInputRef = useRef(null);
+
+  if (!isOpen) return null;
+
+  const handleCabImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        if (showToast) showToast("Image file size must be under 5MB", "error");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setManualImage(reader.result);
+        setCabImageName(file.name);
+        if (showToast) showToast("Cab voucher/photo attached!", "success");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!pickup.trim()) {
+      setError("Pickup location is required.");
+      return;
+    }
+
+    setError("");
+    setLoading(true);
+    setHasSearched(true);
+
+    try {
+      const cabResponse = await fetch("/api/admin-srdv/cabs/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          pickup,
+          drop,
+          date,
+          time,
+          vehicleType,
+        }),
+      });
+
+      if (!cabResponse.ok) {
+        const errorPayload = await cabResponse.json().catch(() => ({}));
+        throw new Error(
+          errorPayload.error ||
+            `Cab API failed with status ${cabResponse.status}`,
+        );
+      }
+
+      const cabData = await cabResponse.json();
+      // Real shape: Error / Result.TraceID / Result.TaxiData[]
+      const cabResults = mapCabApiResponse(cabData);
+      setResults(cabResults);
+    } catch (err) {
+      console.error("Cab search failed:", err);
+      setError(err.message || "Failed to search cabs from SRDV API.");
+      if (showToast) {
+        showToast(`Cab API: ${err.message}`, "error");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddManualCab = () => {
+    if (!manualVehicle.trim()) {
+      setError("Vehicle name is required.");
+      return;
+    }
+
+    const payload = {
+      vehicle: manualVehicle.trim(),
+      category: manualCategory,
+      seats: Number(manualSeats) || 4,
+      ac: manualAc,
+      pickup: manualPickup,
+      drop: manualDrop,
+      date,
+      time,
+      price: Number(manualPrice) || 1500,
+      image: manualImage || "",
+      voucherImage: manualImage || "",
+      isManual: true,
+      apiSelected: false,
+    };
+
+    onSelectCab(payload);
+    onClose();
+    if (showToast) showToast(`Added ${manualVehicle} to Day!`, "success");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-150">
+      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0 bg-slate-50/50">
+          <div className="flex items-center gap-2.5">
+            <span className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <Car className="w-5 h-5" />
+            </span>
+            <div>
+              <h2 className="text-base font-bold text-[#0F172A]">
+                Cab &amp; Private Transfers
+              </h2>
+              <p className="text-xs text-slate-500">
+                Live Cab Search or Custom Private Car Entry
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tab Toggle */}
+        <div className="px-6 pt-4 pb-2 border-b border-slate-200 shrink-0 bg-white">
+          <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl max-w-md">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("api");
+                setError("");
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "api"
+                  ? "bg-white text-emerald-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Search via API</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("manual");
+                setError("");
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "manual"
+                  ? "bg-white text-emerald-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Add Cab Manually</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="p-6 overflow-y-auto space-y-4 flex-1">
+          {error && (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-700">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="font-medium">{error}</span>
+            </div>
+          )}
+
+          {/* TAB 1: API SEARCH */}
+          {activeTab === "api" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Pickup Location <span className="text-red-500">*</span>
+                  </label>
+                  <AutocompleteInput
+                    value={pickup}
+                    onChange={(e) => setPickup(e.target.value)}
+                    onSelect={(item) => setPickup(item.label)}
+                    suggestUrl="/api/cities/cab"
+                    placeholder="Pickup City / Landmark"
+                    iconType="car"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Drop Destination <span className="text-red-500">*</span>
+                  </label>
+                  <AutocompleteInput
+                    value={drop}
+                    onChange={(e) => setDrop(e.target.value)}
+                    onSelect={(item) => setDrop(item.label)}
+                    suggestUrl="/api/cities/cab"
+                    placeholder="Drop Destination"
+                    iconType="car"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Time
+                  </label>
+                  <input
+                    type="text"
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                    placeholder="e.g. 12:30 PM"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Vehicle Type
+                  </label>
+                  <select
+                    value={vehicleType}
+                    onChange={(e) => setVehicleType(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                  >
+                    <option>Any</option>
+                    <option>Sedan</option>
+                    <option>SUV</option>
+                    <option>Tempo Traveller</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSearch}
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-75"
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
+                )}
+                <span>
+                  {loading
+                    ? "Searching Transport Fleet..."
+                    : "Search Cabs via API"}
+                </span>
+              </button>
+
+              {/* Results */}
+              <div className="space-y-3 pt-2">
+                {loading && (
+                  <div className="flex flex-col items-center justify-center py-10 text-slate-500 text-xs gap-3">
+                    <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                    <span className="font-medium">
+                      Checking available transport fleet...
+                    </span>
+                  </div>
+                )}
+
+                {!loading && hasSearched && results.length === 0 && (
+                  <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                    <p className="text-xs text-slate-600">
+                      No cabs returned by API for this route.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("manual");
+                        setManualPickup(pickup);
+                        setManualDrop(drop);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition cursor-pointer shadow-xs"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Add Cab / Car Manually</span>
+                    </button>
+                  </div>
+                )}
+
+                {!loading &&
+                  results?.map((cab) => (
+                    <div
+                      key={cab.srdvIndex}
+                      className="flex items-center justify-between gap-4 border border-slate-200 rounded-xl p-3.5 hover:border-emerald-400 hover:shadow-sm transition bg-white"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                          <Car className="w-5 h-5" />
+                        </span>
+                        <div>
+                          <p className="font-bold text-[#0F172A] text-sm">
+                            {cab.vehicle}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {cab.category} · {cab.seats} Seats{" "}
+                            {cab.ac ? "· AC" : ""}
+                          </p>
+                        </div>
+                      </div>
+
+                      <p className="font-bold text-[#0F172A] text-base">
+                        {inr(cab.price)}
+                      </p>
+
+                      <button
+                        onClick={() => {
+                          onSelectCab({
+                            ...cab,
+                            pickup,
+                            drop,
+                            date,
+                            time,
+                            apiSelected: true,
+                          });
+                          onClose();
+                          if (showToast) {
+                            showToast(
+                              `Added cab "${cab.vehicle}" to Day!`,
+                              "success",
+                            );
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer shrink-0"
+                      >
+                        Select Cab
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: MANUAL ENTRY FORM */}
+          {activeTab === "manual" && (
+            <div className="space-y-4">
+              <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/70 rounded-xl text-xs text-emerald-900 leading-relaxed">
+                <span className="font-bold">Manual Vehicle Entry:</span> Specify
+                private AC cab, sedan, or SUV transfer.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Vehicle Model <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={manualVehicle}
+                    onChange={(e) => setManualVehicle(e.target.value)}
+                    placeholder="e.g. Toyota Innova Crysta / Sedan"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Category
+                  </label>
+                  <select
+                    value={manualCategory}
+                    onChange={(e) => setManualCategory(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                  >
+                    <option>Sedan</option>
+                    <option>SUV</option>
+                    <option>Hatchback</option>
+                    <option>Tempo Traveller</option>
+                    <option>Luxury</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Pickup Location
+                  </label>
+                  <input
+                    type="text"
+                    value={manualPickup}
+                    onChange={(e) => setManualPickup(e.target.value)}
+                    placeholder="e.g. Mussoorie Hotel / Airport"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Drop Location
+                  </label>
+                  <input
+                    type="text"
+                    value={manualDrop}
+                    onChange={(e) => setManualDrop(e.target.value)}
+                    placeholder="e.g. Khajjiar / Resort"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Seating Capacity
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={manualSeats}
+                    onChange={(e) =>
+                      setManualSeats(Number(e.target.value) || 4)
+                    }
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Rate / Transfer Price (INR)
+                  </label>
+                  <input
+                    type="number"
+                    value={manualPrice}
+                    onChange={(e) =>
+                      setManualPrice(Number(e.target.value) || 0)
+                    }
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 flex items-center gap-2">
+                  <input
+                    id="cab-ac-toggle"
+                    type="checkbox"
+                    checked={manualAc}
+                    onChange={(e) => setManualAc(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-emerald-400 w-4 h-4 cursor-pointer"
+                  />
+                  <label
+                    htmlFor="cab-ac-toggle"
+                    className="text-xs font-semibold text-slate-700 cursor-pointer"
+                  >
+                    Air Conditioned (AC Vehicle)
+                  </label>
+                </div>
+
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="text-xs font-semibold text-slate-700 block">
+                    Cab Photo / Voucher Ticket (Optional)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      ref={cabFileInputRef}
+                      onChange={handleCabImageFileChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => cabFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold cursor-pointer text-xs transition"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Photo / Voucher</span>
+                    </button>
+                    <input
+                      type="text"
+                      value={
+                        manualImage && !manualImage.startsWith("data:")
+                          ? manualImage
+                          : ""
+                      }
+                      onChange={(e) => setManualImage(e.target.value)}
+                      placeholder="Or paste photo/ticket URL (https://...)"
+                      className="flex-1 min-w-[200px] border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition"
+                    />
+                  </div>
+
+                  {manualImage && (
+                    <div className="relative inline-block mt-1.5 border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white p-1">
+                      <img
+                        src={manualImage}
+                        alt="Cab Preview"
+                        className="h-24 w-auto object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualImage("");
+                          setCabImageName("");
+                        }}
+                        className="absolute top-2 right-2 p-1 rounded-full bg-red-600 text-white hover:bg-red-700 transition cursor-pointer shadow-xs"
+                        title="Remove photo"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                      {cabImageName && (
+                        <p className="text-[10px] text-slate-500 px-1 pt-0.5 truncate max-w-xs">
+                          {cabImageName}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddManualCab}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Add Manual Cab to Day Itinerary</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   4. BUS SEARCH & MANUAL ENTRY MODAL
+   ========================================================================= */
+export function BusSearchModal({
+  isOpen,
+  onClose,
+  onSelectBus,
+  initialData = {},
+  showToast,
+}) {
+  const [activeTab, setActiveTab] = useState("api"); // 'api' | 'manual'
+
+  // API Search State
+  const [from, setFrom] = useState(initialData.from || "Delhi");
+  const [to, setTo] = useState(initialData.to || "Manali");
+  const [date, setDate] = useState(initialData.date || getFutureDateStr(14));
+  const [pax, setPax] = useState(initialData.pax || 2);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [results, setResults] = useState([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const busSearchIdRef = useRef(null);
+
+  // Manual Entry State
+  const [manualOperator, setManualOperator] = useState(
+    initialData.operator || "Zingbus / HRTC Volvo",
+  );
+  const [manualBusType, setManualBusType] = useState(
+    initialData.busType || "AC Volvo Semi-Sleeper (2+2)",
+  );
+  const [manualFrom, setManualFrom] = useState(
+    initialData.from || "Delhi (Kashmere Gate)",
+  );
+  const [manualTo, setManualTo] = useState(
+    initialData.to || "Manali / Mussoorie",
+  );
+  const [manualDeparture, setManualDeparture] = useState(
+    initialData.departure || "21:30",
+  );
+  const [manualArrival, setManualArrival] = useState(
+    initialData.arrival || "08:00",
+  );
+  const [manualPrice, setManualPrice] = useState(initialData.price || 1200);
+  const [manualImage, setManualImage] = useState(
+    initialData.image || initialData.voucherImage || "",
+  );
+  const [busImageName, setBusImageName] = useState("");
+  const busFileInputRef = useRef(null);
+
+  if (!isOpen) return null;
+
+  const handleBusImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        if (showToast) showToast("Image file size must be under 5MB", "error");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setManualImage(reader.result);
+        setBusImageName(file.name);
+        if (showToast) showToast("Bus ticket/photo attached!", "success");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!from.trim()) {
+      setError("Origin city is required.");
+      return;
+    }
+    if (!to.trim()) {
+      setError("Destination city is required.");
+      return;
+    }
+
+    const searchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    busSearchIdRef.current = searchId;
+
+    setError("");
+    setResults([]);
+    setLoading(true);
+    setHasSearched(true);
+
+    try {
+      const busResponse = await fetch("/api/admin-srdv/buses/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from,
+          to,
+          date,
+          pax,
+        }),
+      });
+
+      if (!busResponse.ok) {
+        const errorPayload = await busResponse.json().catch(() => ({}));
+        throw new Error(
+          errorPayload.error ||
+            `Bus API failed with status ${busResponse.status}`,
+        );
+      }
+
+      const busData = await busResponse.json();
+      if (busSearchIdRef.current !== searchId) return;
+      // Real shape: Error / Result.TraceId / Result.BusResults (object or array of options)
+      const busResults = mapBusApiResponse(busData);
+      setResults(busResults);
+    } catch (err) {
+      if (busSearchIdRef.current !== searchId) return;
+
+      console.error("Bus search failed:", err);
+      setError(err.message || "Failed to search buses from SRDV API.");
+      if (showToast) {
+        showToast(`Bus API: ${err.message}`, "error");
+      }
+    } finally {
+      if (busSearchIdRef.current === searchId) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleAddManualBus = () => {
+    if (!manualOperator.trim()) {
+      setError("Bus operator name is required.");
+      return;
+    }
+
+    const payload = {
+      operator: manualOperator.trim(),
+      busType: manualBusType,
+      from: manualFrom,
+      to: manualTo,
+      departure: manualDeparture,
+      arrival: manualArrival,
+      price: Number(manualPrice) || 1200,
+      date,
+      image: manualImage || "",
+      voucherImage: manualImage || "",
+      isManual: true,
+      apiSelected: false,
+    };
+
+    onSelectBus(payload);
+    onClose();
+    if (showToast)
+      showToast(`Added bus "${manualOperator}" to Day!`, "success");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-150">
+      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0 bg-slate-50/50">
+          <div className="flex items-center gap-2.5">
+            <span className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <Bus className="w-5 h-5" />
+            </span>
+            <div>
+              <h2 className="text-base font-bold text-[#0F172A]">
+                Bus Services
+              </h2>
+              <p className="text-xs text-slate-500">
+                Live Bus Inventory or Custom Manual Entry
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tab Toggle */}
+        <div className="px-6 pt-4 pb-2 border-b border-slate-200 shrink-0 bg-white">
+          <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl max-w-md">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("api");
+                setError("");
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "api"
+                  ? "bg-white text-amber-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Search via API</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("manual");
+                setError("");
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "manual"
+                  ? "bg-white text-amber-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Add Bus Manually</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="p-6 overflow-y-auto space-y-4 flex-1">
+          {error && (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-700">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="font-medium">{error}</span>
+            </div>
+          )}
+
+          {/* TAB 1: API SEARCH */}
+          {activeTab === "api" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Origin City <span className="text-red-500">*</span>
+                  </label>
+                  <AutocompleteInput
+                    value={from}
+                    onChange={(e) => setFrom(e.target.value)}
+                    onSelect={(item) => setFrom(item.label)}
+                    suggestUrl="/api/cities/bus"
+                    placeholder="Origin City"
+                    iconType="bus"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Destination City <span className="text-red-500">*</span>
+                  </label>
+                  <AutocompleteInput
+                    value={to}
+                    onChange={(e) => setTo(e.target.value)}
+                    onSelect={(item) => setTo(item.label)}
+                    suggestUrl="/api/cities/bus"
+                    placeholder="Destination City"
+                    iconType="bus"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={handleSearch}
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-75"
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
+                )}
+                <span>
+                  {loading
+                    ? "Searching Bus Schedules..."
+                    : "Search Buses via API"}
+                </span>
+              </button>
+
+              {/* Results */}
+              <div className="space-y-3 pt-2">
+                {loading && (
+                  <div className="flex flex-col items-center justify-center py-10 text-slate-500 text-xs gap-3">
+                    <Loader2 className="w-8 h-8 text-amber-600 animate-spin" />
+                    <span className="font-medium">
+                      Querying bus routes &amp; seat availability...
+                    </span>
+                  </div>
+                )}
+
+                {!loading && hasSearched && results.length === 0 && (
+                  <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                    <p className="text-xs text-slate-600">
+                      No scheduled buses found for this route.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("manual");
+                        setManualFrom(from);
+                        setManualTo(to);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition cursor-pointer shadow-xs"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Add Bus Manually</span>
+                    </button>
+                  </div>
+                )}
+
+                {!loading &&
+                  results?.map((bus) => (
+                    <div
+                      key={
+                        bus.resultIndex ?? `${bus.operator}-${bus.departureIso}`
+                      }
+                      className="flex items-center justify-between gap-4 border border-slate-200 rounded-xl p-3.5 hover:border-amber-400 hover:shadow-sm transition bg-white"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="w-10 h-10 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                          <Bus className="w-5 h-5" />
+                        </span>
+                        <div>
+                          <p className="font-bold text-[#0F172A] text-sm">
+                            {bus.operator}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {bus.busType} · {bus.departure} → {bus.arrival}
+                          </p>
+                        </div>
+                      </div>
+
+                      <p className="font-bold text-[#0F172A] text-base">
+                        {inr(bus.price)}
+                        <span className="text-xs font-normal text-slate-500">
+                          {" "}
+                          / pax
+                        </span>
+                      </p>
+
+                      <button
+                        onClick={() => {
+                          onSelectBus({
+                            ...bus,
+                            from,
+                            to,
+                            date,
+                            apiSelected: true,
+                          });
+                          onClose();
+                          if (showToast) {
+                            showToast(
+                              `Added bus "${bus.operator}" to Day!`,
+                              "success",
+                            );
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer shrink-0"
+                      >
+                        Select Bus
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: MANUAL ENTRY FORM */}
+          {activeTab === "manual" && (
+            <div className="space-y-4">
+              <div className="p-3.5 bg-amber-50/70 border border-amber-200/70 rounded-xl text-xs text-amber-900 leading-relaxed">
+                <span className="font-bold">Manual Bus Entry:</span> Specify
+                luxury bus, Volvo sleeper, or state transport coach.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Bus Operator <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={manualOperator}
+                    onChange={(e) => setManualOperator(e.target.value)}
+                    placeholder="e.g. Zingbus, Intrcity, HRTC Volvo"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Bus Category / Type
+                  </label>
+                  <input
+                    type="text"
+                    value={manualBusType}
+                    onChange={(e) => setManualBusType(e.target.value)}
+                    placeholder="e.g. AC Volvo Multi-Axle Sleeper (2+1)"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Boarding Point (From)
+                  </label>
+                  <input
+                    type="text"
+                    value={manualFrom}
+                    onChange={(e) => setManualFrom(e.target.value)}
+                    placeholder="e.g. Delhi (Kashmere Gate ISBT)"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Dropping Point (To)
+                  </label>
+                  <input
+                    type="text"
+                    value={manualTo}
+                    onChange={(e) => setManualTo(e.target.value)}
+                    placeholder="e.g. Manali Bus Stand"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Departure Time
+                  </label>
+                  <input
+                    type="text"
+                    value={manualDeparture}
+                    onChange={(e) => setManualDeparture(e.target.value)}
+                    placeholder="e.g. 09:30 PM"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Arrival Time
+                  </label>
+                  <input
+                    type="text"
+                    value={manualArrival}
+                    onChange={(e) => setManualArrival(e.target.value)}
+                    placeholder="e.g. 08:00 AM"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                    Fare per Seat (INR)
+                  </label>
+                  <input
+                    type="number"
+                    value={manualPrice}
+                    onChange={(e) =>
+                      setManualPrice(Number(e.target.value) || 0)
+                    }
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="text-xs font-semibold text-slate-700 block">
+                    Bus Photo / Ticket Voucher (Optional)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      ref={busFileInputRef}
+                      onChange={handleBusImageFileChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => busFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 font-semibold cursor-pointer text-xs transition"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Photo / Ticket</span>
+                    </button>
+                    <input
+                      type="text"
+                      value={
+                        manualImage && !manualImage.startsWith("data:")
+                          ? manualImage
+                          : ""
+                      }
+                      onChange={(e) => setManualImage(e.target.value)}
+                      placeholder="Or paste photo/ticket URL (https://...)"
+                      className="flex-1 min-w-[200px] border border-slate-200 rounded-xl px-3.5 py-1.5 text-xs font-medium text-[#0F172A] focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition"
+                    />
+                  </div>
+
+                  {manualImage && (
+                    <div className="relative inline-block mt-1.5 border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white p-1">
+                      <img
+                        src={manualImage}
+                        alt="Bus Preview"
+                        className="h-24 w-auto object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualImage("");
+                          setBusImageName("");
+                        }}
+                        className="absolute top-2 right-2 p-1 rounded-full bg-red-600 text-white hover:bg-red-700 transition cursor-pointer shadow-xs"
+                        title="Remove photo"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                      {busImageName && (
+                        <p className="text-[10px] text-slate-500 px-1 pt-0.5 truncate max-w-xs">
+                          {busImageName}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddManualBus}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Add Manual Bus to Day Itinerary</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

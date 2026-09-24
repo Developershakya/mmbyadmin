@@ -140,7 +140,7 @@ export default function Header() {
             <a href="#" className="hover:text-orange-600 transition">
               Adventures
             </a>
-            <Link href="/blog" className="hover:text-orange-600 transition">
+            <Link href="/blogs" className="hover:text-orange-600 transition">
               Blog
             </Link>
             <Link href="/aboutUs" className="hover:text-orange-600 transition">

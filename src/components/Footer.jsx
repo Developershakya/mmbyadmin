@@ -78,12 +78,12 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="blog" className="text-gray-300 hover:text-white">
+                <Link href="/blogs" className="text-gray-300 hover:text-white">
                   Blog
                 </Link>
               </li>
                <li>
-                <Link href="termAndCondition" className="text-gray-300 hover:text-white">
+                <Link href="/term-and-conditions" className="text-gray-300 hover:text-white">
                   Term & Conditions
                 </Link>
               </li>

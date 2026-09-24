@@ -1,6 +1,28 @@
 import { callSrdvApi } from '@/lib/srdvApi';
 import { NextResponse } from "next/server";
 
+const normalizeHotelApiDate = (value) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [dd, mm, yyyy] = raw.split('/');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  const parsed = new Date(`${raw.includes('T') ? raw.split('T')[0] : raw}T00:00:00`);
+  if (!Number.isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+    const dd = String(parsed.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return raw;
+};
+
 export async function POST(request) {
   const { checkInDate, noOfNights, cityId, guestNationality, noOfRooms, roomGuests } = await request.json();
 
@@ -22,7 +44,7 @@ export async function POST(request) {
 
     const payload = {
       BookingMode: "5",
-      CheckInDate: checkInDate,
+      CheckInDate: normalizeHotelApiDate(checkInDate),
       NoOfNights: String(noOfNights || 1),
       CityId: String(cityId || ''),
       CountryCode: "",
@@ -34,7 +56,7 @@ export async function POST(request) {
       MaxRating: "5",
       IsNearBySearchAllowed: false
     };
-
+   console.log("Payload for SRDV API:", payload);
     const data = await callSrdvApi(process.env.HOTEL_API_URL, 'Search', payload);
 
     if (data.Error && String(data.Error.ErrorCode) !== '0') {

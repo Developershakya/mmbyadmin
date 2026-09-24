@@ -11,9 +11,7 @@ export async function POST(request) {
       SrdvIndex: srdvIndex,
       ResultIndex: resultIndex,
     });
-
-    console.log('SEATMAP RAW response:', JSON.stringify(data, null, 2));
-
+   console.log("row", traceId, resultIndex, srdvType, srdvIndex, data);
     if (data.Error?.ErrorCode && data.Error.ErrorCode !== '0') {
       return NextResponse.json({ success: false, message: data.Error.ErrorMessage }, { status: 409 });
     }
