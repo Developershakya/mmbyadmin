@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, MapPin, Plane, Bus, Car, Building2, Check } from 'lucide-react';
-import { fetchSuggestions } from '../../lib/packageBuilder/searchApi.js';
+import { fetchSuggestions } from '../../lib/autoCompleteSugg/searchApi.js';
 
 export default function AutocompleteInput({
   value = '',

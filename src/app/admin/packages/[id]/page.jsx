@@ -1,25 +1,63 @@
 'use client';
 
-import React, { use } from 'react';
+import React, { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAdmin } from '@/context/AdminContext.jsx';
 import TravelProPackageBuilder from '@/components/package-builder/TravelProPackageBuilder.jsx';
 
 export default function PackageDetailPage({ params }) {
   const router = useRouter();
   const resolvedParams = use(params);
   const packageId = resolvedParams?.id;
-  const { handleSaveBuilderPackage, showToast, packages } = useAdmin();
+  const [initialPackage, setInitialPackage] = useState(null);
 
-  const foundPackage = packageId ? packages.find(p => String(p.id) === String(packageId)) : null;
+  useEffect(() => {
+    if (!packageId) {
+      setInitialPackage(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    fetch(`/api/admin-srdv/package?id=${encodeURIComponent(packageId)}`, {
+      method: 'GET',
+      cache: 'no-store'
+    })
+      .then(async (res) => {
+        const text = await res.text();
+        let data = {};
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = { raw: text };
+          }
+        }
+
+        if (!res.ok) {
+          throw new Error(data?.message || 'Failed to fetch package');
+        }
+
+        if (isMounted) {
+          setInitialPackage(data?.package || null);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load package for builder:', err);
+        if (isMounted) setInitialPackage(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [packageId]);
 
   return (
     <div id="holiday-package-builder-container" className="w-full max-w-7xl mx-auto">
       <TravelProPackageBuilder
-        initialPackage={foundPackage}
+        initialPackage={initialPackage}
         onNavigate={(path) => router.push(path)}
-        onSavePackage={handleSaveBuilderPackage}
-        showToast={showToast}
+        onSavePackage={() => {}}
+        showToast={(message, type) => console.log(message, type)}
       />
     </div>
   );

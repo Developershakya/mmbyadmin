@@ -1,4 +1,4 @@
-import { getRouteDirections } from "@/lib/server/routeServer";
+import { getRouteDirections } from "@/lib/geoLocation/routeServer";
 import { NextResponse } from "next/server";
 
 export async function POST(req) {
