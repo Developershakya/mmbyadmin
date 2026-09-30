@@ -13,7 +13,7 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid date format: date. Use yyyy-MM-dd or yyyy-MM-ddTHH:mm:ss.' }, { status: 400 });
   }
 
-  const busUrl = `${(process.env.SRDV_BUS_BASE_URL || process.env.SRDV_BUS_URL || 'https://bus.srdvapi.com/v5/rest').replace(/\/+$/, '')}/Search`;
+  const busUrl = `${(process.env.SRDV_BUS_BASE_URL || process.env.SRDV_BUS_URL || 'https://bus.srdvapi.com/v8/rest').replace(/\/+$/, '')}/Search`;
   const payload = {
     ClientId: process.env.SRDV_CLIENT_ID || body.clientId || '',
     UserName: process.env.SRDV_USERNAME || body.userName || '',

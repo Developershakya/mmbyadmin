@@ -26,7 +26,6 @@ const PackageBooking = sequelize.define(
     userId: {
       type: DataTypes.STRING,
       allowNull: true,
-      defaultValue: 'usr_admin_1'
     },
     customerName: {
       type: DataTypes.STRING,

@@ -1,5 +1,6 @@
 
 import sequelize from "../config/sequelize.js";
+import User from "./User.js";
 // import BusBooking from "./BusBooking.js";
 // import CarBooking from "./CarBooking.js";
 // import FlightBooking from "./FlightBooking.js";
@@ -18,6 +19,7 @@ import sequelize from "../config/sequelize.js";
 // import PackagePhoto from "./PackagePhoto.js";
 // import Sightseeing from "./Sightseeing.js";
 
+
 async function syncDB() {
   try {
     await sequelize.authenticate();
@@ -26,7 +28,7 @@ async function syncDB() {
 
     await sequelize.sync({
       alter: true,
-      force: true,
+      force: false,
     });
 
     console.log("✅ Existing tables were not modified.");

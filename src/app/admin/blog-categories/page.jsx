@@ -1,9 +1,11 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Tags, Plus, Trash2, X, Check, ExternalLink, Loader2 } from "lucide-react";
 import PageHeader from "@/components/admin/PageHeader";
 
-export default function BlogCategoriesView({ onNavigate }) {
+export default function BlogCategoriesView() {
+  const router = useRouter();
   const [blogCategories, setBlogCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
@@ -148,7 +150,7 @@ export default function BlogCategoriesView({ onNavigate }) {
           { label: "Management" },
           { label: "Blog Categories" },
         ]}
-        onNavigate={onNavigate}
+        onNavigate={(path) => router.push(path)}
         actions={
           <button
             type="button"

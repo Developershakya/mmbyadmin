@@ -13,6 +13,10 @@ name: {
     allowNull: false,
     unique: true,
   },
+  phone: {
+    type: DataTypes.STRING(32),
+    allowNull: true,
+  },
   password: {
     type: DataTypes.STRING,
     allowNull: false,

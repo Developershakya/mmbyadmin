@@ -58,7 +58,7 @@ function pickFirstValue(...candidates) {
       if (s.length > 0) return s;
     }
   }
-  return '';
+  return "";
 }
 
 export function normalizeSrdvContext(input = {}) {
@@ -72,10 +72,10 @@ export function normalizeSrdvContext(input = {}) {
     Array.isArray(candidate.legs) && candidate.legs.length > 0
       ? candidate.legs
       : Array.isArray(input.legs) && input.legs.length > 0
-      ? input.legs
-      : Array.isArray(innerData.legs) && innerData.legs.length > 0
-      ? innerData.legs
-      : null;
+        ? input.legs
+        : Array.isArray(innerData.legs) && innerData.legs.length > 0
+          ? innerData.legs
+          : null;
 
   const firstLeg = legs && legs[0] ? legs[0] : null;
   const nestedContext =
@@ -97,7 +97,7 @@ export function normalizeSrdvContext(input = {}) {
     innerFlight.traceId,
     innerFlight.TraceId,
     input.traceId,
-    input.TraceId
+    input.TraceId,
   );
 
   const resultIndex = pickFirstValue(
@@ -112,7 +112,7 @@ export function normalizeSrdvContext(input = {}) {
     innerFlight.resultIndex,
     innerFlight.ResultIndex,
     input.resultIndex,
-    input.ResultIndex
+    input.ResultIndex,
   );
 
   const srdvType = pickFirstValue(
@@ -127,7 +127,7 @@ export function normalizeSrdvContext(input = {}) {
     innerFlight.srdvType,
     innerFlight.SrdvType,
     input.srdvType,
-    input.SrdvType
+    input.SrdvType,
   );
 
   const srdvIndex = pickFirstValue(
@@ -142,7 +142,7 @@ export function normalizeSrdvContext(input = {}) {
     innerFlight.srdvIndex,
     innerFlight.SrdvIndex,
     input.srdvIndex,
-    input.SrdvIndex
+    input.SrdvIndex,
   );
 
   const legIndex =
@@ -167,8 +167,8 @@ export function normalizeSrdvContext(input = {}) {
     resultIndex,
     srdvType,
     srdvIndex,
-    endUserIp: '1.1.1.1',
-    ...(hotelCode ? { hotelCode: String(hotelCode) } : {})
+    endUserIp: "1.1.1.1",
+    ...(hotelCode ? { hotelCode: String(hotelCode) } : {}),
   };
 }
 const loadRazorpayScript = () =>
@@ -188,7 +188,12 @@ const loadRazorpayScript = () =>
     document.body.appendChild(script);
   });
 
-const verifyPaymentOnBackend = async ({ orderId, paymentId, signature, checkoutItem }) => {
+const verifyPaymentOnBackend = async ({
+  orderId,
+  paymentId,
+  signature,
+  checkoutItem,
+}) => {
   const verifyRes = await fetch("/api/admin-srdv/payments/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -215,13 +220,18 @@ const verifyPaymentOnBackend = async ({ orderId, paymentId, signature, checkoutI
 
   const verifyData = await readJsonResponse(verifyRes);
   if (!verifyRes.ok || !verifyData?.success) {
-    throw new Error(verifyData?.message || verifyData?.error || "Payment verification failed");
+    throw new Error(
+      verifyData?.message || verifyData?.error || "Payment verification failed",
+    );
   }
 
   return verifyData;
 };
 
-const simulateTestBooking = async ({ checkoutItem, existingOrderId = null }) => {
+const simulateTestBooking = async ({
+  checkoutItem,
+  existingOrderId = null,
+}) => {
   let orderId = existingOrderId;
   if (!orderId) {
     const orderRes = await fetch("/api/admin-srdv/payments/create-order", {
@@ -238,7 +248,11 @@ const simulateTestBooking = async ({ checkoutItem, existingOrderId = null }) => 
 
     const orderData = await readJsonResponse(orderRes);
     if (!orderRes.ok || !orderData?.success) {
-      throw new Error(orderData?.message || orderData?.error || "Failed to initialize payment record");
+      throw new Error(
+        orderData?.message ||
+          orderData?.error ||
+          "Failed to initialize payment record",
+      );
     }
     orderId = orderData.orderId;
   }
@@ -251,11 +265,18 @@ const simulateTestBooking = async ({ checkoutItem, existingOrderId = null }) => 
   });
 };
 
-const openRazorpayCheckout = async ({ checkoutItem, onSuccess, onDismiss, onError }) => {
+const openRazorpayCheckout = async ({
+  checkoutItem,
+  onSuccess,
+  onDismiss,
+  onError,
+}) => {
   try {
     const isLoaded = await loadRazorpayScript();
     if (!isLoaded || !window.Razorpay) {
-      throw new Error("Could not load Razorpay payment gateway. Please check connection.");
+      throw new Error(
+        "Could not load Razorpay payment gateway. Please check connection.",
+      );
     }
 
     const orderRes = await fetch("/api/admin-srdv/payments/create-order", {
@@ -272,7 +293,11 @@ const openRazorpayCheckout = async ({ checkoutItem, onSuccess, onDismiss, onErro
 
     const orderData = await readJsonResponse(orderRes);
     if (!orderRes.ok || !orderData?.success) {
-      throw new Error(orderData?.message || orderData?.error || "Failed to create payment order");
+      throw new Error(
+        orderData?.message ||
+          orderData?.error ||
+          "Failed to create payment order",
+      );
     }
 
     const { orderId, amount: amountInPaise, keyId, currency } = orderData;
@@ -321,7 +346,8 @@ const openRazorpayCheckout = async ({ checkoutItem, onSuccess, onDismiss, onErro
     const rzp = new window.Razorpay(options);
     rzp.on("payment.failed", function (resp) {
       console.error("Payment failed in Razorpay:", resp.error);
-      const desc = resp.error?.description || resp.error?.reason || "Payment failed";
+      const desc =
+        resp.error?.description || resp.error?.reason || "Payment failed";
       const enhancedErr = new Error(desc);
       enhancedErr.code = resp.error?.code;
       enhancedErr.reason = resp.error?.reason;
@@ -647,7 +673,11 @@ export default function ServiceBookingModal({
           IdType: "Aadhar",
           IdNumber: "",
           Address: packageData?.destination || "Delhi",
-          SeatName: seats[i]?.SeatName || svcData.seatNumbers || `S${i + 1}`,
+          SeatName:
+            seats[i]?.SeatName ||
+            seats[i]?.SeatNo ||
+            seats[i]?.SeatNumber ||
+            `S${i + 1}`,
         });
       }
       setBusPassengers(bList);

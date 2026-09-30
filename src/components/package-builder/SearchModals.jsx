@@ -23,6 +23,7 @@ import {
 import AutocompleteInput from "./AutocompleteInput.jsx";
 import FlightResultCard from "./FlightResultCard.jsx";
 import FareCalendarStrip from "./FareCalendarStrip.jsx";
+import BusResultCard from "./BusResultCard.jsx";
 
 // INR Currency Formatter
 const inr = (n) => "₹" + Math.round(n || 0).toLocaleString("en-IN");
@@ -264,40 +265,110 @@ const mapCabApiResponse = (payload) => {
        DroppingPoints:[{CityPointName,CityPointLocation,CityPointTime}],
        CancellationPolicies:[{CancellationCharge,PolicyString,...}],
        Price:{ BasePrice, OfferedPrice, PublishedPrice, Tax, Discount, GST } } ] } } */
-const mapBusOption = (b, traceId) => ({
-  operator: b.TravelName || "",
-  busType: b.BusType || "",
-  departure: fmtTime(b.DepartureTime),
-  arrival: fmtTime(b.ArrivalTime),
-  departureIso: b.DepartureTime || "",
-  arrivalIso: b.ArrivalTime || "",
-  seatsLeft: b.AvailableSeats ?? "",
-  price:
-    Number(
-      b.Price?.OfferedPriceRoundedOff ??
-        b.Price?.OfferedPrice ??
-        b.Price?.PublishedPrice,
-    ) || 0,
-  basePrice: Number(b.Price?.BasePrice) || 0,
-  resultIndex: b.ResultIndex ?? "",
-  routeId: b.RouteId || "",
-  boardingPoints: b.BoardingPoints || [],
-  droppingPoints: b.DroppingPoints || [],
-  cancellationPolicies: b.CancellationPolicies || [],
-  idProofRequired: Boolean(b.IdProofRequired),
-  mTicketEnabled: Boolean(b.MTicketEnabled),
-  maxSeatsPerTicket: b.MaxSeatsPerTicket ?? "",
-  traceId,
-});
 
-const mapBusApiResponse = (payload) => {
-  const raw = payload?.Result?.BusResults;
-  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
-  return list.map((b) =>
-    mapBusOption(b, payload?.Result?.TraceId ?? payload?.TraceId),
-  );
+       // Boarding/Dropping point ke do possible SRDV shapes ko ek canonical shape mein convert karta hai
+const formatBoardingTime = (t) => {
+  if (!t) return "";
+  if (typeof t === "string" && t.includes("T")) {
+    const d = new Date(t);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
+    }
+  }
+  return t; // already plain "20:00" jaisa hai
 };
 
+const normalizePoint = (p) => {
+  if (!p) return null;
+  return {
+    id: p.Id ?? p.CityPointIndex ?? "",
+    name: p.Name ?? p.CityPointName ?? "Point",
+    time: formatBoardingTime(p.Time ?? p.CityPointTime ?? ""),
+    location: p.Location ?? p.CityPointLocation ?? "",
+    landmark: p.Landmark ?? p.CityPointLandmark ?? "",
+    address: p.Address ?? p.CityPointAddress ?? "",
+    contactNumber: p.ContactNumber ?? p.CityPointContactNumber ?? "",
+    isPrime: String(p.IsPrime) === "true",
+  };
+};
+
+const normalizeCancellationPolicy = (cp) => {
+  if (!cp) return null;
+  return {
+    charge: cp.CancellationCharge ?? cp.Charge ?? "",
+    chargeType: cp.CancellationChargeType ?? cp.ChargeType ?? "",
+    policyString: cp.PolicyString ?? cp.Policy ?? cp.Description ?? "",
+    timeBeforeDept: cp.TimeBeforeDept ?? "",
+};
+};
+const mapBusOption = (b, traceId) => {
+  const priceList = Array.isArray(b.Price) ? b.Price : b.Price ? [b.Price] : [];
+  const validFares = priceList.map((p) => Number(p.BasePrice) || 0).filter((v) => v > 0);
+  // FIX: empty array par Math.min() → Infinity aata tha, ab safe fallback
+  const lowestFare = validFares.length > 0 ? Math.min(...validFares) : Number(b.DisplayFare) || 0;
+
+  return {
+    operator: b.TravelsName || b.TravelName || "",
+    busType: b.BusType || "",
+    busRoute: b.BusRoute || "",
+    departure: fmtTime(b.DepartureTime),
+    arrival: fmtTime(b.ArrivalTime),
+    departureIso: b.DepartureTime || "",
+    arrivalIso: b.ArrivalTime || "",
+    duration: fmtDuration(Number(b.Duration) || 0),
+    isArrivingNextDay: String(b.IsArrivingNextDay) === "true",
+    seatsLeft: b.AvailableSeats ?? "",
+    maxSeatsPerTicket: Number(b.MaxSeatsPerTicket) || 6,
+    price: lowestFare,
+    displayFare: Number(b.DisplayFare) || lowestFare,
+    priceOptions: priceList,
+    resultIndex: b.ResultIndex ?? "",
+    srdvIndex: b.SrdvIndex ?? "",
+    routeId: b.RouteId || "",
+    operatorId: b.OperatorId ?? "",
+    isSeater: String(b.Seater) === "true",
+    isSleeper: String(b.Sleeper) === "true",
+    isAC: String(b.IsAC) === "true",
+    // ✅ FIX: ab CityPoint* aur Id/Name dono shapes handle hote hain
+    boardingPoints: (b.BoardingPoints || []).map(normalizePoint).filter(Boolean),
+    droppingPoints: (b.DroppingPoints || []).map(normalizePoint).filter(Boolean),
+    cancellationPolicies: (b.CancellationPolicies || []).map(normalizeCancellationPolicy).filter(Boolean),
+    idProofRequired: String(b.IdProofRequired) === "true",
+    isDropPointMandatory: String(b.IsDropPointMandatory) === "true",
+    liveTracking: String(b.LiveTracking) === "true",
+    mTicketEnabled: String(b.MTicketEnabled) === "true",
+    partialCancellationAllowed: String(b.PartialCancellationAllowed) === "true",
+    traceId,
+  };
+};
+
+const mapBusApiResponse = (payload) => {
+  const list = Array.isArray(payload?.Result)
+    ? payload.Result
+    : Array.isArray(payload?.Result?.BusResults)
+      ? payload.Result.BusResults
+      : payload?.Result?.BusResults
+        ? [payload.Result.BusResults]
+        : [];
+
+  const traceId = payload?.TraceId ?? payload?.Result?.TraceId ?? "";
+  return list.map((b) => mapBusOption(b, traceId));
+};
+// Shared SRDV error extractor — used by ALL 4 search modals
+const extractSrdvError = (payload) => {
+  const err = payload?.Error;
+  if (err && typeof err === "object") {
+    const code = err.ErrorCode ?? err.errorCode;
+    const message = String(err.ErrorMessage || err.message || "").trim();
+    // "0" or 0 = success. Anything else (including "252") = real error.
+    if (code !== undefined && code !== null && String(code) !== "0") {
+      return `Error Code: ${code}\n\n${message || "SRDV returned an error."}`;
+    }
+    if (message) return message;
+  }
+  if (payload?.error) return payload.error;
+  return null;
+};
 /* =========================================================================
    1. FLIGHT SEARCH & MANUAL ENTRY MODAL (WITH IMAGE UPLOAD)
    ========================================================================= */
@@ -436,14 +507,6 @@ export function FlightSearchModal({
       return;
     }
 
-    const toSrdvError = (payload = {}) => {
-      if (payload?.Error?.ErrorCode && payload.Error.ErrorCode !== "0") {
-        return `Error Code: ${payload.Error.ErrorCode || "Unknown"}\n\n${payload.Error.ErrorMessage || "SRDV returned an error."}`;
-      }
-      if (payload?.error) return payload.error;
-      return null;
-    };
-
     const searchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     flightSearchIdRef.current = searchId;
 
@@ -475,7 +538,7 @@ export function FlightSearchModal({
       const flightData = await flightResponse.json().catch(() => ({}));
       if (flightSearchIdRef.current !== searchId) return;
 
-      const srdvError = toSrdvError(flightData);
+      const srdvError = extractSrdvError(flightData);
       if (!flightResponse.ok || srdvError) {
         throw Object.assign(
           new Error(
@@ -2631,8 +2694,11 @@ export function BusSearchModal({
   const [activeTab, setActiveTab] = useState("api"); // 'api' | 'manual'
 
   // API Search State
+  // API Search State
   const [from, setFrom] = useState(initialData.from || "Delhi");
+  const [fromCode, setFromCode] = useState("230");
   const [to, setTo] = useState(initialData.to || "Manali");
+  const [toCode, setToCode] = useState("4845");
   const [date, setDate] = useState(initialData.date || getFutureDateStr(14));
   const [pax, setPax] = useState(initialData.pax || 2);
 
@@ -2696,6 +2762,18 @@ export function BusSearchModal({
       setError("Destination city is required.");
       return;
     }
+    if (!fromCode) {
+      setError(
+        "Please select the origin city from the suggestions list (city code required by supplier).",
+      );
+      return;
+    }
+    if (!toCode) {
+      setError(
+        "Please select the destination city from the suggestions list (city code required by supplier).",
+      );
+      return;
+    }
 
     const searchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     busSearchIdRef.current = searchId;
@@ -2708,42 +2786,41 @@ export function BusSearchModal({
     try {
       const busResponse = await fetch("/api/admin-srdv/buses/search", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           from,
           to,
           date,
           pax,
+          source_city: from,
+          source_code: fromCode,
+          destination_city: to,
+          destination_code: toCode,
         }),
       });
 
-      if (!busResponse.ok) {
-        const errorPayload = await busResponse.json().catch(() => ({}));
+      const busData = await busResponse.json().catch(() => ({}));
+      if (busSearchIdRef.current !== searchId) return;
+
+      const srdvErrMsg = extractSrdvError(busData);
+      if (!busResponse.ok || srdvErrMsg) {
         throw new Error(
-          errorPayload.error ||
+          srdvErrMsg ||
+            busData?.error ||
             `Bus API failed with status ${busResponse.status}`,
         );
       }
 
-      const busData = await busResponse.json();
-      if (busSearchIdRef.current !== searchId) return;
-      // Real shape: Error / Result.TraceId / Result.BusResults (object or array of options)
       const busResults = mapBusApiResponse(busData);
       setResults(busResults);
+      console.log("Bus search results:", busResults);
     } catch (err) {
       if (busSearchIdRef.current !== searchId) return;
-
       console.error("Bus search failed:", err);
       setError(err.message || "Failed to search buses from SRDV API.");
-      if (showToast) {
-        showToast(`Bus API: ${err.message}`, "error");
-      }
+      if (showToast) showToast(`Bus API: ${err.message}`, "error");
     } finally {
-      if (busSearchIdRef.current === searchId) {
-        setLoading(false);
-      }
+      if (busSearchIdRef.current === searchId) setLoading(false);
     }
   };
 
@@ -2856,8 +2933,14 @@ export function BusSearchModal({
                   </label>
                   <AutocompleteInput
                     value={from}
-                    onChange={(e) => setFrom(e.target.value)}
-                    onSelect={(item) => setFrom(item.label)}
+                    onChange={(e) => {
+                      setFrom(e.target.value);
+                      setFromCode(""); // typing se code invalidate karo, dobara select karna padega
+                    }}
+                    onSelect={(item) => {
+                      setFrom(item.label);
+                      setFromCode(item.code || item.id || "");
+                    }}
                     suggestUrl="/api/cities/bus"
                     placeholder="Origin City"
                     iconType="bus"
@@ -2869,8 +2952,14 @@ export function BusSearchModal({
                   </label>
                   <AutocompleteInput
                     value={to}
-                    onChange={(e) => setTo(e.target.value)}
-                    onSelect={(item) => setTo(item.label)}
+                    onChange={(e) => {
+                      setTo(e.target.value);
+                      setToCode(""); // typing se code invalidate karo, dobara select karna padega
+                    }}
+                    onSelect={(item) => {
+                      setTo(item.label);
+                      setToCode(item.code || item.id || "");
+                    }}
                     suggestUrl="/api/cities/bus"
                     placeholder="Destination City"
                     iconType="bus"
@@ -2938,57 +3027,31 @@ export function BusSearchModal({
                 )}
 
                 {!loading &&
-                  results?.map((bus) => (
-                    <div
-                      key={
-                        bus.resultIndex ?? `${bus.operator}-${bus.departureIso}`
-                      }
-                      className="flex items-center justify-between gap-4 border border-slate-200 rounded-xl p-3.5 hover:border-amber-400 hover:shadow-sm transition bg-white"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="w-10 h-10 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
-                          <Bus className="w-5 h-5" />
-                        </span>
-                        <div>
-                          <p className="font-bold text-[#0F172A] text-sm">
-                            {bus.operator}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {bus.busType} · {bus.departure} → {bus.arrival}
-                          </p>
-                        </div>
-                      </div>
-
-                      <p className="font-bold text-[#0F172A] text-base">
-                        {inr(bus.price)}
-                        <span className="text-xs font-normal text-slate-500">
-                          {" "}
-                          / pax
-                        </span>
-                      </p>
-
-                      <button
-                        onClick={() => {
-                          onSelectBus({
-                            ...bus,
-                            from,
-                            to,
-                            date,
-                            apiSelected: true,
-                          });
-                          onClose();
-                          if (showToast) {
-                            showToast(
-                              `Added bus "${bus.operator}" to Day!`,
-                              "success",
-                            );
-                          }
-                        }}
-                        className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer shrink-0"
-                      >
-                        Select Bus
-                      </button>
-                    </div>
+                  results?.map((bus, idx) => (
+                    <BusResultCard
+                      key={bus.resultIndex || `bus-${idx}`}
+                      bus={bus}
+                      onSelect={(chosenBus) => {
+                        onSelectBus({
+                          ...chosenBus,
+                          from,
+                          to,
+                          date,
+                          source_city: from,
+                          source_code: fromCode,
+                          destination_city: to,
+                          destination_code: toCode,
+                          apiSelected: true,
+                        });
+                        onClose();
+                        if (showToast) {
+                          showToast(
+                            `Added bus "${chosenBus.operator}" to Day!`,
+                            "success",
+                          );
+                        }
+                      }}
+                    />
                   ))}
               </div>
             </div>

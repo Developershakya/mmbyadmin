@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import UserMenu from "./UserMenu";
 
-export default function Header() {
+export default function Header({ dashboard = false }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const router = useRouter();
@@ -45,12 +45,13 @@ export default function Header() {
               alt="Make My Bharat Yatra Logo"
               width={300}
               height={48}
-              className="object-contain object-center h-15"
+              priority={dashboard}
+              className={dashboard ? "h-auto w-[118px] object-contain object-center sm:w-[180px]" : "object-contain object-center h-15"}
             />
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-6 text-sm font-medium text-gray-600">
+          <nav className={`${dashboard ? "hidden" : "hidden md:flex"} items-center space-x-6 text-sm font-medium text-gray-600`}>
             {/* Destination dropdown */}
             <div className="relative group">
               <button className="flex items-center gap-1.5 text-orange-600 pb-1 border-b-2 border-orange-600">
@@ -149,9 +150,9 @@ export default function Header() {
           </nav>
 
           {/* Right side (desktop) */}
-          <div className="hidden md:flex items-center space-x-6 text-sm font-medium text-gray-600">
+          <div className={`${dashboard ? "flex" : "hidden md:flex"} items-center space-x-6 text-sm font-medium text-gray-600`}>
             {/* Customer Service dropdown */}
-            <div className="relative group">
+            {!dashboard && <div className="relative group">
               <button className="flex items-center gap-1.5 hover:text-orange-600 transition">
                 <Headphones className="w-3.5 h-3.5" />
                 <span>Customer Service</span>
@@ -177,13 +178,13 @@ export default function Header() {
                   </span>
                 </a>
               </div>
-            </div>
+            </div>}
 
             <UserMenu />
           </div>
 
           {/* Mobile menu button */}
-          <div className="md:hidden">
+          {!dashboard && <div className="md:hidden">
             <Button onClick={() => setIsMenuOpen(!isMenuOpen)}>
               {isMenuOpen ? (
                 <X className="w-6 h-6" />
@@ -191,11 +192,11 @@ export default function Header() {
                 <Menu className="w-6 h-6" />
               )}
             </Button>
-          </div>
+          </div>}
         </div>
 
         {/* Mobile Navigation */}
-        {isMenuOpen && (
+        {!dashboard && isMenuOpen && (
           <div className="md:hidden py-4 border-t">
             <nav className="flex flex-col space-y-4">
               <Link href="/" className="text-gray-700 hover:text-orange-500 font-medium">
